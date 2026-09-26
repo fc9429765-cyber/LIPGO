@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { createContext, useContext, useEffect, useState, useMemo, useCallback } from "react"
+import { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import type { User } from "@supabase/supabase-js"
 import type { UserProfile } from "@/lib/auth-actions"
@@ -41,7 +41,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [lastProfileId, setLastProfileId] = useState<string | null>(null)
+  // Ref (no state): solo lo lee el listener de auth para no recargar el perfil
+  // dos veces. Como state era dependencia del efecto y se seteaba dentro, el
+  // efecto corría dos veces en cada montaje (2× getSession + 2× /api/user-profile).
+  const lastProfileIdRef = useRef<string | null>(null)
+  const setLastProfileId = (id: string | null) => {
+    lastProfileIdRef.current = id
+  }
   
   // Empresa selection state
   const [accessibleEmpresas, setAccessibleEmpresas] = useState<AccessibleEmpresa[]>([])
@@ -200,7 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
       // Only load profile if the user ID changed
-      if (session?.user?.id && lastProfileId !== session.user.id) {
+      if (session?.user?.id && lastProfileIdRef.current !== session.user.id) {
         if (!isLoadingProfile) {
           isLoadingProfile = true
           try {
@@ -220,7 +226,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
 
     return () => subscription.unsubscribe()
-  }, [supabase, lastProfileId])
+  }, [supabase])
 
   // Load accessible empresas when profile is loaded
   useEffect(() => {

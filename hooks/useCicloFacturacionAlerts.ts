@@ -1,7 +1,9 @@
 "use client"
 
+
+import { setVisibleInterval } from "@/lib/polling"
 import { useEffect, useState } from "react"
-import { getUserPermissions } from "@/lib/permissions-actions"
+import { getUserPermissionsCached } from "@/lib/permissions-client-cache"
 
 interface CicloFacturacionAlerta {
   id: number
@@ -30,7 +32,7 @@ export function useCicloFacturacionAlerts(): UseCicloFacturacionAlertsResult {
   useEffect(() => {
     const cargar = async () => {
       try {
-        const permisos = await getUserPermissions()
+        const permisos = await getUserPermissionsCached()
         const permiso = !!permisos?.ciclo_facturacion_jefe || !!permisos?.ciclo_facturacion_coordinador
         setHasPermission(permiso)
         if (!permiso) {
@@ -53,8 +55,8 @@ export function useCicloFacturacionAlerts(): UseCicloFacturacionAlertsResult {
     }
 
     cargar()
-    const interval = setInterval(cargar, 60000)
-    return () => clearInterval(interval)
+    const detener = setVisibleInterval(cargar, 60000)
+    return () => detener()
   }, [])
 
   return { alerts, count, loading, hasPermission }

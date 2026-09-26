@@ -1,7 +1,9 @@
 "use client"
 
+
+import { setVisibleInterval } from "@/lib/polling"
 import { useState, useEffect } from "react"
-import { getUserPermissions } from "@/lib/permissions-actions"
+import { getUserPermissionsCached } from "@/lib/permissions-client-cache"
 
 interface ConteoCiclicoAlerta {
   tipo: "vencido" | "diferencia"
@@ -43,7 +45,7 @@ export function useConteoCiclicoAlerts(
       }
 
       try {
-        const permissions = await getUserPermissions(userId)
+        const permissions = await getUserPermissionsCached(userId)
 
         if (!permissions || !(permissions as any).cuadre_inventario) {
           setHasPermission(false)
@@ -72,8 +74,8 @@ export function useConteoCiclicoAlerts(
 
     checkPermissionAndLoadAlerts()
 
-    const interval = setInterval(checkPermissionAndLoadAlerts, 60000)
-    return () => clearInterval(interval)
+    const detener = setVisibleInterval(checkPermissionAndLoadAlerts, 60000)
+    return () => detener()
   }, [empresaId, userId])
 
   return {

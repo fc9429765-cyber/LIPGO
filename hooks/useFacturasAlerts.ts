@@ -1,7 +1,9 @@
 "use client"
+
 
+import { setVisibleInterval } from "@/lib/polling"
 import { useState, useEffect } from "react"
-import { getUserPermissions } from "@/lib/permissions-actions"
+import { getUserPermissionsCached } from "@/lib/permissions-client-cache"
 
 interface FacturaAlerta {
   id: number
@@ -34,7 +36,7 @@ export function useFacturasAlerts(empresaId: number | null, userId?: string): Us
 
       try {
         // Check if user has gestionfacturas permission
-        const permissions = await getUserPermissions(userId)
+        const permissions = await getUserPermissionsCached(userId)
         
         if (!permissions || !permissions.gestionfacturas) {
           setHasPermission(false)
@@ -66,8 +68,8 @@ export function useFacturasAlerts(empresaId: number | null, userId?: string): Us
     checkPermissionAndLoadAlerts()
     
     // Refresh every 60 seconds
-    const interval = setInterval(checkPermissionAndLoadAlerts, 60000)
-    return () => clearInterval(interval)
+    const detener = setVisibleInterval(checkPermissionAndLoadAlerts, 60000)
+    return () => detener()
   }, [empresaId, userId])
 
   return {

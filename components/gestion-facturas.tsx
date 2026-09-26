@@ -86,6 +86,12 @@ export default function GestionFacturas({ onBack, filtroInicial, onFiltroInicial
   // Valor NETO por orden (operación × tarifa por owner/id_empresa, igual que el cuadro).
   const [valoresNetos, setValoresNetos] = useState<Record<string, number>>({})
   const [searchTerm, setSearchTerm] = useState("")
+  // Debounce: antes cada tecla disparaba una consulta al servidor.
+  const [searchDebounced, setSearchDebounced] = useState("")
+  useEffect(() => {
+    const t = setTimeout(() => setSearchDebounced(searchTerm), 350)
+    return () => clearTimeout(t)
+  }, [searchTerm])
   const [searchInput, setSearchInput] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
@@ -266,8 +272,8 @@ export default function GestionFacturas({ onBack, filtroInicial, onFiltroInicial
 
   useEffect(() => {
     setCurrentPage(1)
-    loadOrdenes(1, searchTerm, filters)
-  }, [selectedEmpresaId, searchTerm])
+    loadOrdenes(1, searchDebounced, filters)
+  }, [selectedEmpresaId, searchDebounced])
 
   // Carga la lista de transportes reales del proyecto (para el filtro
   // desplegable) cada vez que cambia la empresa o el rango de fechas del

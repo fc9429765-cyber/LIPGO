@@ -1,5 +1,7 @@
 "use client"
+
 
+import { setVisibleInterval } from "@/lib/polling"
 import { useState, useEffect } from "react"
 
 export interface RendimientoAlert {
@@ -67,8 +69,8 @@ export function useRendimientoAlerts(empresaId: number | null, userId: string | 
     checkPermissionAndFetchAlerts()
 
     // Refresh every 2 minutes
-    const interval = setInterval(checkPermissionAndFetchAlerts, 120000)
-    return () => clearInterval(interval)
+    const detener = setVisibleInterval(checkPermissionAndFetchAlerts, 120000)
+    return () => detener()
   }, [empresaId, userId])
 
   return { alerts, count, hasPermission, loading }

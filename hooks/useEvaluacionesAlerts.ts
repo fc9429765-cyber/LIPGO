@@ -1,7 +1,9 @@
 "use client"
+
 
+import { setVisibleInterval } from "@/lib/polling"
 import { useState, useEffect } from "react"
-import { getUserPermissions } from "@/lib/permissions-actions"
+import { getUserPermissionsCached } from "@/lib/permissions-client-cache"
 
 interface EvaluacionAlerta {
   id: number
@@ -40,7 +42,7 @@ export function useEvaluacionesAlerts(
 
       try {
         // Verificar el permiso `evaluacionpersonal` antes de consultar
-        const permissions = await getUserPermissions(userId)
+        const permissions = await getUserPermissionsCached(userId)
 
         if (!permissions || !permissions.evaluacionpersonal) {
           setHasPermission(false)
@@ -70,8 +72,8 @@ export function useEvaluacionesAlerts(
     checkPermissionAndLoadAlerts()
 
     // Refrescar cada 60 segundos como el resto de alertas
-    const interval = setInterval(checkPermissionAndLoadAlerts, 60000)
-    return () => clearInterval(interval)
+    const detener = setVisibleInterval(checkPermissionAndLoadAlerts, 60000)
+    return () => detener()
   }, [empresaId, userId])
 
   return {

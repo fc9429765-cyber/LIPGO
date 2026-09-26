@@ -1,5 +1,7 @@
 "use client"
+
 
+import { setVisibleInterval } from "@/lib/polling"
 import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase-client"
 
@@ -53,8 +55,8 @@ export function usePendingTurnos(empresaId: number | null) {
     fetchPending()
     
     // Refresh every 30 seconds
-    const interval = setInterval(fetchPending, 30000)
-    return () => clearInterval(interval)
+    const detener = setVisibleInterval(fetchPending, 30000)
+    return () => detener()
   }, [fetchPending])
 
   return { pendingSolicitudes, count, loading, refresh: fetchPending }

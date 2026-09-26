@@ -1,5 +1,7 @@
 "use client"
+
 
+import { setVisibleInterval } from "@/lib/polling"
 import { useEffect, useState } from "react"
 
 export interface AsistenciaPendiente {
@@ -91,10 +93,10 @@ export function useAsistenciaAlerts(
     }
 
     run()
-    const interval = setInterval(run, 120000)
+    const detener = setVisibleInterval(run, 120000)
     return () => {
       cancelled = true
-      clearInterval(interval)
+      detener()
     }
   }, [empresaId, userId])
 

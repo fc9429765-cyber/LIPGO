@@ -14,6 +14,7 @@
 // de turno".
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { setVisibleInterval } from "@/lib/polling"
 import { useAuth } from "@/components/auth-provider"
 import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
@@ -262,8 +263,9 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
   useEffect(() => {
     setLoading(true)
     cargar()
-    const id = setInterval(cargar, 60_000)
-    return () => clearInterval(id)
+    // 9 consultas por refresco: no tiene sentido seguir pegándole a la base de
+    // datos cada minuto mientras la pestaña está en segundo plano.
+    return setVisibleInterval(cargar, 60_000)
   }, [cargar])
 
   useEffect(() => {

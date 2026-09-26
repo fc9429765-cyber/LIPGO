@@ -8,12 +8,12 @@ import { SplashScreen } from "@/components/splash-screen"
 import { LipbotDock } from "@/components/lipbot-dock"
 import { groups, type GroupKey } from "@/lib/dashboard-data"
 import { useAuth } from "@/components/auth-provider"
-import { getAtencionDelDia } from "@/lib/atencion-actions"
+import { getAtencionDelDiaCompartida } from "@/lib/atencion-del-dia-cache"
 import type { AtencionItem } from "@/components/lip-ai-assistant"
 import { useRouter } from "next/navigation"
 
 export default function DashboardPage() {
-  const { user, loading, selectedEmpresaId } = useAuth()
+  const { user, loading, selectedEmpresaId, profile } = useAuth()
   const router = useRouter()
   const [selectedGroup, setSelectedGroup] = useState<GroupKey | null>(null)
   const [selectedModule, setSelectedModule] = useState<string | null>(null)
@@ -24,7 +24,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!selectedEmpresaId) return
     let cancel = false
-    getAtencionDelDia()
+    getAtencionDelDiaCompartida(profile?.id, selectedEmpresaId ?? undefined)
       .then((r) => {
         if (!cancel && r.success) setAlertas(r.items as AtencionItem[])
       })
@@ -32,7 +32,7 @@ export default function DashboardPage() {
     return () => {
       cancel = true
     }
-  }, [selectedEmpresaId])
+  }, [selectedEmpresaId, profile?.id])
 
   // Navegación robusta a un módulo (usada por el asistente IA con abrir_modulo).
   // Fija el GRUPO que contiene el módulo además del módulo, porque main-content

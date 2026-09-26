@@ -1,7 +1,9 @@
 "use client"
+
 
+import { setVisibleInterval } from "@/lib/polling"
 import { useState, useEffect } from "react"
-import { getUserPermissions } from "@/lib/permissions-actions"
+import { getUserPermissionsCached } from "@/lib/permissions-client-cache"
 
 interface PreoperacionalAlert {
   id: number
@@ -104,7 +106,7 @@ export function usePreoperacionalAlerts(empresaId: number | null, userId?: strin
 
       try {
         // Check if user has prechequeo permission
-        const permissions = await getUserPermissions(userId)
+        const permissions = await getUserPermissionsCached(userId)
         if (!permissions || !permissions.prechequeo) {
           setHasPermission(false)
           setLoading(false)
@@ -172,8 +174,8 @@ export function usePreoperacionalAlerts(empresaId: number | null, userId?: strin
     checkPermissionAndLoadAlerts()
     
     // Refresh every 60 seconds
-    const interval = setInterval(checkPermissionAndLoadAlerts, 60000)
-    return () => clearInterval(interval)
+    const detener = setVisibleInterval(checkPermissionAndLoadAlerts, 60000)
+    return () => detener()
   }, [empresaId, userId])
 
   return {

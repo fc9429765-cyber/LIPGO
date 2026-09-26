@@ -1,7 +1,9 @@
 "use client"
+
 
+import { setVisibleInterval } from "@/lib/polling"
 import { useState, useEffect, useCallback } from "react"
-import { getUserPermissions } from "@/lib/permissions-actions"
+import { getUserPermissionsCached } from "@/lib/permissions-client-cache"
 
 export interface InventarioAlert {
   idproducto: number
@@ -32,7 +34,7 @@ export function useInventarioAlerts(empresaId?: number | null, userId?: string) 
 
     try {
       // Check if user has saldos_producto permission
-      const permissions = await getUserPermissions(userId)
+      const permissions = await getUserPermissionsCached(userId)
       
       if (!permissions || !permissions.saldos_producto) {
         setHasPermission(false)
@@ -65,9 +67,9 @@ export function useInventarioAlerts(empresaId?: number | null, userId?: string) 
     fetchAlerts()
 
     // Refresh every 60 seconds
-    const interval = setInterval(fetchAlerts, 60000)
+    const detener = setVisibleInterval(fetchAlerts, 60000)
 
-    return () => clearInterval(interval)
+    return () => detener()
   }, [fetchAlerts])
 
   return { alerts, count, hasPermission, loading }
