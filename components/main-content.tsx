@@ -2,183 +2,191 @@
 
 import React from "react"
 import { useAuth } from "@/components/auth-provider"
-import { getAtencionDelDia } from "@/lib/atencion-actions"
+import { getAtencionDelDiaCompartida } from "@/lib/atencion-del-dia-cache"
 import { LipAiAssistant, type AtencionItem } from "@/components/lip-ai-assistant"
 import { AtencionBanner } from "@/components/atencion-banner"
 import { TopBar } from "@/components/top-bar"
 import { DailySummary } from "@/components/daily-summary"
 import { ModuleCards } from "@/components/module-cards"
 import { ModulesView } from "@/components/modules-view"
-import { OrderEntryForm } from "@/components/order-entry-form"
 import { ModulePlaceholder } from "@/components/module-placeholder"
-import { GenericCrudTable } from "@/components/configuration/generic-crud-table"
 import { configModules } from "@/lib/config-definitions"
-import { OrdersManagement } from "@/components/orders/orders-management"
-import { ComprehensiveOrdersManagement } from "@/components/orders/comprehensive-orders-management"
-import { DashboardPedidos } from "@/components/orders/dashboard-pedidos"
-import { DashboardRecepcion } from "@/components/dashboard-recepcion"
-import { OrderEditPage } from "@/components/orders/order-edit-page"
-import { ProductosWithCategories } from "@/components/configuration/productos-with-categories"
-import { VehicleAppointmentsForm } from "@/components/vehicle-appointments-form"
-import { BasculaForm } from "@/components/bascula-form"
-import { BasculaHistory } from "@/components/bascula-history"
-import { GenerateLoadOrders } from "@/components/generate-load-orders"
-import { GenerateUnloadOrders } from "@/components/generate-unload-orders"
-import { GenerateDistributionOrders } from "@/components/generate-distribution-orders"
-import { InventoryTransactionsModule } from "@/components/inventory-transactions-module"
-import { ProductionEntryForm } from "@/components/production-entry-form"
-import { InventoryBalanceDetails } from "@/components/inventory-balance-details"
-import { InventoryBalanceGlobal } from "@/components/inventory-balance-global"
-import { ReprocesosManagement } from "@/components/reprocesos-management"
-import { LoadOrdersManagement } from "@/components/load-orders-management"
-import { ProductionApproval } from "@/components/production-approval"
-import LiquidacionTolva from "@/components/produccion/liquidacion-tolva"
-import ControlPiso from "@/components/produccion/control-piso"
-import ReporteParos from "@/components/produccion/reporte-paros"
 // Producción: maestro de montacargas, QR y bitácora de mantenimiento.
-import GestionMontacargas from "@/components/montacargas/gestion-montacargas"
-import { InventoryTransactionsManagement } from "@/components/inventory-transactions-management"
-import { SanitaryRegistryForm } from "@/components/sanitary-registry-form"
-import { ProductTransferForm } from "@/components/product-transfer-form"
-import { TransferRequestsView } from "@/components/transfer-requests-view"
-import { BatchApproval } from "@/components/batch-approval"
-import { Picking } from "@/components/picking"
-import { Packing } from "@/components/packing"
-import DashboardOperacion from "@/components/dashboard-operacion"
-import { BatchHistory } from "@/components/batch-history"
-import { Aprendizaje } from "@/components/aprendizaje" // Guia de usuario (modulo universal, sin permiso)
 import { ModuloGuiaBar } from "@/components/modulo-guia-bar" // Guia embebida en la pantalla de cada modulo
-import { ProductionEntriesView } from "@/components/production-entries-view"
-import InventoryAudit from "@/components/inventory-audit"
-import { SanitaryInspectionHistory } from "@/components/sanitary-inspection-history"
-import { ApprovalHistory } from "@/components/approval-history"
-import { WarehouseCapacityComponent } from "@/components/warehouse-capacity"
-import QRPalletRegistration from "@/components/qr-pallet-registration"
-import QRPalletReading from "@/components/qr-pallet-reading"
-import { PalletInventoryView } from "@/components/pallet-inventory-view"
-import MaterialExplosion from "@/components/material-explosion"
-import MontacargasDia from "@/components/inventario/montacargas-dia" // CRUD diario de disponibilidad de montacargas y conteo de personal
-import Bitacora from "@/components/lip/bitacora" // CRUD de bitacora del dia (Operacion Lip)
 import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { UserPermissionsManagement } from "@/components/configuration/user-permissions-management"
-import BitacoraAuditoria from "@/components/configuration/bitacora-auditoria"
-import PlacasDistribucion from "@/components/configuration/placas-distribucion"
-import MuellesEmpresaConfig from "@/components/configuration/muelles-empresa"
 import { PermissionGuard } from "@/components/permission-guard"
-import { UserAccessModule } from "@/components/user-access-module"
-import HeadcountManagement from "@/components/headcount-management" // Added Head Count component import
-import { Tolva } from "@/components/tolva"
-import VerTolva from "@/components/ver-tolva"
-import { Proyecciones } from "@/components/proyecciones"
-import AttendanceRegistration from "@/components/attendance-registration" // Added import for attendance registration
-import AttendanceTable from "@/components/attendance-table" // Added import for attendance table
-import { ExtraHoursAssignment } from "@/components/extra-hours-assignment" // Added import for extra hours assignment module
-import { ApoyoCargue } from "@/components/apoyo-cargue" // Added import for apoyo en cargue module
 // Reconstruido: reportar la novedad y ver su efecto en la quincena en una sola
 // pantalla, con el impacto en pesos tomado de la vista que liquida.
-import NovedadesTiempoReal from "@/components/rrhh/novedades-tiempo-real" // Added import for personnel notices module
-import AsistenciaAdministrativa from "@/components/rrhh/asistencia-administrativa"
-import GestionTurnos from "@/components/rrhh/gestion-turnos" // CRUD de turnos (tabla tarifasturnos)
 // Envoltorio con dos pestañas: la programación diaria de siempre (la que
 // escribe los turnos) y la vista de quincena (cobertura, equipos, grilla).
-import ProgramacionPersonal from "@/components/rrhh/programacion-personal"
-import NotificacionesPersonal from "@/components/rrhh/notificaciones-personal" // Envío de alertas/turnos por WhatsApp al celular del personal
-import { ViewPicking } from "@/components/view-picking" // Added import for ViewPicking component
-import { Tarifas } from "@/components/configuration/tarifas" // Added import for Tarifas component
-import { FacturacionProyectos } from "@/components/facturacion-proyectos" // Added import for Facturacion Proyectos component
-import { CuadroControlFacturacion } from "@/components/cuadro-control-facturacion"
-import ResumenFacturacionProyecto from "@/components/resumen-facturacion-proyecto"
 import { ClaveFinancieraGuard } from "@/components/clave-financiera-guard"
 // Gestión Financiera: alquiler de montacargas facturado + cargos fijos ($2M, 600 ton).
-import CargosFijos from "@/components/cargos-fijos"
-import CorreccionOrdenes from "@/components/correccion-ordenes"
-import ConciliacionAvimol from "@/components/conciliacion-avimol"
-import PrefacturaProduccion from "@/components/prefactura-produccion"
-import CicloFacturacion from "@/components/ciclo-facturacion"
-import { DashboardOperacionesLip } from "@/components/dashboard-operaciones-lip" // Dashboard Operaciones LIP
-import { RegistroPreoperacional } from "@/components/registro-preoperacional" // Registro Preoperacional
-import GestionContratos from "@/components/rrhh/gestion-contratos"
-import DotacionEPP from "@/components/rrhh/dotacion-epp"
-import Capacitaciones from "@/components/rrhh/capacitaciones"
-import CapacitacionesAsistencia from "@/components/rrhh/capacitaciones-asistencia"
 // Reconstruido: requisicion con causal legal del Art. 77 Ley 50/1990 y costo
 // mensual estimado con los porcentajes reales de prestaciones y parafiscales.
-import RequisicionPersonal from "@/components/rrhh/requisicion-personal"
-import ProcesosDisciplinarios from "@/components/rrhh/procesos-disciplinarios"
-import EvaluacionesDashboard from "@/components/rrhh/evaluaciones-dashboard"
-import InduccionesEvidenciaDashboard from "@/components/rrhh/inducciones-evidencia-dashboard"
-import InduccionesManagement from "@/components/rrhh/inducciones-management"
-import IsoEvidenceDashboard from "@/components/iso9001/iso-evidence-dashboard"
-import GestionSolicitudes from "@/components/rrhh/gestion-solicitudes"
-import GestionSolicitudesPersonal from "@/components/rrhh/gestion-solicitudes-personal"
-import HojasDeVida from "@/components/rrhh/hojas-de-vida"
-import Antecedentes from "@/components/rrhh/antecedentes"
-import ExamenesMedicos from "@/components/rrhh/examenes-medicos"
-import Ausentismos from "@/components/rrhh/ausentismos"
-import RecobroIncapacidades from "@/components/rrhh/recobro-incapacidades"
-import Vacaciones from "@/components/rrhh/vacaciones"
-import { Auditoria0312 } from "@/components/sst/auditoria-0312"
-import { Matriz60Estandares } from "@/components/sst/matriz-60-estandares"
-import { RepositorioSoportes } from "@/components/sst/repositorio-soportes"
-import { RepositorioISO9001 } from "@/components/iso9001/repositorio-iso9001"
-import { InvestigacionAT } from "@/components/sst/investigacion-at"
-import { AlertasAT } from "@/components/sst/alertas-at"
-import { InvestigacionesRepositorio } from "@/components/sst/investigaciones-repositorio"
-import { MatrizIpevr } from "@/components/sst/ipevr"
-import { Medevac } from "@/components/sst/medevac"
-import { PerfilSociodemografico } from "@/components/sst/perfil-sociodemografico"
-import { PlanMejoramiento } from "@/components/sst/plan-mejoramiento"
-import { IndicadoresSST } from "@/components/sst/indicadores"
-import { EntregaEpp } from "@/components/sst/entrega-epp"
-import { EquiposMantenimiento } from "@/components/sst/equipos-mantenimiento"
-import { ComunicacionSST } from "@/components/sst/comunicacion"
-import { GestionCambio } from "@/components/sst/gestion-cambio"
-import { ActividadesSST } from "@/components/sst/actividades"
-import { MatrizIntegradaSIG } from "@/components/sst/matriz-integrada-sig"
-import { RepositorioSIG } from "@/components/sst/repositorio-sig"
-import RepositorioUniversal from "@/components/sst/repositorio-universal"
 import { ModuleKpiHeader } from "@/components/module-kpi-header"
-import { DashboardSIG } from "@/components/sst/dashboard-sig"
-import { AspectosAmbientales } from "@/components/sst/aspectos-ambientales"
-import { ObjetivosSIG } from "@/components/sst/objetivos-sig"
-import { NoConformidadesSIG } from "@/components/sst/no-conformidades-sig"
-import { IndicadoresSIG } from "@/components/sst/indicadores-sig"
-import { EvaluacionAreas } from "@/components/sst/evaluacion-areas"
-import { PanelOperacionLIP } from "@/components/sst/panel-operacion-lip"
-import ControlToneladas from "@/components/control-toneladas"
-import CentroCoordinacion from "@/components/centro-coordinacion"
-import { OperacionDelDia } from "@/components/operacion/operacion-del-dia"
-import { MapaInteraccionProceso } from "@/components/sst/mapa-interaccion-proceso"
-import { MapaProcesos } from "@/components/sig/mapa-procesos"
-import { PanelInventarioLIP } from "@/components/sst/panel-inventario-lip"
-import { CuadreInventario } from "@/components/sst/cuadre-inventario"
-import { PanelGestionHumanaLIP } from "@/components/sst/panel-gestion-humana-lip"
-import { SatisfaccionPQRSF } from "@/components/sst/satisfaccion-pqrsf"
-import { CalificacionConductor } from "@/components/sst/calificacion-conductor"
-import { FacturacionProyectosIndicador } from "@/components/sst/facturacion-proyectos-indicador"
-import { MatrizLegalAmbiental } from "@/components/sst/matriz-legal-ambiental"
-import { ContextoDofa } from "@/components/sst/contexto-dofa"
-import GestionColaboradores from "@/components/rrhh/gestion-colaboradores"
-import { CarpetasTrabajadores } from "@/components/rrhh/carpetas-trabajadores"
-import Entrevistas from "@/components/rrhh/entrevistas"
-import BienestarPrograma from "@/components/rrhh/bienestar-programa"
-import BienestarParticipacion from "@/components/rrhh/bienestar-participacion"
-import Nominapersonal from "@/components/nominapersonal" // Added import for Nominapersonal component
-import Liquidaciones from "@/components/liquidaciones"
-import AcumuladosLIPgo from "@/components/acumulados-lipgo"
-import Parafiscales from "@/components/parafiscales"
-import RevisionNomina from "@/components/revision-nomina"
-import Bonos from "@/components/bonos"
-import { SolicitudTurnos } from "@/components/solicitud-turnos" // Added import for Solicitud de Turnos
-import { AprobarTurnos } from "@/components/aprobar-turnos" // Added import for Aprobar Turnos
-import { AttendanceViewer } from "@/components/attendance-viewer" // Added import for AttendanceViewer component
-import GestionFacturas from "@/components/gestion-facturas" // Added import for Gestion de Facturas
-import AsistenteIA from "@/components/asistente-ia" // Added import for AI Assistant
-import FormularioRegistroGasto from "@/components/gastos/formulario-registro-gasto"
-import DashboardGastos from "@/components/gastos/dashboard-gastos"
-import EstadoResultados from "@/components/estado-resultados/estado-resultados"
 import { GroupKey } from "@/lib/dashboard-data"
+import dynamic from "next/dynamic"
+import { ModuleLoading } from "@/components/module-loading"
+
+// Carga por demanda de los módulos (rendimiento): antes, los ~160 módulos se
+// importaban estáticamente aquí y el bundle inicial del dashboard traía el
+// código de TODOS aunque el usuario abriera uno. Con next/dynamic cada módulo
+// se descarga la primera vez que se abre. Las piezas de layout/guards/home
+// siguen estáticas arriba. Generado a partir de los imports originales.
+const OrderEntryForm = dynamic(() => import("@/components/order-entry-form").then((m) => m.OrderEntryForm), { loading: ModuleLoading })
+const GenericCrudTable = dynamic(() => import("@/components/configuration/generic-crud-table").then((m) => m.GenericCrudTable), { loading: ModuleLoading })
+const OrdersManagement = dynamic(() => import("@/components/orders/orders-management").then((m) => m.OrdersManagement), { loading: ModuleLoading })
+const ComprehensiveOrdersManagement = dynamic(() => import("@/components/orders/comprehensive-orders-management").then((m) => m.ComprehensiveOrdersManagement), { loading: ModuleLoading })
+const DashboardPedidos = dynamic(() => import("@/components/orders/dashboard-pedidos").then((m) => m.DashboardPedidos), { loading: ModuleLoading })
+const DashboardRecepcion = dynamic(() => import("@/components/dashboard-recepcion").then((m) => m.DashboardRecepcion), { loading: ModuleLoading })
+const OrderEditPage = dynamic(() => import("@/components/orders/order-edit-page").then((m) => m.OrderEditPage), { loading: ModuleLoading })
+const ProductosWithCategories = dynamic(() => import("@/components/configuration/productos-with-categories").then((m) => m.ProductosWithCategories), { loading: ModuleLoading })
+const VehicleAppointmentsForm = dynamic(() => import("@/components/vehicle-appointments-form").then((m) => m.VehicleAppointmentsForm), { loading: ModuleLoading })
+const BasculaForm = dynamic(() => import("@/components/bascula-form").then((m) => m.BasculaForm), { loading: ModuleLoading })
+const BasculaHistory = dynamic(() => import("@/components/bascula-history").then((m) => m.BasculaHistory), { loading: ModuleLoading })
+const GenerateLoadOrders = dynamic(() => import("@/components/generate-load-orders").then((m) => m.GenerateLoadOrders), { loading: ModuleLoading })
+const GenerateUnloadOrders = dynamic(() => import("@/components/generate-unload-orders").then((m) => m.GenerateUnloadOrders), { loading: ModuleLoading })
+const GenerateDistributionOrders = dynamic(() => import("@/components/generate-distribution-orders").then((m) => m.GenerateDistributionOrders), { loading: ModuleLoading })
+const InventoryTransactionsModule = dynamic(() => import("@/components/inventory-transactions-module").then((m) => m.InventoryTransactionsModule), { loading: ModuleLoading })
+const ProductionEntryForm = dynamic(() => import("@/components/production-entry-form").then((m) => m.ProductionEntryForm), { loading: ModuleLoading })
+const InventoryBalanceDetails = dynamic(() => import("@/components/inventory-balance-details").then((m) => m.InventoryBalanceDetails), { loading: ModuleLoading })
+const InventoryBalanceGlobal = dynamic(() => import("@/components/inventory-balance-global").then((m) => m.InventoryBalanceGlobal), { loading: ModuleLoading })
+const ReprocesosManagement = dynamic(() => import("@/components/reprocesos-management").then((m) => m.ReprocesosManagement), { loading: ModuleLoading })
+const LoadOrdersManagement = dynamic(() => import("@/components/load-orders-management").then((m) => m.LoadOrdersManagement), { loading: ModuleLoading })
+const ProductionApproval = dynamic(() => import("@/components/production-approval").then((m) => m.ProductionApproval), { loading: ModuleLoading })
+const LiquidacionTolva = dynamic(() => import("@/components/produccion/liquidacion-tolva"), { loading: ModuleLoading })
+const ControlPiso = dynamic(() => import("@/components/produccion/control-piso"), { loading: ModuleLoading })
+const ReporteParos = dynamic(() => import("@/components/produccion/reporte-paros"), { loading: ModuleLoading })
+const GestionMontacargas = dynamic(() => import("@/components/montacargas/gestion-montacargas"), { loading: ModuleLoading })
+const InventoryTransactionsManagement = dynamic(() => import("@/components/inventory-transactions-management").then((m) => m.InventoryTransactionsManagement), { loading: ModuleLoading })
+const SanitaryRegistryForm = dynamic(() => import("@/components/sanitary-registry-form").then((m) => m.SanitaryRegistryForm), { loading: ModuleLoading })
+const ProductTransferForm = dynamic(() => import("@/components/product-transfer-form").then((m) => m.ProductTransferForm), { loading: ModuleLoading })
+const TransferRequestsView = dynamic(() => import("@/components/transfer-requests-view").then((m) => m.TransferRequestsView), { loading: ModuleLoading })
+const BatchApproval = dynamic(() => import("@/components/batch-approval").then((m) => m.BatchApproval), { loading: ModuleLoading })
+const Picking = dynamic(() => import("@/components/picking").then((m) => m.Picking), { loading: ModuleLoading })
+const Packing = dynamic(() => import("@/components/packing").then((m) => m.Packing), { loading: ModuleLoading })
+const DashboardOperacion = dynamic(() => import("@/components/dashboard-operacion"), { loading: ModuleLoading })
+const BatchHistory = dynamic(() => import("@/components/batch-history").then((m) => m.BatchHistory), { loading: ModuleLoading })
+const Aprendizaje = dynamic(() => import("@/components/aprendizaje").then((m) => m.Aprendizaje), { loading: ModuleLoading })
+const ProductionEntriesView = dynamic(() => import("@/components/production-entries-view").then((m) => m.ProductionEntriesView), { loading: ModuleLoading })
+const InventoryAudit = dynamic(() => import("@/components/inventory-audit"), { loading: ModuleLoading })
+const SanitaryInspectionHistory = dynamic(() => import("@/components/sanitary-inspection-history").then((m) => m.SanitaryInspectionHistory), { loading: ModuleLoading })
+const ApprovalHistory = dynamic(() => import("@/components/approval-history").then((m) => m.ApprovalHistory), { loading: ModuleLoading })
+const WarehouseCapacityComponent = dynamic(() => import("@/components/warehouse-capacity").then((m) => m.WarehouseCapacityComponent), { loading: ModuleLoading })
+const QRPalletRegistration = dynamic(() => import("@/components/qr-pallet-registration"), { loading: ModuleLoading })
+const QRPalletReading = dynamic(() => import("@/components/qr-pallet-reading"), { loading: ModuleLoading })
+const PalletInventoryView = dynamic(() => import("@/components/pallet-inventory-view").then((m) => m.PalletInventoryView), { loading: ModuleLoading })
+const MaterialExplosion = dynamic(() => import("@/components/material-explosion"), { loading: ModuleLoading })
+const MontacargasDia = dynamic(() => import("@/components/inventario/montacargas-dia"), { loading: ModuleLoading })
+const Bitacora = dynamic(() => import("@/components/lip/bitacora"), { loading: ModuleLoading })
+const UserPermissionsManagement = dynamic(() => import("@/components/configuration/user-permissions-management").then((m) => m.UserPermissionsManagement), { loading: ModuleLoading })
+const BitacoraAuditoria = dynamic(() => import("@/components/configuration/bitacora-auditoria"), { loading: ModuleLoading })
+const PlacasDistribucion = dynamic(() => import("@/components/configuration/placas-distribucion"), { loading: ModuleLoading })
+const MuellesEmpresaConfig = dynamic(() => import("@/components/configuration/muelles-empresa"), { loading: ModuleLoading })
+const UserAccessModule = dynamic(() => import("@/components/user-access-module").then((m) => m.UserAccessModule), { loading: ModuleLoading })
+const HeadcountManagement = dynamic(() => import("@/components/headcount-management"), { loading: ModuleLoading })
+const Tolva = dynamic(() => import("@/components/tolva").then((m) => m.Tolva), { loading: ModuleLoading })
+const VerTolva = dynamic(() => import("@/components/ver-tolva"), { loading: ModuleLoading })
+const Proyecciones = dynamic(() => import("@/components/proyecciones").then((m) => m.Proyecciones), { loading: ModuleLoading })
+const AttendanceRegistration = dynamic(() => import("@/components/attendance-registration"), { loading: ModuleLoading })
+const AttendanceTable = dynamic(() => import("@/components/attendance-table"), { loading: ModuleLoading })
+const ExtraHoursAssignment = dynamic(() => import("@/components/extra-hours-assignment").then((m) => m.ExtraHoursAssignment), { loading: ModuleLoading })
+const ApoyoCargue = dynamic(() => import("@/components/apoyo-cargue").then((m) => m.ApoyoCargue), { loading: ModuleLoading })
+const NovedadesTiempoReal = dynamic(() => import("@/components/rrhh/novedades-tiempo-real"), { loading: ModuleLoading })
+const AsistenciaAdministrativa = dynamic(() => import("@/components/rrhh/asistencia-administrativa"), { loading: ModuleLoading })
+const GestionTurnos = dynamic(() => import("@/components/rrhh/gestion-turnos"), { loading: ModuleLoading })
+const ProgramacionPersonal = dynamic(() => import("@/components/rrhh/programacion-personal"), { loading: ModuleLoading })
+const NotificacionesPersonal = dynamic(() => import("@/components/rrhh/notificaciones-personal"), { loading: ModuleLoading })
+const ViewPicking = dynamic(() => import("@/components/view-picking").then((m) => m.ViewPicking), { loading: ModuleLoading })
+const Tarifas = dynamic(() => import("@/components/configuration/tarifas").then((m) => m.Tarifas), { loading: ModuleLoading })
+const FacturacionProyectos = dynamic(() => import("@/components/facturacion-proyectos").then((m) => m.FacturacionProyectos), { loading: ModuleLoading })
+const CuadroControlFacturacion = dynamic(() => import("@/components/cuadro-control-facturacion").then((m) => m.CuadroControlFacturacion), { loading: ModuleLoading })
+const ResumenFacturacionProyecto = dynamic(() => import("@/components/resumen-facturacion-proyecto"), { loading: ModuleLoading })
+const CargosFijos = dynamic(() => import("@/components/cargos-fijos"), { loading: ModuleLoading })
+const CorreccionOrdenes = dynamic(() => import("@/components/correccion-ordenes"), { loading: ModuleLoading })
+const ConciliacionAvimol = dynamic(() => import("@/components/conciliacion-avimol"), { loading: ModuleLoading })
+const PrefacturaProduccion = dynamic(() => import("@/components/prefactura-produccion"), { loading: ModuleLoading })
+const CicloFacturacion = dynamic(() => import("@/components/ciclo-facturacion"), { loading: ModuleLoading })
+const DashboardOperacionesLip = dynamic(() => import("@/components/dashboard-operaciones-lip").then((m) => m.DashboardOperacionesLip), { loading: ModuleLoading })
+const RegistroPreoperacional = dynamic(() => import("@/components/registro-preoperacional").then((m) => m.RegistroPreoperacional), { loading: ModuleLoading })
+const GestionContratos = dynamic(() => import("@/components/rrhh/gestion-contratos"), { loading: ModuleLoading })
+const DotacionEPP = dynamic(() => import("@/components/rrhh/dotacion-epp"), { loading: ModuleLoading })
+const Capacitaciones = dynamic(() => import("@/components/rrhh/capacitaciones"), { loading: ModuleLoading })
+const CapacitacionesAsistencia = dynamic(() => import("@/components/rrhh/capacitaciones-asistencia"), { loading: ModuleLoading })
+const RequisicionPersonal = dynamic(() => import("@/components/rrhh/requisicion-personal"), { loading: ModuleLoading })
+const ProcesosDisciplinarios = dynamic(() => import("@/components/rrhh/procesos-disciplinarios"), { loading: ModuleLoading })
+const EvaluacionesDashboard = dynamic(() => import("@/components/rrhh/evaluaciones-dashboard"), { loading: ModuleLoading })
+const InduccionesEvidenciaDashboard = dynamic(() => import("@/components/rrhh/inducciones-evidencia-dashboard"), { loading: ModuleLoading })
+const InduccionesManagement = dynamic(() => import("@/components/rrhh/inducciones-management"), { loading: ModuleLoading })
+const IsoEvidenceDashboard = dynamic(() => import("@/components/iso9001/iso-evidence-dashboard"), { loading: ModuleLoading })
+const GestionSolicitudes = dynamic(() => import("@/components/rrhh/gestion-solicitudes"), { loading: ModuleLoading })
+const GestionSolicitudesPersonal = dynamic(() => import("@/components/rrhh/gestion-solicitudes-personal"), { loading: ModuleLoading })
+const HojasDeVida = dynamic(() => import("@/components/rrhh/hojas-de-vida"), { loading: ModuleLoading })
+const Antecedentes = dynamic(() => import("@/components/rrhh/antecedentes"), { loading: ModuleLoading })
+const ExamenesMedicos = dynamic(() => import("@/components/rrhh/examenes-medicos"), { loading: ModuleLoading })
+const Ausentismos = dynamic(() => import("@/components/rrhh/ausentismos"), { loading: ModuleLoading })
+const RecobroIncapacidades = dynamic(() => import("@/components/rrhh/recobro-incapacidades"), { loading: ModuleLoading })
+const Vacaciones = dynamic(() => import("@/components/rrhh/vacaciones"), { loading: ModuleLoading })
+const Auditoria0312 = dynamic(() => import("@/components/sst/auditoria-0312").then((m) => m.Auditoria0312), { loading: ModuleLoading })
+const Matriz60Estandares = dynamic(() => import("@/components/sst/matriz-60-estandares").then((m) => m.Matriz60Estandares), { loading: ModuleLoading })
+const RepositorioSoportes = dynamic(() => import("@/components/sst/repositorio-soportes").then((m) => m.RepositorioSoportes), { loading: ModuleLoading })
+const RepositorioISO9001 = dynamic(() => import("@/components/iso9001/repositorio-iso9001").then((m) => m.RepositorioISO9001), { loading: ModuleLoading })
+const InvestigacionAT = dynamic(() => import("@/components/sst/investigacion-at").then((m) => m.InvestigacionAT), { loading: ModuleLoading })
+const AlertasAT = dynamic(() => import("@/components/sst/alertas-at").then((m) => m.AlertasAT), { loading: ModuleLoading })
+const InvestigacionesRepositorio = dynamic(() => import("@/components/sst/investigaciones-repositorio").then((m) => m.InvestigacionesRepositorio), { loading: ModuleLoading })
+const MatrizIpevr = dynamic(() => import("@/components/sst/ipevr").then((m) => m.MatrizIpevr), { loading: ModuleLoading })
+const Medevac = dynamic(() => import("@/components/sst/medevac").then((m) => m.Medevac), { loading: ModuleLoading })
+const PerfilSociodemografico = dynamic(() => import("@/components/sst/perfil-sociodemografico").then((m) => m.PerfilSociodemografico), { loading: ModuleLoading })
+const PlanMejoramiento = dynamic(() => import("@/components/sst/plan-mejoramiento").then((m) => m.PlanMejoramiento), { loading: ModuleLoading })
+const IndicadoresSST = dynamic(() => import("@/components/sst/indicadores").then((m) => m.IndicadoresSST), { loading: ModuleLoading })
+const EntregaEpp = dynamic(() => import("@/components/sst/entrega-epp").then((m) => m.EntregaEpp), { loading: ModuleLoading })
+const EquiposMantenimiento = dynamic(() => import("@/components/sst/equipos-mantenimiento").then((m) => m.EquiposMantenimiento), { loading: ModuleLoading })
+const ComunicacionSST = dynamic(() => import("@/components/sst/comunicacion").then((m) => m.ComunicacionSST), { loading: ModuleLoading })
+const GestionCambio = dynamic(() => import("@/components/sst/gestion-cambio").then((m) => m.GestionCambio), { loading: ModuleLoading })
+const ActividadesSST = dynamic(() => import("@/components/sst/actividades").then((m) => m.ActividadesSST), { loading: ModuleLoading })
+const MatrizIntegradaSIG = dynamic(() => import("@/components/sst/matriz-integrada-sig").then((m) => m.MatrizIntegradaSIG), { loading: ModuleLoading })
+const RepositorioSIG = dynamic(() => import("@/components/sst/repositorio-sig").then((m) => m.RepositorioSIG), { loading: ModuleLoading })
+const RepositorioUniversal = dynamic(() => import("@/components/sst/repositorio-universal"), { loading: ModuleLoading })
+const DashboardSIG = dynamic(() => import("@/components/sst/dashboard-sig").then((m) => m.DashboardSIG), { loading: ModuleLoading })
+const AspectosAmbientales = dynamic(() => import("@/components/sst/aspectos-ambientales").then((m) => m.AspectosAmbientales), { loading: ModuleLoading })
+const ObjetivosSIG = dynamic(() => import("@/components/sst/objetivos-sig").then((m) => m.ObjetivosSIG), { loading: ModuleLoading })
+const NoConformidadesSIG = dynamic(() => import("@/components/sst/no-conformidades-sig").then((m) => m.NoConformidadesSIG), { loading: ModuleLoading })
+const IndicadoresSIG = dynamic(() => import("@/components/sst/indicadores-sig").then((m) => m.IndicadoresSIG), { loading: ModuleLoading })
+const EvaluacionAreas = dynamic(() => import("@/components/sst/evaluacion-areas").then((m) => m.EvaluacionAreas), { loading: ModuleLoading })
+const PanelOperacionLIP = dynamic(() => import("@/components/sst/panel-operacion-lip").then((m) => m.PanelOperacionLIP), { loading: ModuleLoading })
+const ControlToneladas = dynamic(() => import("@/components/control-toneladas"), { loading: ModuleLoading })
+const CentroCoordinacion = dynamic(() => import("@/components/centro-coordinacion"), { loading: ModuleLoading })
+const OperacionDelDia = dynamic(() => import("@/components/operacion/operacion-del-dia").then((m) => m.OperacionDelDia), { loading: ModuleLoading })
+const MapaInteraccionProceso = dynamic(() => import("@/components/sst/mapa-interaccion-proceso").then((m) => m.MapaInteraccionProceso), { loading: ModuleLoading })
+const MapaProcesos = dynamic(() => import("@/components/sig/mapa-procesos").then((m) => m.MapaProcesos), { loading: ModuleLoading })
+const PanelInventarioLIP = dynamic(() => import("@/components/sst/panel-inventario-lip").then((m) => m.PanelInventarioLIP), { loading: ModuleLoading })
+const CuadreInventario = dynamic(() => import("@/components/sst/cuadre-inventario").then((m) => m.CuadreInventario), { loading: ModuleLoading })
+const PanelGestionHumanaLIP = dynamic(() => import("@/components/sst/panel-gestion-humana-lip").then((m) => m.PanelGestionHumanaLIP), { loading: ModuleLoading })
+const SatisfaccionPQRSF = dynamic(() => import("@/components/sst/satisfaccion-pqrsf").then((m) => m.SatisfaccionPQRSF), { loading: ModuleLoading })
+const CalificacionConductor = dynamic(() => import("@/components/sst/calificacion-conductor").then((m) => m.CalificacionConductor), { loading: ModuleLoading })
+const FacturacionProyectosIndicador = dynamic(() => import("@/components/sst/facturacion-proyectos-indicador").then((m) => m.FacturacionProyectosIndicador), { loading: ModuleLoading })
+const MatrizLegalAmbiental = dynamic(() => import("@/components/sst/matriz-legal-ambiental").then((m) => m.MatrizLegalAmbiental), { loading: ModuleLoading })
+const ContextoDofa = dynamic(() => import("@/components/sst/contexto-dofa").then((m) => m.ContextoDofa), { loading: ModuleLoading })
+const GestionColaboradores = dynamic(() => import("@/components/rrhh/gestion-colaboradores"), { loading: ModuleLoading })
+const CarpetasTrabajadores = dynamic(() => import("@/components/rrhh/carpetas-trabajadores").then((m) => m.CarpetasTrabajadores), { loading: ModuleLoading })
+const Entrevistas = dynamic(() => import("@/components/rrhh/entrevistas"), { loading: ModuleLoading })
+const BienestarPrograma = dynamic(() => import("@/components/rrhh/bienestar-programa"), { loading: ModuleLoading })
+const BienestarParticipacion = dynamic(() => import("@/components/rrhh/bienestar-participacion"), { loading: ModuleLoading })
+const Nominapersonal = dynamic(() => import("@/components/nominapersonal"), { loading: ModuleLoading })
+const Liquidaciones = dynamic(() => import("@/components/liquidaciones"), { loading: ModuleLoading })
+const AcumuladosLIPgo = dynamic(() => import("@/components/acumulados-lipgo"), { loading: ModuleLoading })
+const Parafiscales = dynamic(() => import("@/components/parafiscales"), { loading: ModuleLoading })
+const RevisionNomina = dynamic(() => import("@/components/revision-nomina"), { loading: ModuleLoading })
+const Bonos = dynamic(() => import("@/components/bonos"), { loading: ModuleLoading })
+const SolicitudTurnos = dynamic(() => import("@/components/solicitud-turnos").then((m) => m.SolicitudTurnos), { loading: ModuleLoading })
+const AprobarTurnos = dynamic(() => import("@/components/aprobar-turnos").then((m) => m.AprobarTurnos), { loading: ModuleLoading })
+const AttendanceViewer = dynamic(() => import("@/components/attendance-viewer").then((m) => m.AttendanceViewer), { loading: ModuleLoading })
+const GestionFacturas = dynamic(() => import("@/components/gestion-facturas"), { loading: ModuleLoading })
+const AsistenteIA = dynamic(() => import("@/components/asistente-ia"), { loading: ModuleLoading })
+const FormularioRegistroGasto = dynamic(() => import("@/components/gastos/formulario-registro-gasto"), { loading: ModuleLoading })
+const DashboardGastos = dynamic(() => import("@/components/gastos/dashboard-gastos"), { loading: ModuleLoading })
+const EstadoResultados = dynamic(() => import("@/components/estado-resultados/estado-resultados"), { loading: ModuleLoading })
 
 interface MainContentProps {
   selectedGroup: GroupKey | null
@@ -227,7 +235,7 @@ export function MainContent({
   React.useEffect(() => {
     if (!selectedEmpresaId) return
     let cancel = false
-    getAtencionDelDia(profile?.id, selectedEmpresaId ?? undefined)
+    getAtencionDelDiaCompartida(profile?.id, selectedEmpresaId ?? undefined)
       .then((r) => {
         if (!cancel && r.success) setHomeAlertas(r.items as AtencionItem[])
       })
