@@ -10,7 +10,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Download, Pencil, Eye, EyeOff, Receipt, Scale, Info } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
-import * as XLSX from "xlsx"
 import { getBasculaHistory, updateBasculaRecord } from "@/lib/bascula-actions"
 import { useAuth } from "@/components/auth-provider"
 import { useSubmoduloFiltro } from "@/components/submodulo-filtro-context"
@@ -186,7 +185,8 @@ export function BasculaHistory() {
     }
   }
 
-  const handleExportToExcel = () => {
+  const handleExportToExcel = async () => {
+    const XLSX = await import("xlsx")
     setExporting(true)
     try {
       const dataToExport = filteredData.map((row) => ({

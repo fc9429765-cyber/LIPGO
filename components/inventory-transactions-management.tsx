@@ -22,7 +22,6 @@ import {
   type Location,
   type ProductWithCode,
 } from "@/lib/inventory-actions"
-import * as XLSX from "xlsx"
 
 export function InventoryTransactionsManagement() {
   const { selectedEmpresaId } = useAuth()
@@ -75,7 +74,8 @@ export function InventoryTransactionsManagement() {
     })
   }
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
+    const XLSX = await import("xlsx")
     // Prepare data for export
     const exportData = transactions.map((transaction) => ({
       ID: transaction.id,

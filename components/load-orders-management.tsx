@@ -35,7 +35,6 @@ import { getLoadOrders, deleteLoadOrder } from "@/lib/orders-actions"
 import { getAvailableVehiclesForAssignment, assignVehicleToLoadOrder } from "@/lib/vehicle-actions"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/components/auth-provider"
-import * as XLSX from "xlsx"
 
 interface LoadOrder {
   id: number
@@ -231,7 +230,8 @@ export function LoadOrdersManagement() {
     }
   }
 
-  const handleExportToExcel = () => {
+  const handleExportToExcel = async () => {
+    const XLSX = await import("xlsx")
     if (filteredOrders.length === 0) {
       toast({
         title: "No hay datos",

@@ -28,7 +28,6 @@ import {
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/components/auth-provider"
-import * as XLSX from "xlsx"
 
 export function BatchHistory() {
   const [records, setRecords] = useState<BatchHistoryRecord[]>([])
@@ -176,7 +175,8 @@ export function BatchHistory() {
     setCurrentPage(Math.min(Math.max(1, page), totalPages))
   }
 
-  const handleExportToExcel = () => {
+  const handleExportToExcel = async () => {
+    const XLSX = await import("xlsx")
     const exportData = filteredRecords.map((record) => ({
       Fecha: record.fecha,
       Cliente: record.cliente,

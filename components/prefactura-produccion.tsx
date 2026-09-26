@@ -15,7 +15,6 @@
 // borrador se puede eliminar; una aprobada no (ya se le pasó al cliente).
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import * as XLSX from "xlsx"
 import { useToast } from "@/components/ui/use-toast"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -213,7 +212,8 @@ export default function PrefacturaProduccion({ idempresaFija }: { idempresaFija?
     }
   }
 
-  const exportarExcel = () => {
+  const exportarExcel = async () => {
+    const XLSX = await import("xlsx")
     if (!data || seleccionadas.length === 0) return
     const wb = XLSX.utils.book_new()
     const cab: any[][] = [

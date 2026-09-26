@@ -8,7 +8,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Search, Loader2, Download, Eye } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { Label } from "@/components/ui/label"
-import * as XLSX from "xlsx"
 import { useAuth } from "@/components/auth-provider"
 import { BasculaOrderDetailsDialog } from "@/components/bascula-order-details-dialog"
 
@@ -53,7 +52,8 @@ export function BasculaView() {
     setLoading(false)
   }
 
-  const handleExportToExcel = () => {
+  const handleExportToExcel = async () => {
+    const XLSX = await import("xlsx")
     setExporting(true)
     try {
       const dataToExport = filteredData.map((row) => ({

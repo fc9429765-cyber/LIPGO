@@ -7,7 +7,6 @@
 // información" -- este módulo GENERA el reporte, no compara contra Siigo.
 
 import { useCallback, useEffect, useState } from "react"
-import * as XLSX from "xlsx"
 import { useAuth } from "@/components/auth-provider"
 import { useToast } from "@/components/ui/use-toast"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -58,7 +57,8 @@ export default function AcumuladosLIPgo() {
   const totalDeducciones = data.filter((f) => f.tipo === "Deducción").reduce((s, f) => s + Math.abs(f.valor_total), 0)
   const personas = new Set(data.map((f) => f.identificacion)).size
 
-  const exportar = () => {
+  const exportar = async () => {
+    const XLSX = await import("xlsx")
     if (data.length === 0) return
     const headers = [
       "Identificación", "Nombre empleado", "No contrato", "Periodo", "Mes", "Año",

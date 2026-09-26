@@ -57,7 +57,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import * as XLSX from "xlsx"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -486,7 +485,8 @@ export function ComprehensiveOrdersManagement() {
     }
   }
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
+    const XLSX = await import("xlsx")
     const wsData = orders
       .filter((order) => {
         // 'aprobado' se guarda en minúscula ('si') o null; el filtro compara normalizado

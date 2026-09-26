@@ -16,7 +16,6 @@ import { createSolicitudTurnos, getSolicitudesTurnos, getPuestosFacturacion } fr
 import { Badge } from "@/components/ui/badge"
 // XLSX se usa para exportar el historial filtrado a Excel. Ya esta
 // instalado en otros modulos del proyecto (ApprovalHistory, etc.).
-import * as XLSX from "xlsx"
 
 interface LineaSolicitud {
   id: string
@@ -171,7 +170,8 @@ export function SolicitudTurnos() {
   // compartirse fuera de la app sin necesidad de mapeo adicional.
   // Incluimos la URL del PDF de aprobacion como columna (texto plano)
   // para que el receptor pueda abrirlo desde Excel.
-  const handleDownloadExcel = () => {
+  const handleDownloadExcel = async () => {
+    const XLSX = await import("xlsx")
     if (filteredHistorial.length === 0) {
       toast({
         title: "Sin datos",

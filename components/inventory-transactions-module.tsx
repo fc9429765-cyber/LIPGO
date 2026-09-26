@@ -7,7 +7,6 @@
 //   4. Historial de correcciones (inv_correcciones_log, revisable sin tocar invtrans)
 
 import { useEffect, useMemo, useState } from "react"
-import * as XLSX from "xlsx"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -94,7 +93,8 @@ function ConsultaMovimientos() {
     } else toast({ title: "No se pudo consultar", description: r.error, variant: "destructive" })
   }
 
-  const exportarExcel = () => {
+  const exportarExcel = async () => {
+    const XLSX = await import("xlsx")
     const data = filas.map((f) => ({
       "#": f.id,
       Fecha: fmtFechaHora(f.creado),
@@ -266,7 +266,8 @@ function HistorialCorrecciones() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEmpresaId])
 
-  const exportarExcel = () => {
+  const exportarExcel = async () => {
+    const XLSX = await import("xlsx")
     const data = filas.map((f) => ({
       "#": f.id,
       Fecha: fmtFechaHora(f.created_at),

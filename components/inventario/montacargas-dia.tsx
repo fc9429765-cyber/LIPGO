@@ -60,7 +60,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Loader2, Plus, Pencil, Trash2, Truck, Users, CalendarDays, Download, FilterX } from "lucide-react"
-import * as XLSX from "xlsx"
 import {
   createMontacargasDia,
   deleteMontacargasDia,
@@ -141,7 +140,8 @@ export default function MontacargasDia() {
    * tipos (numero/texto) se respetan, en lugar de un CSV separado por
    * comas.
    */
-  const exportarExcel = () => {
+  const exportarExcel = async () => {
+    const XLSX = await import("xlsx")
     // Cada objeto del arreglo es una fila; las claves son los encabezados.
     const data = filteredRows.map((row) => ({
       Fecha: formatFecha(row.fecha),

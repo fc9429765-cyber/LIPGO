@@ -30,7 +30,6 @@ import {
   type Location,
   type ProductWithCode,
 } from "@/lib/inventory-actions"
-import * as XLSX from "xlsx"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tolva, type PrefilledTolvaLine } from "@/components/tolva"
 
@@ -141,7 +140,8 @@ export function ProductionEntriesView() {
     })
   }
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
+    const XLSX = await import("xlsx")
     // Lo VISIBLE, para que el archivo coincida con lo que se ve en pantalla.
     const exportData = transaccionesVisibles.map((transaction) => ({
       ID: transaction.id,

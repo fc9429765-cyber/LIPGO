@@ -40,7 +40,6 @@ import {
   CheckSquare,
   Landmark,
 } from "lucide-react"
-import * as XLSX from "xlsx"
 import {
   getLiquidaciones,
   guardarEstadoLiquidacion,
@@ -429,7 +428,8 @@ export default function Liquidaciones() {
     } else toast({ title: "Error", description: r.message, variant: "destructive" })
   }
 
-  const exportar = () => {
+  const exportar = async () => {
+    const XLSX = await import("xlsx")
     try {
       const headers = [
         "Persona",

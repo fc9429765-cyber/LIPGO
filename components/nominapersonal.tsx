@@ -14,7 +14,6 @@ import { useToast } from "@/components/ui/use-toast"
 import { Download, RefreshCw } from "lucide-react"
 import { Search } from "lucide-react" // Declare the Search variable
 import { ChevronDown, ChevronRight } from "lucide-react"
-import * as XLSX from "xlsx"
 
 // Helper function to safely parse dates from database without timezone conversion issues
 const parseDateFromDB = (dateString: string | null | undefined): Date | null => {
@@ -585,6 +584,7 @@ export default function Nominapersonal() {
   }
 
   const exportToExcelLiquidacion = async () => {
+    const XLSX = await import("xlsx")
     try {
       const headers = [
         "Fecha",
@@ -699,6 +699,7 @@ export default function Nominapersonal() {
   }, [adelantosRaw])
 
   const exportToExcelArchivoplanano = async () => {
+    const XLSX = await import("xlsx")
     try {
       // ORDEN EXIGIDO POR SIIGO: el NOMBRE del empleado va inmediatamente
       // después de la cédula. Este array es el que manda en el archivo — el
@@ -770,6 +771,7 @@ export default function Nominapersonal() {
   // Mismo layout de columnas que exportToExcelArchivoplanano (el que exige
   // Siigo) -- una fila por persona, con el valor ya consolidado.
   const exportToExcelAdelantos = async () => {
+    const XLSX = await import("xlsx")
     try {
       const headers = ["Contrato", "Identificación", "Nombre", "Novedad", "Tipo Novedad", "Cantidad/Valor", "Fecha Inicio", "Fecha Fin", "Días No Hábiles"]
 

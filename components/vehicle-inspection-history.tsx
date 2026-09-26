@@ -23,7 +23,6 @@ import {
   type VehicleInspectionRecord,
 } from "@/lib/vehicle-inspection-actions"
 import { useAuth } from "@/components/auth-provider"
-import * as XLSX from "xlsx"
 
 // Criterios: clave de columna + etiqueta visible (para exportar y resumir).
 const CRITERIOS = [
@@ -105,7 +104,8 @@ export function VehicleInspectionHistory() {
    * cada campo en su propia columna. Los criterios se exportan como
    * "Si"/"No" y se incluye el conteo de fotos.
    */
-  const exportarExcel = () => {
+  const exportarExcel = async () => {
+    const XLSX = await import("xlsx")
     const data = registros.map((r) => ({
       Fecha: formatFecha(r.fecha),
       "Hora Ingreso": r.hora_ingreso ?? "",

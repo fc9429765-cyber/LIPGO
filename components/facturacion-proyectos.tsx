@@ -14,7 +14,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { ChevronLeft, DollarSign, Weight, ChevronRight, Download, Clock } from "lucide-react"
-import * as XLSX from "xlsx"
 import { useAuth } from "@/components/auth-provider"
 import { getConciliacionAvimol } from "@/lib/conciliacion-avimol-actions"
 import { calcularServiciosAdicionalesIndupan } from "@/lib/servicios-adicionales-indupan-actions"
@@ -411,7 +410,8 @@ export function FacturacionProyectos() {
     setTurnosCurrentPage(1)
   }
 
-  const exportTurnosToExcel = () => {
+  const exportTurnosToExcel = async () => {
+    const XLSX = await import("xlsx")
     if (filteredTurnosData.length === 0) {
       toast({
         title: "Advertencia",
@@ -490,7 +490,8 @@ export function FacturacionProyectos() {
     })
   }
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
+    const XLSX = await import("xlsx")
     if (filteredData.length === 0) {
       toast({
         title: "Advertencia",

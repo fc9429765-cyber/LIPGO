@@ -31,7 +31,6 @@ import {
   ChevronRight,
   RefreshCw,
 } from "lucide-react"
-import * as XLSX from "xlsx"
 import {
   getControlFacturacion,
   getPrefactura,
@@ -234,7 +233,8 @@ export function SoporteAnexo({ lineas }: { lineas: SoporteLinea[] }) {
 // `consecutivo` = id de la prefactura ya guardada (bigserial, único): viaja como
 // columna en cada fila -- no solo en el nombre del archivo -- para poder
 // amarrar esta línea a la factura real el día que exista ese cruce.
-function exportarSoporteExcel(lineas: SoporteLinea[], nombre: string, consecutivo?: number) {
+async function exportarSoporteExcel(lineas: SoporteLinea[], nombre: string, consecutivo?: number) {
+  const XLSX = await import("xlsx")
   const { grupos } = agruparSoporte(lineas)
   const wb = XLSX.utils.book_new()
   const usados = new Set<string>()
@@ -415,7 +415,8 @@ export function CuadroControlFacturacion() {
   // muestra y separa por él. En los demás proyectos esas columnas no aportan.
   const hayTransporte = proyectoConReglaMedioPago(empresaId)
 
-  const exportarDetalle = () => {
+  const exportarDetalle = async () => {
+    const XLSX = await import("xlsx")
     if (!data) return
     const rows = data.filas.map((f) => ({
       Fecha: f.fecha ?? "",
@@ -560,7 +561,8 @@ export function CuadroControlFacturacion() {
 
   // Descarga la prefactura SELECCIONADA, bien formateada (encabezado por owner,
   // filas de servicio con nombre/tipo operación, subtotales, total) + TABLA ORIGEN.
-  const descargarPrefacturaExcel = () => {
+  const descargarPrefacturaExcel = async () => {
+    const XLSX = await import("xlsx")
     if (!pref || !prefSel) return
     const proyecto = empresas.find((e) => e.id === empresaId)?.nombre || `Empresa ${empresaId}`
     const rango = `${filtros.desde || "inicio"} a ${filtros.hasta || "fin"}`

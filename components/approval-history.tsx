@@ -10,7 +10,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Search, FileDown, FileText } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { getBatchHistory, getBatchHistoryFilters, type BatchHistoryRecord } from "@/lib/batch-actions"
-import * as XLSX from "xlsx"
 import { useAuth } from "@/components/auth-provider"
 
 export function ApprovalHistory() {
@@ -63,7 +62,8 @@ export function ApprovalHistory() {
     })
   }
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
+    const XLSX = await import("xlsx")
     const exportData = records.map((record) => ({
       ID: record.id,
       Fecha: record.fecha ? new Date(record.fecha).toLocaleDateString() : "",

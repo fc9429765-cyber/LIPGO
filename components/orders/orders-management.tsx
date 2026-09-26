@@ -71,7 +71,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import * as XLSX from "xlsx"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -1155,7 +1154,8 @@ export function OrdersManagement(_props?: { onEditOrder?: (orderId: number) => v
     window.open(pdfUrl, "_blank")
   }
 
-  const handleExportToExcel = () => {
+  const handleExportToExcel = async () => {
+    const XLSX = await import("xlsx")
     if (filteredOrders.length === 0) {
       toast({
         title: "No hay datos",
