@@ -92,6 +92,7 @@ import ResumenFacturacionProyecto from "@/components/resumen-facturacion-proyect
 import { ClaveFinancieraGuard } from "@/components/clave-financiera-guard"
 // Gestión Financiera: alquiler de montacargas facturado + cargos fijos ($2M, 600 ton).
 import CargosFijos from "@/components/cargos-fijos"
+import CorreccionOrdenes from "@/components/correccion-ordenes"
 import ConciliacionAvimol from "@/components/conciliacion-avimol"
 import PrefacturaProduccion from "@/components/prefactura-produccion"
 import CicloFacturacion from "@/components/ciclo-facturacion"
@@ -1089,6 +1090,12 @@ export function MainContent({
             <PermissionGuard moduleName="Cargos Fijos">
               <ClaveFinancieraGuard>
                 <CargosFijos />
+              </ClaveFinancieraGuard>
+            </PermissionGuard>
+          ) : selectedModule === "Corrección de Órdenes" ? (
+            <PermissionGuard moduleName="Corrección de Órdenes">
+              <ClaveFinancieraGuard>
+                <CorreccionOrdenes />
               </ClaveFinancieraGuard>
             </PermissionGuard>
           ) : selectedModule === "Conciliación Avimol" ? (

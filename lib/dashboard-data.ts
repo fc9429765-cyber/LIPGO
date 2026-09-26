@@ -1,4 +1,4 @@
-import { Gift, Truck, Forklift, Scale, ClipboardCheck, Package, FileText, CheckCircle, Box, PackagePlus, BarChart3, Package2, ArrowRightLeft, History, Search, LayoutDashboard, Activity, FileCheck, Receipt, Clock, Users, Eye, Settings, Type as type, LucideIcon, CreditCard, UserCheck, Store, Tag, Layers, MapPin, Warehouse, Gauge, QrCode, Sparkles, BadgeCheck, BookOpen, Lock, ClipboardList, CalendarDays, NotebookPen, GraduationCap, Wallet, Banknote, Calculator, CalendarClock, FolderOpen, FolderArchive, UserCog, HeartHandshake, ShieldCheck, Stethoscope, AlertTriangle, Star, Send, Landmark, UserPlus, LayoutGrid, FileSpreadsheet } from "lucide-react"
+import { Gift, Truck, Forklift, Scale, ClipboardCheck, Package, FileText, CheckCircle, Box, PackagePlus, BarChart3, Package2, ArrowRightLeft, History, Search, LayoutDashboard, Activity, FileCheck, Receipt, Clock, Users, Eye, Settings, Type as type, LucideIcon, CreditCard, UserCheck, Store, Tag, Layers, MapPin, Warehouse, Gauge, QrCode, Sparkles, BadgeCheck, BookOpen, Lock, ClipboardList, CalendarDays, NotebookPen, GraduationCap, Wallet, Banknote, Calculator, CalendarClock, FolderOpen, FolderArchive, UserCog, HeartHandshake, ShieldCheck, Stethoscope, AlertTriangle, Star, Send, Landmark, UserPlus, LayoutGrid, FileSpreadsheet, FileEdit } from "lucide-react"
 
 export interface Module {
   name: string
@@ -280,6 +280,9 @@ export const groups: Group[] = [
           // más cartera/cobro (días vencidos) desde el cierre. Permiso propio.
           { name: "Ciclo de Facturación", icon: Landmark },
           { name: "Tarifas", icon: CreditCard },
+          // Edición directa de cabeceraoc/detalleoc de una orden ya creada
+          // (antes Facturación lo hacía a mano en Supabase). Permiso propio.
+          { name: "Corrección de Órdenes", icon: FileEdit },
           // "Gestión de Facturas" se MOVIÓ a Gestión LIP → Operación Lip (función
           // operativa del coordinador). Conserva su permiso (gestionfacturas).
         ],

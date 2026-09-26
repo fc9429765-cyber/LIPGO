@@ -192,6 +192,11 @@ export interface UserPermissions {
   cuadro_facturacion: boolean
   conciliacion_avimol: boolean
   prefactura_produccion: boolean
+  // Edición directa de cabeceraoc/detalleoc de una orden ya creada (Gestión
+  // Financiera · Facturación). Sin catálogo de motivos: texto libre
+  // obligatorio guardado en ordenes_correcciones; el detalle campo-por-campo
+  // ya lo cubre el trigger genérico fn_auditoria().
+  correccion_ordenes: boolean
   // Ciclo de Facturación: anexo enviado -> firmado -> factura enviada ->
   // firmada -> cierre, más cartera/cobro. Visibilidad general +
   // 2 capacidades separadas (sin rol de usuario real en el sistema).
@@ -366,6 +371,7 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   // + horas extra) e Indupan (Tolva). Documento cobrable con ciclo de vida, así
   // que lleva permiso propio y no el del Cuadro de Control.
   "Prefactura de Producción": "prefactura_produccion",
+  "Corrección de Órdenes": "correccion_ordenes",
   // Ciclo de Facturación: la visibilidad del módulo/menú es `ciclo_facturacion`
   // (el mapa solo soporta una llave por módulo); dentro del módulo, las
   // acciones de cada paso se gatean aparte por `ciclo_facturacion_jefe`/
