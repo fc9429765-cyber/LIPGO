@@ -879,12 +879,17 @@ export async function getPrefactura(
     const procesadas = new Set<string>()
     const estadoPorOrden = new Map<string, { estado: string | null; facturasiigo: string | null; pesovascula: number; mediopago: string | null }>()
     for (let offset = 0; ; offset += 1000) {
-      const { data, error } = await sb
+      // Mismo rango de fechas que se aplica luego a la vista `facturacion`:
+      // antes se recorría TODA la historia de la empresa (4 páginas en ID1)
+      // solo para armar este mapa, aunque el período pedido fuera un mes.
+      let q = sb
         .from("cabeceraoc")
         .select("ordendecargue, fincargue, facturar, tipooperacion, estadofactura, facturasiigo, pesovascula, mediopago")
         .eq("idempresa", idempresa)
         .neq("tipooperacion", "proyeccion")
-        .range(offset, offset + 999)
+      if (filtros.desde) q = q.gte("fechacargue", filtros.desde)
+      if (filtros.hasta) q = q.lte("fechacargue", filtros.hasta)
+      const { data, error } = await q.range(offset, offset + 999)
       if (error) return { success: false, message: error.message }
       if (!data || data.length === 0) break
       for (const o of data) {
@@ -1353,12 +1358,16 @@ export async function getControlFacturacion(
     {
       const pageSize = 1000
       for (let offset = 0; ; offset += pageSize) {
-        const { data, error } = await sb
+        // Mismo rango de fechas que se aplica luego a la vista `facturacion`
+        // (ver getPrefactura): sin esto se recorría toda la historia por empresa.
+        let q = sb
           .from("cabeceraoc")
           .select("ordendecargue, estadofactura, facturasiigo, valorpago, fincargue, facturar, tipooperacion, pesovascula, mediopago")
           .eq("idempresa", idempresa)
           .neq("tipooperacion", "proyeccion")
-          .range(offset, offset + pageSize - 1)
+        if (filtros.desde) q = q.gte("fechacargue", filtros.desde)
+        if (filtros.hasta) q = q.lte("fechacargue", filtros.hasta)
+        const { data, error } = await q.range(offset, offset + pageSize - 1)
         if (error) return { success: false, message: error.message }
         if (!data || data.length === 0) break
         for (const o of data) {

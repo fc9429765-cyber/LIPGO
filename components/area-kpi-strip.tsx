@@ -35,6 +35,13 @@ const ICONS: Record<string, LucideIcon> = {
   shield: ShieldCheck,
 }
 
+// Memo en el cliente por (grupo, submódulo, empresa, período): al navegar entre
+// submódulos del mismo grupo la tira se pinta al instante desde memoria en vez
+// de volver a llamar al servidor (y sin volver a mostrar el skeleton). Si el
+// valor venció se muestra el anterior mientras se refresca en segundo plano.
+const KPI_MEMO_TTL_MS = 10 * 60 * 1000
+const kpiMemo = new Map<string, { items: AreaKpiItem[]; titulo: string | null; exp: number }>()
+
 function Skeleton({ n }: { n: number }) {
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
@@ -65,10 +72,22 @@ export function AreaKpiStrip({ groupKey, moduleName }: { groupKey: string; modul
       return
     }
     let cancel = false
-    setLoading(true)
+    const clave = [groupKey, moduleName ?? "", selectedEmpresaId ?? "", profile?.id ?? "", filtro.anio ?? "", filtro.mes ?? "", filtro.desde ?? "", filtro.hasta ?? ""].join("|")
+    const memo = kpiMemo.get(clave)
+    if (memo) {
+      setItems(memo.items)
+      setTituloResp(memo.titulo)
+      setLoading(false)
+      if (memo.exp > Date.now()) return
+    } else {
+      setLoading(true)
+    }
     getAreaKpisRapidas(groupKey, selectedEmpresaId, profile?.id, moduleName, filtro.anio, filtro.mes, filtro.desde, filtro.hasta)
-      .then((r) => { if (!cancel) { setItems(r.items); setTituloResp(r.titulo ?? null) } })
-      .catch(() => { if (!cancel) { setItems([]); setTituloResp(null) } })
+      .then((r) => {
+        kpiMemo.set(clave, { items: r.items, titulo: r.titulo ?? null, exp: Date.now() + KPI_MEMO_TTL_MS })
+        if (!cancel) { setItems(r.items); setTituloResp(r.titulo ?? null) }
+      })
+      .catch(() => { if (!cancel && !memo) { setItems([]); setTituloResp(null) } })
       .finally(() => { if (!cancel) setLoading(false) })
     return () => { cancel = true }
   }, [groupKey, moduleName, selectedEmpresaId, profile?.id, tituloGrupo, filtro.anio, filtro.mes, filtro.desde, filtro.hasta])

@@ -12,7 +12,7 @@
 // Usamos el cliente admin (service role) porque las tablas sig_* tienen RLS
 // y el rol anon no puede leerlas; la autorizacion del modulo ya se controla
 // con los permisos (sig_matriz / sig_iso*). Mismo patron que permissions-actions.
-import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 import { getResumenISO, type EstadoISO } from "@/lib/iso9001-actions"
 import { getMatrizEstandares } from "@/lib/sst-auditoria-actions"
 import { computar0312 } from "@/lib/sst-types"
@@ -1905,6 +1905,33 @@ type IvRes = { success: boolean; valores: Record<string, SigIndicadorValor>; err
 const _ivInflight = new Map<string, Promise<IvRes>>()
 const IV_TTL_MS = 10 * 60 * 1000 // 10 minutos
 
+// Caché PERSISTENTE (tabla sig_indicadores_cache, scripts/199): la de memoria
+// vive solo en la instancia que la calculó, y en Vercel las instancias arrancan
+// frías con frecuencia, así que el usuario pagaba el cálculo (~49 consultas,
+// ~13 s) al abrir casi cualquier submódulo. Con la tabla, cualquier instancia
+// sirve el último valor al instante; si venció, lo sirve igual y refresca en bg.
+const IV_TABLA = "sig_indicadores_cache"
+
+async function _ivLeerPersistente(clave: string): Promise<{ value: IvRes; computedAt: number } | null> {
+  try {
+    const sb = await getSupabaseAdminAsSystem()
+    const { data } = await sb.from(IV_TABLA).select("valores, computed_at").eq("clave", clave).maybeSingle()
+    if (!data?.valores) return null
+    return { value: { success: true, valores: data.valores }, computedAt: new Date(data.computed_at).getTime() }
+  } catch {
+    return null
+  }
+}
+
+async function _ivGuardarPersistente(clave: string, r: IvRes): Promise<void> {
+  try {
+    const sb = await getSupabaseAdminAsSystem()
+    await sb.from(IV_TABLA).upsert({ clave, valores: r.valores, computed_at: new Date().toISOString() }, { onConflict: "clave" })
+  } catch {
+    // best-effort: si la tabla no existe aún, la caché en memoria sigue funcionando
+  }
+}
+
 // Fachada con caché + dedupe + stale-while-revalidate: la PRIMERA vez por
 // (proyecto, periodo) se calcula en frío (única espera de ~10s); las siguientes
 // son INSTANTÁNEAS, y si el valor venció se sirve el último bueno y se refresca en
@@ -1922,7 +1949,10 @@ export async function getIndicadoresValores(
     if (enVuelo) return enVuelo
     const p = _computeIndicadoresValores(proyectoId, desde, hasta)
       .then((r) => {
-        if (r.success) _ivCache.set(_ivKey, { value: r, exp: Date.now() + IV_TTL_MS })
+        if (r.success) {
+          _ivCache.set(_ivKey, { value: r, exp: Date.now() + IV_TTL_MS })
+          void _ivGuardarPersistente(_ivKey, r)
+        }
         return r
       })
       .catch((err: any): IvRes => ({ success: false, valores: {}, error: err?.message || "Error" }))
@@ -1935,7 +1965,17 @@ export async function getIndicadoresValores(
     void refrescar()
     return _ivHit.value
   }
-  // Frío (nunca calculado para este alcance) → se espera el cálculo una sola vez.
+  // Frío en ESTA instancia: antes de calcular, mirar la caché persistente
+  // compartida entre instancias. Fresca → instantáneo; vencida → se sirve y
+  // se refresca en segundo plano (mismo criterio que la de memoria).
+  const persistido = await _ivLeerPersistente(_ivKey)
+  if (persistido) {
+    const expira = persistido.computedAt + IV_TTL_MS
+    _ivCache.set(_ivKey, { value: persistido.value, exp: expira })
+    if (expira <= Date.now()) void refrescar()
+    return persistido.value
+  }
+  // Frío en todas partes (nunca calculado para este alcance) → única espera.
   return refrescar()
 }
 
