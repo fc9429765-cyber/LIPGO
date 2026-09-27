@@ -99,7 +99,8 @@ insert into public.autorizacion_perfiles (nombre, descripcion) values
   ('Gerencia de proyecto', 'Gerencia del cliente/proyecto (Indupan, Avimol, cada Cedi): aprueba ajustes 601/702/555, libera cuarentena, aprueba y anula pedidos. Asignar con alcance a SU proyecto.'),
   ('Calidad', 'Decide sobre producto retenido: libera de cuarentena (343). Bloquear (344) y solicitar desecho (555) no piden clave.'),
   ('Cartera', 'Revisión de cartera de pedidos.'),
-  ('Coordinador LIP', 'Persona encargada por LIP en cada ID (proyecto). Ejecuta con motivo las correcciones de inventario (309/102/602/552/312), que quedan en el historial de correcciones. Asignar con alcance a SU proyecto.'),
+  ('Coordinador LIP', 'Responsable por LIP de TODA la logística del ID (proyecto): correcciones de inventario (309/102/602/552/312), aprobación de despachos manuales (601) y faltantes (702) de su sitio, y cierre de pedidos con entrega parcial. Asignar con alcance a SU(S) proyecto(s).'),
+  ('Líder LIP', 'Líder de sitio por LIP en un ID, bajo el Coordinador LIP. Ejecuta con motivo las correcciones de inventario (309/102/602/552/312). Asignar con alcance a SU proyecto.'),
   ('Financiera', 'Acceso al grupo Gestión Financiera y aprobación de bonos.')
 on conflict (nombre) do nothing;
 
@@ -111,7 +112,8 @@ join public.autorizacion_procesos pr on (
   or (p.nombre = 'Gerencia de proyecto' and pr.codigo in ('inv_601_aprobar','inv_702_aprobar','inv_555_aprobar','inv_343','ped_aprobar_gerencia','ped_anular','ped_cerrar_pendiente'))
   or (p.nombre = 'Calidad' and pr.codigo in ('inv_343'))
   or (p.nombre = 'Cartera' and pr.codigo in ('ped_aprobar_cartera'))
-  or (p.nombre = 'Coordinador LIP' and pr.codigo in ('inv_309','inv_102','inv_602','inv_552','inv_312'))
+  or (p.nombre = 'Coordinador LIP' and pr.codigo in ('inv_309','inv_102','inv_602','inv_552','inv_312','inv_601_aprobar','inv_702_aprobar','ped_cerrar_pendiente'))
+  or (p.nombre = 'Líder LIP' and pr.codigo in ('inv_309','inv_102','inv_602','inv_552','inv_312'))
   or (p.nombre = 'Financiera' and pr.codigo in ('fin_gestion_financiera','fin_bonos_aprobar'))
 )
 on conflict do nothing;
@@ -154,8 +156,13 @@ alter table public.autorizacion_usuario_procesos disable row level security;
 --     SU proyecto únicamente.
 --   · Cartera → usuarios de LIPgo cuyo nombre coincide con un usuario de
 --     cartera actual (usuariocartera), con alcance a su proyecto.
---   · Coordinador LIP → los usuarios "Coordinador <sitio>" (encargados por LIP
---     en cada ID), con alcance a su proyecto. "Coordinador SST" no es de sitio.
+--   · Coordinador LIP → los usuarios "Coordinador <sitio>" (cuentas genéricas que
+--     hoy usan los encargados por LIP en cada ID) y Jairo Torres (ID2), con
+--     alcance a su proyecto. "Coordinador SST" no es de sitio. Personas según la
+--     gerencia (2026-09-27): ID1 e ID3 Yul Contento (coordinador), Deivid Parra
+--     (líder ID1), Manuel Agamez (líder ID3); ID2 Jairo Torres y Fernando
+--     Jimenez. Los que no tienen cuenta propia se asignan desde la pantalla
+--     cuando Gestión de Usuarios les cree el usuario.
 insert into public.autorizacion_usuario_perfiles (usuario_id, perfil_id, idempresa, asignado_por)
 select pr.id, p.id, null, 'sql 203'
 from public.profiles pr
@@ -194,8 +201,7 @@ select pr.id, p.id, pr.empresa_id, 'sql 203'
 from public.profiles pr
 join public.autorizacion_perfiles p on p.nombre = 'Coordinador LIP'
 where pr.empresa_id is not null
-  and pr.usuario ilike 'coordinador%'
-  and pr.usuario not ilike '%sst%'
+  and ((pr.usuario ilike 'coordinador%' and pr.usuario not ilike '%sst%') or pr.usuario = 'Jairo Torres')
 on conflict do nothing;
 
 -- (e) Clave personal (hash), recuperación y bitácora.
