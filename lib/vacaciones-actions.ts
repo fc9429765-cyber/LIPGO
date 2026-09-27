@@ -70,6 +70,8 @@ export async function getVacacionesResumen(empresaId?: number | null): Promise<V
         .select("identificacion,fecha")
         .eq("idempresa", emp)
         .ilike("asistencia", "%vacacion%")
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("id")
         .range(from, from + 999)
       for (const r of data ?? []) {
         const k = norm(r.identificacion)

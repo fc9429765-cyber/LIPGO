@@ -21,7 +21,13 @@ export async function getAuditoria(
     const page = Math.max(0, f.page ?? 0)
     const size = Math.min(200, Math.max(1, f.pageSize ?? 50))
 
-    let q = sb.from("auditoria").select("*", { count: "exact" }).order("ts", { ascending: false })
+    // `id` como desempate: varios eventos pueden compartir `ts` y sin llave única
+    // la paginación puede repetir/perder filas (ver lib/orden-paginacion.ts).
+    let q = sb
+      .from("auditoria")
+      .select("*", { count: "exact" })
+      .order("ts", { ascending: false })
+      .order("id", { ascending: false })
     if (f.desde) q = q.gte("ts", f.desde)
     if (f.hasta) q = q.lte("ts", `${f.hasta}T23:59:59.999`)
     if (f.actorId) q = f.actorId === "__sistema__" ? q.is("actor_id", null) : q.eq("actor_id", f.actorId)

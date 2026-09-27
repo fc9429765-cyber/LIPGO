@@ -73,6 +73,8 @@ export async function getMarcacionesDia(
           .select("identificacion, hora")
           .eq("idempresa", empresaId)
           .eq("fecha", fecha)
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+          .order("id")
           .range(d, h),
       ).catch((e: any) => {
         avisos.push("No se pudieron leer las marcaciones del kiosco.")
@@ -85,6 +87,8 @@ export async function getMarcacionesDia(
           .select("identificacion, nombre, puesto, turno, asistencia, horaentradaprogramada")
           .eq("idempresa", empresaId)
           .eq("fecha", fecha)
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+          .order("id")
           .range(d, h),
       ).catch((e: any) => {
         avisos.push("No se pudo leer la programación del día.")
@@ -100,6 +104,8 @@ export async function getMarcacionesDia(
           .select("identificacion")
           .eq("admin", true)
           .or(`idempresa.eq.${empresaId},idempresa.is.null`)
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+          .order("id")
           .range(d, h),
       ).catch((e: any) => {
         console.error("[v0] getMarcacionesDia headcount admin:", e?.message ?? e)

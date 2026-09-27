@@ -75,6 +75,8 @@ export async function getIndicadoresAusentismo(
           .from("headcount")
           .select("identificacion, nombre, salario, fechainicio, fecha_retiro, admin")
           .eq("idempresa", empresaId)
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+          .order("id")
           .range(d, h),
       )
       personas = personas.filter((p) => !/prueba/i.test(String(p.nombre ?? "")))
@@ -107,6 +109,8 @@ export async function getIndicadoresAusentismo(
           .select("identificacion")
           .eq("admin", true)
           .or(`idempresa.eq.${empresaId},idempresa.is.null`)
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+          .order("id")
           .range(d, h),
       )
       for (const p of filasAdmin) identificacionesAdmin.add(String(p.identificacion ?? "").trim())
@@ -129,6 +133,8 @@ export async function getIndicadoresAusentismo(
           .gte("fecha", desde)
           .lte("fecha", hasta)
           .not("asistencia", "is", null)
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+          .order("id")
           .range(d, h),
       )
       filas = filas.filter(

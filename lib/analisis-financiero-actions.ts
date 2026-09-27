@@ -384,6 +384,12 @@ async function realPorCodigo(
       .eq("idempresa", idempresa)
       .gte("fechacargue", desde)
       .lt("fechacargue", hastaExclusivo)
+      // Orden único y estable para paginar (ver lib/orden-paginacion.ts).
+      .order("numeroorden")
+      .order("producto")
+      .order("toneladas")
+      .order("cantidad")
+      .order("tiquetebascula")
       .range(off, off + 999)
     if (error) {
       notas.push(`No se pudo leer la facturación: ${error.message}`)

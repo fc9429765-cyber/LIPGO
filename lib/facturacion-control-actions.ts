@@ -889,7 +889,7 @@ export async function getPrefactura(
         .neq("tipooperacion", "proyeccion")
       if (filtros.desde) q = q.gte("fechacargue", filtros.desde)
       if (filtros.hasta) q = q.lte("fechacargue", filtros.hasta)
-      const { data, error } = await q.range(offset, offset + 999)
+      const { data, error } = await q.order("id").range(offset, offset + 999)
       if (error) return { success: false, message: error.message }
       if (!data || data.length === 0) break
       for (const o of data) {
@@ -924,7 +924,7 @@ export async function getPrefactura(
         .eq("idempresa", idempresa)
       if (filtros.desde) q = q.gte("fechacargue", filtros.desde)
       if (filtros.hasta) q = q.lte("fechacargue", filtros.hasta)
-      const { data, error } = await q.range(offset, offset + 999)
+      const { data, error } = await q.order("numeroorden").order("producto").order("toneladas").order("cantidad").order("tiquetebascula").range(offset, offset + 999)
       if (error) return { success: false, message: error.message }
       if (!data || data.length === 0) break
       for (const r of data) {
@@ -956,7 +956,7 @@ export async function getPrefactura(
         .eq("idempresa", idempresa)
       if (filtros.desde) q = q.gte("fechacargue", filtros.desde)
       if (filtros.hasta) q = q.lte("fechacargue", filtros.hasta)
-      const { data, error } = await q.range(offset, offset + 999)
+      const { data, error } = await q.order("numeroorden").order("producto").order("toneladas").order("cantidad").order("tiquetebascula").range(offset, offset + 999)
       if (error) return { success: false, message: error.message }
       if (!data || data.length === 0) break
       const cantMap = await cantidadesPorUnidad(
@@ -1367,7 +1367,7 @@ export async function getControlFacturacion(
           .neq("tipooperacion", "proyeccion")
         if (filtros.desde) q = q.gte("fechacargue", filtros.desde)
         if (filtros.hasta) q = q.lte("fechacargue", filtros.hasta)
-        const { data, error } = await q.range(offset, offset + pageSize - 1)
+        const { data, error } = await q.order("id").range(offset, offset + pageSize - 1)
         if (error) return { success: false, message: error.message }
         if (!data || data.length === 0) break
         for (const o of data) {
@@ -1414,7 +1414,7 @@ export async function getControlFacturacion(
         // al elegirlos. Se filtra mas abajo, sobre el owner ya resuelto.
         if (filtros.placa) q = q.ilike("placa", `%${filtros.placa}%`)
         if (filtros.cliente) q = q.ilike("cliente", `%${filtros.cliente}%`)
-        const { data, error } = await q.range(offset, offset + pageSize - 1)
+        const { data, error } = await q.order("numeroorden").order("producto").order("toneladas").order("cantidad").order("tiquetebascula").range(offset, offset + pageSize - 1)
         if (error) return { success: false, message: error.message }
         if (!data || data.length === 0) break
         facturas = facturas.concat(data)
@@ -1482,7 +1482,7 @@ export async function getControlFacturacion(
           .eq("idempresa", idempresa)
         if (filtros.desde) q = q.gte("fechacargue", filtros.desde)
         if (filtros.hasta) q = q.lte("fechacargue", filtros.hasta)
-        const { data, error } = await q.range(offset, offset + 999)
+        const { data, error } = await q.order("numeroorden").order("producto").order("toneladas").order("cantidad").order("tiquetebascula").range(offset, offset + 999)
         if (error) return { success: false, message: error.message }
         if (!data || data.length === 0) break
         detalleParaDenominador = detalleParaDenominador.concat(data)

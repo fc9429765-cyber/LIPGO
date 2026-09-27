@@ -55,15 +55,14 @@ function nombreNovedadDestajo(fechaCierreQuincena: string): string {
   return fechaCierreQuincena >= "2026-07-16" ? "52-Bonificación Por Productividad" : "71-Bonificación Ajuste Toneladas"
 }
 
-async function fetchAllRows(sb: any, table: string, select: string, filtros: (q: any) => any): Promise<any[]> {
+// `makeQuery` construye la consulta completa (fuente + filtros + un `.order`
+// ÚNICO y estable, ver lib/orden-paginacion.ts); aquí solo se pagina.
+async function fetchAllRows(makeQuery: () => any): Promise<any[]> {
   let all: any[] = []
   let from = 0
   while (true) {
-    let q = sb.from(table).select(select)
-    q = filtros(q)
-    q = q.range(from, from + 999)
-    const { data, error } = await q
-    if (error) throw new Error(`${table}: ${error.message}`)
+    const { data, error } = await makeQuery().range(from, from + 999)
+    if (error) throw new Error(error.message)
     all = all.concat(data || [])
     if (!data || data.length < 1000) break
     from += 1000
@@ -126,8 +125,17 @@ export async function getAcumuladosLIPgo(
     // 3) pagonomina día a día del rango.
     const cols =
       "fecha, persona, novedad_reportada, actividad_registrada, base_dia, hed, hedf, hen, hef, hn, recargodominical, recargo_dominical_tasa_completa, bonif_prestacional, toneladas, total_liquidado_dia"
-    const rows = await fetchAllRows(admin, "pagonomina", cols, (q: any) =>
-      q.in("persona", nombres).gte("fecha", desde).lte("fecha", hasta),
+    // pagonomina_rango: la misma nómina que la vista, calculada solo para el
+    // rango (scripts/200); orden (persona, fecha) para paginar sin repetir filas.
+    const rows = await fetchAllRows(() =>
+      admin
+        .rpc("pagonomina_rango", { p_desde: desde, p_hasta: hasta })
+        .select(cols)
+        .in("persona", nombres)
+        .gte("fecha", desde)
+        .lte("fecha", hasta)
+        .order("persona")
+        .order("fecha"),
     )
     const rowsPorPersona = new Map<string, any[]>()
     for (const r of rows) {

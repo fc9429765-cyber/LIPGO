@@ -319,6 +319,8 @@ async function armarContexto(
         .in("idempresa", proyectosArr)
         .gte("fecha", desde)
         .lte("fecha", hasta)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("id")
         .range(f, t),
     )
     for (const r of asistRows) {
@@ -1393,6 +1395,8 @@ export async function getConciliacionQuincena(
         .lte("fechacargue", hasta)
         .not("fincargue", "is", null)
         .neq("tipooperacion", "proyeccion")
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("id")
         .range(off, off + 999)
       if (error) return { success: false, message: error.message }
       if (!data || data.length === 0) break
@@ -1410,6 +1414,8 @@ export async function getConciliacionQuincena(
           .from("detalleoc")
           .select("idorden, toneladas")
           .in("idorden", chunk)
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+          .order("id")
           .range(off, off + 999)
         if (error) return { success: false, message: error.message }
         for (const d of data || []) {
@@ -1441,7 +1447,7 @@ export async function getConciliacionQuincena(
     const nombresHc = new Set<string>()
     const salarioPorNombre = new Map<string, number>()
     for (let off = 0; ; off += 1000) {
-      const { data, error } = await admin.from("headcount").select("nombre, salario").range(off, off + 999)
+      const { data, error } = await admin.from("headcount").select("nombre, salario").order("id").range(off, off + 999)
       if (error) break
       for (const h of data || []) {
         const key = String(h.nombre || "").trim().toUpperCase()
@@ -1846,6 +1852,8 @@ export async function getAuxiliaresVsAsistencia(
         .lte("fechacargue", hasta)
         .not("fincargue", "is", null)
         .neq("tipooperacion", "proyeccion")
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("id")
         .range(off, off + 999)
       if (error) return { success: false, message: error.message }
       if (!data || data.length === 0) break
@@ -1863,6 +1871,8 @@ export async function getAuxiliaresVsAsistencia(
         .in("idempresa", emps)
         .gte("fecha", desde)
         .lte("fecha", hasta)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("id")
         .range(off, off + 999)
       if (error) return { success: false, message: error.message }
       if (!data || data.length === 0) break
@@ -1881,6 +1891,8 @@ export async function getAuxiliaresVsAsistencia(
         .in("idempresa", emps)
         .gte("fecha", desde)
         .lte("fecha", hasta)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("id")
         .range(off, off + 999)
       if (error) break
       if (!data || data.length === 0) break

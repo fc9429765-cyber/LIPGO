@@ -12,6 +12,7 @@ import { MODULE_PERMISSION_MAP } from "@/lib/permissions-map"
 import { groups } from "@/lib/dashboard-data"
 import { REGISTRO_ACCIONES, NUCLEO_PROHIBIDO, pkDe } from "@/lib/lipbot-registry"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { aplicarOrdenEstable } from "@/lib/orden-paginacion"
 import { getCurrentEmpresaId } from "@/lib/company-filter"
 import { guiaCompactaParaLIPbot } from "@/lib/transacciones-codigo"
 import { NOVEDADES_DIA as CODIGOS_NOVEDAD } from "@/lib/asistencia-catalogos"
@@ -643,7 +644,8 @@ export async function POST(req: Request) {
                 let parcial = false
                 while (pagina < MAX_PAGES) {
                   const desde = pagina * PAGE
-                  const { data, error } = await aplicar(baseSelect(sumar)).range(desde, desde + PAGE - 1)
+                  // Orden único y estable para paginar (ver lib/orden-paginacion.ts).
+                  const { data, error } = await aplicarOrdenEstable(aplicar(baseSelect(sumar)), tabla).range(desde, desde + PAGE - 1)
                   if (error) {
                     return {
                       ok: false,

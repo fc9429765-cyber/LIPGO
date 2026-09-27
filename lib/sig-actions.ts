@@ -2192,6 +2192,8 @@ async function _computeIndicadoresValores(
         .from("registroasistencia")
         .select("fecha,puesto,asistencia,nombre,identificacion")
         .in("idempresa", clientes)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("id")
         .range(aFrom, aFrom + 999)
       if (desde) qa = qa.gte("fecha", desde)
       if (hasta) qa = qa.lte("fecha", hasta)
@@ -4406,7 +4408,7 @@ export async function getPanelGestionHumanaLIP(
     const asisAll: any[] = []
     let aFrom = 0
     while (true) {
-      let q = supabase.from("registroasistencia").select("fecha,puesto,asistencia,identificacion,nombre").in("idempresa", clientes).range(aFrom, aFrom + 999)
+      let q = supabase.from("registroasistencia").select("fecha,puesto,asistencia,identificacion,nombre").in("idempresa", clientes).order("id").range(aFrom, aFrom + 999)
       if (rDesde && rHasta) q = q.gte("fecha", rDesde).lte("fecha", rHasta)
       const { data } = await q
       asisAll.push(...(data ?? []))
@@ -4799,6 +4801,8 @@ export async function getPanelOperacionLIP(
           .select("fecha,puesto,asistencia,identificacion,nombre")
           .in("idempresa", clientes)
           .not("nombre", "ilike", "%prueba%")
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+          .order("id")
           .range(aFrom2, aFrom2 + 999)
         if (desde) qa = qa.gte("fecha", desde)
         if (hasta) qa = qa.lte("fecha", hasta)
@@ -6066,6 +6070,11 @@ export async function getConciliacionPedidosVsSalidas(
         .from("v_pedidos_vs_salidas")
         .select("idempresa, idempresa_pedido, idempresa_salida, empresa_distinta, ocargue, producto, ped_unidades, ped_cargadas, salida_qty, diferencia, pendiente_despacho, pedido_cerrado, estado_pedido, salida_con_lote, estado_alerta")
         .eq("idempresa", empresaId)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("ocargue")
+        .order("producto")
+        .order("idempresa_pedido")
+        .order("idempresa_salida")
         .range(from, from + 999)
       if (error) return { success: false, error: error.message }
       filas.push(...(data ?? []))

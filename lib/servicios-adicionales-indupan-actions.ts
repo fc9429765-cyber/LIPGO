@@ -57,6 +57,8 @@ export async function calcularServiciosAdicionalesIndupan(
         .eq("estado", "aprobado")
         .gte("fecharequerida", desde)
         .lte("fecharequerida", hasta)
+        // Orden único y estable para paginar (ver lib/orden-paginacion.ts).
+        .order("id")
         .range(off, off + 999)
       if (error) return { soporte: [], conceptos: [], alertas: [`Error consultando solicitudesturnos de Indupan: ${error.message}`] }
       if (!data || data.length === 0) break

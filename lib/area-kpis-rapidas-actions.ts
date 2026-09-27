@@ -159,6 +159,8 @@ async function getSubmoduloKpis(
           .neq("tipooperacion", "Tolva f")
           .gte("fechaorden", desde)
           .lte("fechaorden", hasta)
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+          .order("id")
           .range(offset, offset + pageSize - 1)
         if (error) break
         for (const r of data || []) toneladas += Number(r.pesovascula) || 0

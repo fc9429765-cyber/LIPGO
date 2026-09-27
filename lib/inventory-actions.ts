@@ -137,6 +137,11 @@ export async function getLocationsByWarehouse(
         .from("saldoinvdetalle")
         .select("location")
         .eq("idempresa", empresaId)
+        // Orden único y estable para paginar (ver lib/orden-paginacion.ts).
+        .order("idempresa")
+        .order("idproducto")
+        .order("lote")
+        .order("location")
         .range(from, from + 999)
       if (error) { console.error("[v0] getLocationsByWarehouse: error saldos:", error); break }
       for (const r of data ?? []) if (r.location) conSaldo.add(String(r.location))
@@ -2627,6 +2632,11 @@ export async function getWarehouseCapacities(selectedEmpresaId?: number | null):
           .select("location, stock_actual")
           .eq("idempresa", empresaId)
           .in("location", codigos)
+          // Orden único y estable para paginar (ver lib/orden-paginacion.ts).
+          .order("idempresa")
+          .order("idproducto")
+          .order("lote")
+          .order("location")
           .range(from, from + 999)
         if (stockErr) {
           console.error("[v0] Error fetching stock (batch):", stockErr)

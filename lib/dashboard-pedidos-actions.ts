@@ -193,7 +193,11 @@ export async function getDashboardPedidosData(
           .select("*")
           .in("id_empresa", empresaFilter)
           .in("idpedido", chunk)
-          .order("idpedido", { ascending: false }),
+          .order("idpedido", { ascending: false })
+          // Un pedido tiene varias líneas: desempate para que la paginación
+          // sea estable (ver lib/orden-paginacion.ts).
+          .order("producto")
+          .order("transid"),
       )
 
       if (detError) {

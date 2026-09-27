@@ -109,6 +109,8 @@ export async function getOperacionDia(
           .eq("idempresa", empresaId)
           .eq("estado", "Activo")
           .not("admin", "is", true)
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+          .order("id")
           .range(d, h),
       )
       personalActivo = filas.filter((r) => !esPrueba(r.nombre)).length
@@ -130,6 +132,8 @@ export async function getOperacionDia(
           .select("identificacion")
           .eq("admin", true)
           .or(`idempresa.eq.${empresaId},idempresa.is.null`)
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+          .order("id")
           .range(d, h),
       )
       idsAdmin = new Set(filasAdmin.map((r) => String(r.identificacion ?? "").trim()))
@@ -151,6 +155,8 @@ export async function getOperacionDia(
           .eq("idempresa", empresaId)
           .gte("fecha", desde)
           .lte("fecha", hasta)
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+          .order("id")
           .range(d, h),
       )
       const vivas = filas.filter((r) => !esPrueba(r.nombre) && !idsAdmin.has(String(r.identificacion ?? "").trim()))
@@ -191,6 +197,8 @@ export async function getOperacionDia(
             .select("identificacion, nombre, puesto, asistencia, turno")
             .eq("idempresa", empresaId)
             .eq("fecha", fecha)
+            // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+            .order("id")
             .range(d, h),
         ),
         traerTodo((d, h) =>
@@ -199,6 +207,8 @@ export async function getOperacionDia(
             .select("identificacion")
             .eq("idempresa", empresaId)
             .eq("fecha", fecha)
+            // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+            .order("id")
             .range(d, h),
         ),
       ])

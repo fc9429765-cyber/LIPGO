@@ -322,6 +322,8 @@ async function armarIndupan(desde: string, hasta: string) {
       .ilike("origen", ORIGEN_INGRESO_PRODUCCION_INDUPAN)
       .gte("lote", loteDesde)
       .lte("lote", loteHasta)
+      // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+      .order("id")
       .range(off, off + 999)
     if (error) throw new Error(error.message)
     if (!data || data.length === 0) break
@@ -439,6 +441,8 @@ async function armarIndupan(desde: string, hasta: string) {
       .eq("creadopor", "LOGO")
       .gte("fechaprod", desde)
       .lte("fechaprod", hasta)
+      // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+      .order("id")
       .range(0, 999)
     for (const r of data || []) {
       if (r.tipo_produccion === "Harinera") continue

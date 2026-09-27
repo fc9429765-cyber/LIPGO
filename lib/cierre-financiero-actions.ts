@@ -330,6 +330,8 @@ async function cierreDeProyecto(
       .gte("fechacargue", desde90)
       .lte("fechacargue", fecha)
       .neq("tipooperacion", "proyeccion")
+      // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+      .order("id")
       .range(off, off + 999)
     if (error) throw new Error(error.message)
     if (!data || data.length === 0) break
@@ -514,6 +516,8 @@ async function cierreDeProyecto(
         .eq("idempresa", idempresa)
         .gte("fecha", desde)
         .lte("fecha", fecha)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("id")
         .range(off, off + 999)
       if (error) {
         notas.push(`No se pudo leer la facturación de turnos: ${error.message}.`)
@@ -592,6 +596,8 @@ async function cierreDeProyecto(
     const { data, error } = await sb
       .from("headcount")
       .select("nombre, admin, estado, identificacion, contratosiigo")
+      // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+      .order("id")
       .range(off, off + 999)
     if (error) break
     if (!data || data.length === 0) break

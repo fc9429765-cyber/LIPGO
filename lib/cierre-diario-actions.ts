@@ -176,6 +176,8 @@ export async function getCierreDiario(
         .in("idempresa", ids)
         .eq("fechacargue", dia)
         .neq("tipooperacion", "proyeccion")
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("id")
         .range(off, off + 999)
       if (error) return { success: false, message: error.message }
       if (!data || data.length === 0) break

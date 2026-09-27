@@ -62,6 +62,8 @@ export async function getHcYHorasRealPorDia(
       .lte("fecha", hasta)
       .not("puesto", "is", null)
       .not("horaingreso", "is", null)
+      // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+      .order("id")
       .range(off, off + 999)
     if (error || !data || data.length === 0) break
     for (const r of data) {

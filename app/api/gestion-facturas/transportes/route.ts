@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
         .not("transporte", "is", null)
       if (desde) q = q.gte("fechacargue", desde)
       if (hasta) q = q.lte("fechacargue", hasta)
-      const { data, error } = await q.range(offset, offset + pageSize - 1)
+      const { data, error } = await q.order("id").range(offset, offset + pageSize - 1)
       if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 })
       if (!data || data.length === 0) break
       for (const r of data) {

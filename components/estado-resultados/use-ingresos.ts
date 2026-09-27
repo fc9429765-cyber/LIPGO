@@ -26,6 +26,7 @@
 
 import useSWR from "swr"
 import { supabase } from "@/lib/supabase-client"
+import { aplicarOrdenEstable } from "@/lib/orden-paginacion"
 import { getConciliacionAvimol } from "@/lib/conciliacion-avimol-actions"
 import { getMapaPlacasDistribucion } from "@/lib/facturacion-control-actions"
 import { facturadoAOwner } from "@/lib/facturacion-billed-party"
@@ -90,7 +91,8 @@ async function sumarYAgrupar(
   const grupos = new Map<string, { valor: number; registros: number; toneladas: number }>()
 
   while (offset < MAX_ROWS) {
-    const { data: page, error } = await aplicarFiltros(supabase.from(tabla).select(select)).range(
+    // Orden único y estable para paginar (ver lib/orden-paginacion.ts).
+    const { data: page, error } = await aplicarOrdenEstable(aplicarFiltros(supabase.from(tabla).select(select)), tabla).range(
       offset,
       offset + PAGE_SIZE - 1,
     )

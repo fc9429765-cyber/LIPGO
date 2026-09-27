@@ -30,6 +30,7 @@
  */
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { aplicarOrdenEstable } from "@/lib/orden-paginacion"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
 import {
   NOVEDAD_AJUSTE_INGRESO,
@@ -116,7 +117,8 @@ export interface CruceProyeccionData {
 async function paginar(sb: any, tabla: string, cols: string, filtros: (q: any) => any): Promise<any[]> {
   const out: any[] = []
   for (let off = 0; ; off += 1000) {
-    const { data, error } = await filtros(sb.from(tabla).select(cols).range(off, off + 999))
+    // Orden único y estable para paginar (ver lib/orden-paginacion.ts).
+    const { data, error } = await filtros(aplicarOrdenEstable(sb.from(tabla).select(cols), tabla).range(off, off + 999))
     if (error) throw new Error(`${tabla}: ${error.message}`)
     if (!data || data.length === 0) break
     out.push(...data)

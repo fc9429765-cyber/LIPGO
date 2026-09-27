@@ -416,7 +416,7 @@ export async function getAnalisisAusentismoDiario(
   const rows: any[] = []
   let from = 0
   while (true) {
-    const { data, error } = await supabase.from("registroasistencia").select("fecha,nombre,identificacion,puesto,asistencia").in("idempresa", clientes).range(from, from + 999)
+    const { data, error } = await supabase.from("registroasistencia").select("fecha,nombre,identificacion,puesto,asistencia").in("idempresa", clientes).order("id").range(from, from + 999)
     if (error) { console.error("[v0] getAnalisisAusentismoDiario:", error.message); break }
     rows.push(...(data ?? []))
     if (!data || data.length < 1000) break
@@ -596,7 +596,7 @@ export async function generarBorradoresAusentismoDesdeControl(
     let from = 0
     while (true) {
       let q = supabase.from("registroasistencia").select("fecha,nombre,identificacion,asistencia").eq("idempresa", empresaId)
-        .ilike("asistencia", "%incapacidad%").gte("fecha", `${anio}-01-01`).lte("fecha", `${anio}-12-31`).range(from, from + 999)
+        .ilike("asistencia", "%incapacidad%").gte("fecha", `${anio}-01-01`).lte("fecha", `${anio}-12-31`).order("id").range(from, from + 999)
       const { data, error } = await q
       if (error) return { creados: 0, episodios: 0, mesesOmitidos: [], error: error.message }
       rows.push(...(data ?? []))
@@ -728,6 +728,8 @@ export async function getAusentismos(empresaId?: number | null): Promise<Ausenti
       const { data: hc } = await supabase
         .from("headcount")
         .select("identificacion, estado, fecha_retiro, salario, admin")
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("id")
         .range(off, off + 999)
       if (!hc || hc.length === 0) break
       for (const h of hc) {

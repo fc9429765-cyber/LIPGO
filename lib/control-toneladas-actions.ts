@@ -97,6 +97,8 @@ export async function getControlToneladas(
         .lte("fechacargue", hasta)
         .not("fincargue", "is", null)
         .neq("tipooperacion", "proyeccion")
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("id")
         .range(off, off + 999)
       if (error) return { success: false, message: error.message }
       if (!data || data.length === 0) break
@@ -115,6 +117,8 @@ export async function getControlToneladas(
         .from("headcount")
         .select("nombre, idempresa, estado, contratosiigo, fecha_retiro")
         .in("idempresa", emps)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("id")
         .range(off, off + 999)
       if (error) return { success: false, message: error.message }
       for (const r of data || []) {
@@ -150,6 +154,8 @@ export async function getControlToneladas(
         .in("idempresa", emps)
         .gte("fecha", desde)
         .lte("fecha", hasta)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("id")
         .range(off, off + 999)
       if (error) return { success: false, message: error.message }
       for (const r of data || []) {

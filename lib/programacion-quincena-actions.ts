@@ -197,6 +197,8 @@ export async function getProgramacionQuincena(
           .eq("idempresa", empresaId)
           .gte("fecha", desde)
           .lte("fecha", hasta)
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+          .order("id")
           .range(d, h),
       )
     } catch (e: any) {

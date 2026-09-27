@@ -298,7 +298,7 @@ export async function generarHistoricoCalificaciones(opts?: {
     for (let i = 0; i < ordenesSlaCodigos.length; i += 500) {
       const chunk = ordenesSlaCodigos.slice(i, i + 500)
       const detChunk = await fetchAllRows((f, t) =>
-        supabase.from("detalleoc").select("numeroorden, producto").in("numeroorden", chunk).range(f, t),
+        supabase.from("detalleoc").select("numeroorden, producto").in("numeroorden", chunk).order("id").range(f, t),
       )
       for (const d of detChunk) if (esNombreSubproducto(d.producto)) esSubproductoPorOc.add(String(d.numeroorden))
     }

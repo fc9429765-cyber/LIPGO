@@ -330,6 +330,8 @@ export async function getConciliacionAvimol(
         .or(EXCLUIR_HARINERA)
         .gte("lote", loteDesde)
         .lte("lote", loteHasta)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("id")
         .range(off, off + 999)
       if (error) return { success: false, message: error.message }
       if (!data || data.length === 0) break
@@ -351,6 +353,8 @@ export async function getConciliacionAvimol(
         .or(EXCLUIR_HARINERA)
         .gte("fechaprod", desde)
         .lte("fechaprod", hasta)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("id")
         .range(0, 999)
       for (const r of data || []) {
         if (loteAFecha(r.lote) === null) {
@@ -433,6 +437,8 @@ export async function getConciliacionAvimol(
           .eq("estado", "aprobado")
           .gte("fecharequerida", desde)
           .lte("fecharequerida", hasta)
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+          .order("id")
           .range(off, off + 999)
         if (!data || data.length === 0) break
         solicitudes.push(...data)
@@ -839,6 +845,8 @@ export async function getConciliacionAvimol(
         .in("puesto", PUESTOS_TURNO)
         .gte("fecha", desde)
         .lte("fecha", hasta)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("id")
         .range(0, 999)
       for (const r of data || []) {
         const f = String(r.fecha).slice(0, 10)

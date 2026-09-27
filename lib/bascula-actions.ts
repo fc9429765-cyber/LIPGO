@@ -62,6 +62,8 @@ export async function getBasculaHistory(selectedEmpresaId?: number | null) {
           .from("detalleoc")
           .select("idorden, toneladas")
           .in("idorden", chunk)
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+          .order("id")
           .range(offset, offset + 999)
         if (!detalle || detalle.length === 0) break
         for (const d of detalle) {
