@@ -170,19 +170,42 @@ async function obtenerPrestacionRealSiPagada(
 /** Suma el aporte patronal REAL (Parafiscales) de todas las empresas en
  * `ids`, para cada mes cubierto por [desde, hasta], prorrateado si el rango
  * no cubre el mes completo (quincena). */
-async function calcularSegSocialReal(ids: number[], desde: string, hasta: string): Promise<ProvisionesSegSocial> {
-  const meses = mesesEnRango(desde, hasta)
-  let pensionEmpresa = 0, cajaCompensacion = 0, arl = 0, otros = 0
-  for (const { anio, mes, fraccion } of meses) {
-    for (const id of ids) {
-      const r = await getParafiscales(id, anio, mes)
-      if (!r.success || !r.resumen) continue
-      pensionEmpresa += r.resumen.pensionEmpleador * fraccion
-      cajaCompensacion += r.resumen.caja * fraccion
-      arl += r.resumen.arl * fraccion
-      otros += (r.resumen.saludEmpleador + r.resumen.sena + r.resumen.icbf) * fraccion
+/** Ejecuta `fn` sobre `items` con a lo sumo `limite` en vuelo; devuelve los
+ * resultados en el MISMO orden de `items`. */
+async function enParalelo<T, R>(items: T[], limite: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length)
+  let siguiente = 0
+  const trabajador = async () => {
+    for (;;) {
+      const i = siguiente++
+      if (i >= items.length) return
+      out[i] = await fn(items[i])
     }
   }
+  await Promise.all(Array.from({ length: Math.min(limite, items.length) }, trabajador))
+  return out
+}
+
+async function calcularSegSocialReal(ids: number[], desde: string, hasta: string): Promise<ProvisionesSegSocial> {
+  const meses = mesesEnRango(desde, hasta)
+  const tareas = meses.flatMap(({ anio, mes, fraccion }) => ids.map((id) => ({ id, anio, mes, fraccion })))
+  // Hasta 4 (mes, empresa) a la vez. Antes era estrictamente secuencial -- una
+  // version paralela se revirtio porque la vista archivoplano saturaba la BD
+  // (statement timeout); con pagonomina_rango / archivoplano_periodo cada
+  // llamada es liviana. Medido 2026-09-27: ID1 jun-sep 16,8 s -> 6,4 s con los
+  // mismos valores. Se suma en el ORDEN original de las tareas para que el
+  // total sea identico al secuencial (la suma en coma flotante no es conmutativa
+  // al ultimo decimal).
+  const resultados = await enParalelo(tareas, 4, (t) => getParafiscales(t.id, t.anio, t.mes))
+  let pensionEmpresa = 0, cajaCompensacion = 0, arl = 0, otros = 0
+  tareas.forEach((t, i) => {
+    const r = resultados[i]
+    if (!r?.success || !r.resumen) return
+    pensionEmpresa += r.resumen.pensionEmpleador * t.fraccion
+    cajaCompensacion += r.resumen.caja * t.fraccion
+    arl += r.resumen.arl * t.fraccion
+    otros += (r.resumen.saludEmpleador + r.resumen.sena + r.resumen.icbf) * t.fraccion
+  })
   return { pensionEmpresa, cajaCompensacion, arl, otros, total: pensionEmpresa + cajaCompensacion + arl + otros }
 }
 
