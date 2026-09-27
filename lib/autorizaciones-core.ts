@@ -19,6 +19,7 @@ import "server-only"
 import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 import { getCurrentUser } from "@/lib/auth-actions"
 import { verificarClaveHash } from "@/lib/autorizaciones-crypto"
+import { GRUPO_PROCESOS_SOLO_LIP, tieneAccesoFinanciero } from "@/lib/permisos-financieros"
 import type { ResultadoAutorizacion } from "@/lib/autorizaciones"
 
 export const MAX_INTENTOS_CLAVE = 5
@@ -63,6 +64,19 @@ export async function transicionActiva(sb: any): Promise<boolean> {
 export async function nombreProceso(sb: any, proceso: string): Promise<string> {
   const { data } = await sb.from("autorizacion_procesos").select("nombre").eq("codigo", proceso).maybeSingle()
   return data?.nombre || proceso
+}
+
+/** Códigos de proceso del grupo Financiera: exclusivos de LIP (ver lib/permisos-financieros.ts). */
+export async function procesosSoloLip(sb: any): Promise<Set<string>> {
+  const { data } = await sb.from("autorizacion_procesos").select("codigo").eq("grupo", GRUPO_PROCESOS_SOLO_LIP)
+  return new Set((data ?? []).map((r: any) => String(r.codigo)))
+}
+
+/** ¿El usuario tiene algún módulo de Gestión Financiera en Gestión de Usuarios? */
+export async function usuarioTieneAccesoFinanciero(sb: any, usuarioId: string | null | undefined): Promise<boolean> {
+  if (!usuarioId) return false
+  const { data } = await sb.from("permisos_usuarios").select("*").eq("usuario_id", usuarioId).maybeSingle()
+  return tieneAccesoFinanciero(data)
 }
 
 async function nombreEmpresa(sb: any, idempresa: number | null | undefined): Promise<string | null> {
@@ -213,6 +227,21 @@ export async function autorizar(input: {
   }
 
   const base = { usuario_id: usuarioId, usuario: usuarioNombre, proceso, idempresa, referencia }
+
+  // 0) CANDADO FINANCIERO. Lo financiero es propiedad de LIP y no se comparte con
+  //    ningún ID: un proceso del grupo Financiera solo lo puede autorizar (con
+  //    clave personal O compartida) un usuario que ya tenga módulos de Gestión
+  //    Financiera en Gestión de Usuarios. Sin sesión, tampoco.
+  if ((await procesosSoloLip(sb)).has(proceso)) {
+    if (!(await usuarioTieneAccesoFinanciero(sb, usuarioId))) {
+      const nombre = await nombreProceso(sb, proceso)
+      await registrarLog({ ...base, resultado: "sin_permiso", detalle: { motivo: "sin módulos de Gestión Financiera (solo LIP)" } })
+      return {
+        ok: false,
+        error: `«${nombre}» es un proceso financiero exclusivo de LIP. Tu usuario no tiene módulos de Gestión Financiera en Gestión de Usuarios, así que no puede autorizarlo.`,
+      }
+    }
+  }
 
   // 1) Clave personal del usuario en sesión.
   let personal: any = null

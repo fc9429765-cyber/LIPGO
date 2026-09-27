@@ -26,16 +26,24 @@
 --   · Gerencia de proyecto = la gerencia del CLIENTE de cada ID (Indupan, Avimol,
 --     cada Cedi). Autoriza SOLO en su proyecto (alcance = su idempresa).
 --
+-- LO FINANCIERO ES PROPIEDAD DE LIP: los procesos del grupo "Financiera" solo
+-- pueden otorgarse y usarse por usuarios que YA tengan módulos de Gestión
+-- Financiera en Gestión de Usuarios (exclusiva de LIPgo). Lo hace cumplir el
+-- código (lib/permisos-financieros.ts + lib/autorizaciones-core.ts), tanto al
+-- asignar como al autorizar.
+--
+-- ESTE SQL NO MODIFICA NINGÚN PERMISO POR MÓDULO EXISTENTE: solo agrega la
+-- columna del nuevo submódulo. Comprobable con scripts/snapshot_permisos_usuarios.mts
+-- (foto antes / foto después: cero cambios en las columnas existentes).
+--
 -- (a) Permiso del nuevo submódulo "Autorizaciones por clave" (Configuración ›
---     General). Se otorga SOLO a la cuenta `admin` de LIPgo: tener
---     gestion_usuarios NO basta, porque hoy lo tienen también cuentas de clientes
---     (Admon Indupan, Gerencia DEMO). Los demás administradores de LIPgo se
---     habilitan desde Gestión de Usuarios, como cualquier módulo.
+--     General). Se otorga EXACTAMENTE al mismo conjunto que hoy tiene "Gestión de
+--     Usuarios" (exclusivo de LIPgo): mismo criterio, misma gente, sin ampliar.
 alter table public.permisos_usuarios
   add column if not exists autorizaciones_clave boolean not null default false;
 update public.permisos_usuarios
    set autorizaciones_clave = true
- where usuario_id in (select id from public.profiles where usuario = 'admin');
+ where gestion_usuarios = true;
 
 -- (b) Catálogo de procesos autorizables (el "código" al que se da permiso).
 create table if not exists public.autorizacion_procesos (
@@ -137,8 +145,9 @@ alter table public.autorizacion_usuario_procesos disable row level security;
 
 -- Semilla de asignaciones (editable en la pantalla):
 --   · Gerencia General LIPgo → SOLO la cuenta `admin` de LIPgo (dueña del
---     software), alcance todos los proyectos. Verificado 2026-09-27: si se
---     sembrara por gestion_usuarios entrarían cuentas de CLIENTES.
+--     software), alcance todos los proyectos. A los demás administradores de
+--     LIPgo (p. ej. Admon Indupan) se lo asigna la gerencia desde la pantalla si
+--     lo considera; este perfil autoriza TODO en TODOS los proyectos y es respaldo.
 --   · Gerencia de proyecto / Calidad / Cartera → los usuarios "Gerencia X",
 --     "Calidad X", "Cartera X" de cada proyecto (son del cliente), con alcance a
 --     SU proyecto únicamente.
@@ -151,11 +160,14 @@ join public.autorizacion_perfiles p on p.nombre = 'Gerencia General LIPgo'
 where pr.usuario = 'admin'
 on conflict do nothing;
 
+-- "Gerencia Indupan" (perfil sin cuenta de acceso) es la misma persona que
+-- "Jose Rangel" (gerenciaindupan@lipgo.app): el perfil se le da a Jose Rangel.
 insert into public.autorizacion_usuario_perfiles (usuario_id, perfil_id, idempresa, asignado_por)
 select pr.id, p.id, pr.empresa_id, 'sql 203'
 from public.profiles pr
 join public.autorizacion_perfiles p on p.nombre = 'Gerencia de proyecto'
-where pr.usuario ilike 'gerencia %' and pr.empresa_id is not null
+where pr.empresa_id is not null
+  and (pr.usuario ilike 'gerencia %' or pr.usuario = 'Jose Rangel')
 on conflict do nothing;
 
 insert into public.autorizacion_usuario_perfiles (usuario_id, perfil_id, idempresa, asignado_por)

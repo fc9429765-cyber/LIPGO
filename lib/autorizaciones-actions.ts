@@ -28,7 +28,15 @@ import {
   generarClaveProvisional,
 } from "@/lib/autorizaciones-crypto"
 import { correoConfigurado, enviarCorreo } from "@/lib/email"
-import { CONFIG_TRANSICION, MAX_INTENTOS_CLAVE, MINUTOS_BLOQUEO, getTransicionHasta, hoyColombiaISO } from "@/lib/autorizaciones-core"
+import {
+  CONFIG_TRANSICION,
+  MAX_INTENTOS_CLAVE,
+  MINUTOS_BLOQUEO,
+  getTransicionHasta,
+  hoyColombiaISO,
+  procesosSoloLip,
+  usuarioTieneAccesoFinanciero,
+} from "@/lib/autorizaciones-core"
 import {
   validarFormatoClave,
   enmascararCorreo,
@@ -64,6 +72,23 @@ async function logInterno(fila: { usuario_id: string | null; usuario: string | n
 async function nombreDeUsuario(sb: any, usuarioId: string): Promise<string | null> {
   const { data } = await sb.from("profiles").select("usuario").eq("id", usuarioId).maybeSingle()
   return data?.usuario ?? null
+}
+
+const MSG_SOLO_LIP =
+  "Los procesos financieros son exclusivos de LIP: solo pueden otorgarse a usuarios que ya tengan módulos de Gestión Financiera en Gestión de Usuarios."
+
+/**
+ * Candado financiero en la ADMINISTRACIÓN: no se puede otorgar (por perfil ni
+ * por excepción) un proceso del grupo Financiera a un usuario sin módulos de
+ * Gestión Financiera. Devuelve el mensaje de rechazo o null si procede.
+ */
+async function rechazoFinanciero(sb: any, usuarioId: string, procesos: string[]): Promise<string | null> {
+  const soloLip = await procesosSoloLip(sb)
+  const financieros = procesos.filter((p) => soloLip.has(p))
+  if (!financieros.length) return null
+  if (await usuarioTieneAccesoFinanciero(sb, usuarioId)) return null
+  const usuario = (await nombreDeUsuario(sb, usuarioId)) || "Ese usuario"
+  return `${usuario} no tiene módulos de Gestión Financiera en Gestión de Usuarios y esto incluye ${financieros.length === 1 ? "un proceso financiero" : `${financieros.length} procesos financieros`} (${financieros.join(", ")}). ${MSG_SOLO_LIP} Otórgale primero el acceso financiero allí (solo LIPgo puede) o usa un perfil sin procesos financieros.`
 }
 
 function alcanceTexto(ids: (number | null)[], empresas: Map<number, string>): string {
@@ -440,6 +465,26 @@ export async function adminGuardarPerfil(input: { id?: number | null; nombre: st
     const procesos = Array.from(new Set((input.procesos ?? []).map((p) => String(p).trim()).filter(Boolean)))
     const sb: any = await getSupabaseAdmin()
     let id = input.id ? Number(input.id) : null
+
+    // Candado financiero: si el perfil YA está asignado a usuarios sin acceso
+    // financiero, no se le pueden agregar procesos financieros.
+    if (id) {
+      const soloLip = await procesosSoloLip(sb)
+      if (procesos.some((p) => soloLip.has(p))) {
+        const { data: asignados } = await sb.from("autorizacion_usuario_perfiles").select("usuario_id").eq("perfil_id", id)
+        const sinAcceso: string[] = []
+        for (const uid of Array.from(new Set((asignados ?? []).map((a: any) => String(a.usuario_id))))) {
+          if (!(await usuarioTieneAccesoFinanciero(sb, uid as string))) sinAcceso.push((await nombreDeUsuario(sb, uid as string)) || (uid as string))
+        }
+        if (sinAcceso.length) {
+          return {
+            success: false,
+            message: `No se puede: este perfil está asignado a usuarios sin módulos de Gestión Financiera (${sinAcceso.join(", ")}). ${MSG_SOLO_LIP} Quítales el perfil o crea un perfil aparte para lo financiero.`,
+          }
+        }
+      }
+    }
+
     if (id) {
       const { error } = await sb.from("autorizacion_perfiles").update({ nombre, descripcion: input.descripcion ?? null, activo: input.activo !== false }).eq("id", id)
       if (error) return { success: false, message: error.code === "23505" ? "Ya existe un perfil con ese nombre." : error.message }
@@ -481,6 +526,9 @@ export async function adminAsignarPerfil(usuarioId: string, perfilId: number, id
     if (!usuarioId || !perfilId) return { success: false, message: "Usuario y perfil son obligatorios." }
     const sb: any = await getSupabaseAdmin()
     const admin = await getCurrentUsuarioForInsert()
+    const { data: pp } = await sb.from("autorizacion_perfil_procesos").select("proceso").eq("perfil_id", perfilId)
+    const rechazo = await rechazoFinanciero(sb, usuarioId, (pp ?? []).map((r: any) => String(r.proceso)))
+    if (rechazo) return { success: false, message: rechazo }
     const { error } = await sb.from("autorizacion_usuario_perfiles").insert({ usuario_id: usuarioId, perfil_id: perfilId, idempresa: idempresa ?? null, asignado_por: admin })
     if (error && error.code !== "23505") return { success: false, message: error.message }
     if (error?.code === "23505") return { success: false, message: "Ese usuario ya tiene ese perfil con ese alcance." }
@@ -512,6 +560,10 @@ export async function adminGuardarExcepcion(usuarioId: string, proceso: string, 
     if (!usuarioId || !proceso) return { success: false, message: "Usuario y proceso son obligatorios." }
     const sb: any = await getSupabaseAdmin()
     const admin = await getCurrentUsuarioForInsert()
+    if (permitir) {
+      const rechazo = await rechazoFinanciero(sb, usuarioId, [proceso])
+      if (rechazo) return { success: false, message: rechazo }
+    }
     let del = sb.from("autorizacion_usuario_procesos").delete().eq("usuario_id", usuarioId).eq("proceso", proceso)
     del = idempresa == null ? del.is("idempresa", null) : del.eq("idempresa", idempresa)
     await del
