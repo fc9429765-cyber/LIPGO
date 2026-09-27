@@ -459,6 +459,7 @@ function AprobacionesPendientes() {
                 <th className="px-2 py-2">Producto</th>
                 <th className="px-2 py-2">Lote · Ubic.</th>
                 <th className="px-2 py-2 text-right">Cantidad</th>
+                <th className="px-2 py-2 text-right">Stock hoy</th>
                 <th className="px-2 py-2">Motivo</th>
                 <th className="px-2 py-2">Solicitó</th>
                 <th className="px-2 py-2"></th>
@@ -473,6 +474,18 @@ function AprobacionesPendientes() {
                   <td className="px-2 py-1.5 text-xs">{f.producto}</td>
                   <td className="px-2 py-1.5 text-xs">{f.lote} · {f.location}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{Number(f.cantidad).toLocaleString("es-CO")}</td>
+                  {/* Stock actual del lote/ubicación: si es menor que lo pedido, el
+                      ajuste ya no aplica (el producto salió por otro movimiento
+                      después de la solicitud) -- se debe rechazar, no aprobar. */}
+                  <td
+                    className={`px-2 py-1.5 text-right tabular-nums text-xs ${
+                      f.stock_actual != null && f.stock_actual < Number(f.cantidad) ? "font-semibold text-red-600" : "text-muted-foreground"
+                    }`}
+                    title={f.stock_actual != null && f.stock_actual < Number(f.cantidad) ? "Stock insuficiente: el ajuste ya no aplica tal cual" : undefined}
+                  >
+                    {f.stock_actual == null ? "—" : Number(f.stock_actual).toLocaleString("es-CO")}
+                    {f.stock_actual != null && f.stock_actual < Number(f.cantidad) && <span className="block text-[10px] font-normal">insuficiente</span>}
+                  </td>
                   <td className="max-w-[220px] px-2 py-1.5 text-xs text-muted-foreground">{f.motivo || "—"}</td>
                   <td className="px-2 py-1.5 text-xs">{f.solicitado_por}</td>
                   <td className="px-2 py-1.5 text-right">
@@ -488,7 +501,7 @@ function AprobacionesPendientes() {
                 </tr>
               ))}
               {!cargando && filas.length === 0 && (
-                <tr><td colSpan={9} className="px-3 py-6 text-center text-sm text-muted-foreground">No hay solicitudes pendientes.</td></tr>
+                <tr><td colSpan={10} className="px-3 py-6 text-center text-sm text-muted-foreground">No hay solicitudes pendientes.</td></tr>
               )}
             </tbody>
           </table>

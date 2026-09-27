@@ -4,6 +4,7 @@ import type React from "react"
 import { Camera, Check, ChevronsUpDown } from "lucide-react"
 import { Scan, AlertCircle, ArrowRightLeft } from "lucide-react"
 import { getCurrentStock, registerQRPalletFromTransaction, getStockFromSaldoInvDetalle, getProductByName } from "@/lib/inventory-actions"
+import { CODIGOS_REQUIEREN_APROBACION } from "@/lib/transacciones-codigo"
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -95,6 +96,11 @@ export function InventoryTransactionsForm() {
     Reproceso: [{ c: "551", l: "Merma / Reproceso (551)" }],
   }
   const codigoPorDefecto = (tipo: string) => (tipo === "Entrada" ? "701" : tipo === "Salida" ? "702" : tipo === "Reproceso" ? "551" : "")
+  // 601/702 requieren aprobación de Gerencia y NO se registran por este
+  // formulario (el servidor también los rechaza): se solicitan en la pestaña
+  // "Movimiento por código" y quedan en "Aprobaciones pendientes".
+  const codigoActual = formData.cod_movimiento || codigoPorDefecto(formData.tipo_movimiento)
+  const requiereAprobacionGerencia = CODIGOS_REQUIEREN_APROBACION.has(codigoActual)
 
   useEffect(() => {
     loadData()
@@ -703,6 +709,13 @@ export function InventoryTransactionsForm() {
                   <p className="text-[11px] text-muted-foreground">
                     Código que identifica el movimiento en el inventario: <b>{formData.cod_movimiento || codigoPorDefecto(formData.tipo_movimiento) || "—"}</b>
                   </p>
+                  {requiereAprobacionGerencia && (
+                    <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-[11px] md:text-xs text-amber-800">
+                      El concepto <b>{codigoActual}</b> requiere aprobación de Gerencia y no se puede registrar desde este formulario. Solicítalo en la
+                      pestaña <b>Movimiento por código</b>: queda en <b>Aprobaciones pendientes</b> hasta que Gerencia lo apruebe con su clave. Si es una
+                      devolución, merma o despacho con orden, elige el concepto que corresponde.
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -887,11 +900,11 @@ export function InventoryTransactionsForm() {
             <div className="flex justify-end">
               <Button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || requiereAprobacionGerencia}
                 size="lg"
                 className="w-full md:w-auto h-8 md:h-10 text-xs md:text-sm"
               >
-                {isLoading ? "Registrando..." : "Registrar Transacción"}
+                {isLoading ? "Registrando..." : requiereAprobacionGerencia ? "Requiere aprobación de Gerencia" : "Registrar Transacción"}
               </Button>
             </div>
           </form>

@@ -552,7 +552,19 @@ export async function getAjustesPendientes(filtros?: {
     q = q.eq("estado", filtros?.estado ?? "pendiente")
     const { data, error } = await q
     if (error) return { success: false, data: [], message: error.message }
-    return { success: true, data: (data ?? []) as AjustePendiente[] }
+    const filas = (data ?? []) as AjustePendiente[]
+    // Stock ACTUAL de cada lote/ubicación, para que Gerencia vea de entrada si
+    // el ajuste aún aplica. Caso real 26-sep: se pidió sacar 120 und por 702,
+    // el producto salió por otra vía antes de la aprobación y al aprobar el
+    // stock ya era 0 -- sin esta columna solo se veía al fallar.
+    for (const f of filas) {
+      try {
+        f.stock_actual = await stockDeLote(sb, Number(f.idempresa), String(f.producto ?? ""), String(f.lote ?? ""), String(f.location ?? ""))
+      } catch {
+        f.stock_actual = undefined
+      }
+    }
+    return { success: true, data: filas }
   } catch (e: any) {
     return { success: false, data: [], message: e?.message || "Error al listar las solicitudes." }
   }
@@ -577,7 +589,10 @@ export async function aprobarAjustePendiente(id: number, claveAprobacion: string
     if (!resultado.success) {
       // No se marca aprobado si la ejecución real falló (ej. el stock cambió
       // entre la solicitud y la aprobación) -- queda pendiente para reintentar.
-      return { success: false, message: `La aprobación no se pudo aplicar: ${resultado.message}` }
+      return {
+        success: false,
+        message: `La aprobación no se pudo aplicar: ${resultado.message} El producto pudo haber salido por otro movimiento después de la solicitud (revisa "Consulta de movimientos" de ese lote); si el ajuste ya no aplica, recházalo indicando el motivo.`,
+      }
     }
 
     await sb

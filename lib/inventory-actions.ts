@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase-client"
 import { fetchAllRows } from "@/lib/fetch-all-rows"
+import { CODIGOS_REQUIEREN_APROBACION } from "@/lib/transacciones-codigo"
 import * as XLSX from "xlsx"
 import { generateAndUploadProductionEntryPDF } from "@/lib/pdf-actions"
 import { getColombiaDate } from "@/lib/date-utils"
@@ -519,6 +520,22 @@ export interface InventoryTransaction {
 export async function registerInventoryTransaction(transaction: InventoryTransaction) {
   try {
     console.log("[v0] Registering transaction with data:", transaction)
+
+    // CONTROL DE GERENCIA (2026-09-27): 601 y 702 NO se ejecutan desde aquí.
+    // Este formulario "clásico" insertaba directo en invtrans -- sin aprobación
+    // y sin pasar por inv_correcciones_log -- y era la puerta trasera del control
+    // que ya existía en "Movimiento por código" (SQL 62). Caso real: 120 und de
+    // PT La Insuperable (lote 20260804, V28) salieron por 702 el 26-sep por
+    // este camino mientras dos solicitudes del MISMO ajuste seguían
+    // "pendientes" de aprobación; al ir a aprobarlas el stock ya era 0.
+    const cod = String(transaction.cod_movimiento ?? "").trim()
+    if (CODIGOS_REQUIEREN_APROBACION.has(cod)) {
+      const nombre = cod === "601" ? "salida sin orden de cargue" : "salida por ajuste / faltante"
+      return {
+        success: false,
+        message: `El concepto ${cod} (${nombre}) requiere aprobación de Gerencia y no se registra desde este formulario. Solicítalo en Transacciones de Inventario › "Movimiento por código": queda en "Aprobaciones pendientes" hasta que Gerencia lo apruebe con su clave.`,
+      }
+    }
 
     const supabase = await createClient()
 

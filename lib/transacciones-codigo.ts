@@ -133,6 +133,10 @@ export interface AjustePendiente {
   motivo_rechazo: string | null
   invtrans_ids: number[] | null
   created_at: string
+  /** Stock ACTUAL del lote en esa ubicación al listar (lo calcula
+   *  getAjustesPendientes): si es menor que `cantidad`, el ajuste ya no aplica
+   *  tal cual -- el producto salió por otro movimiento después de pedirlo. */
+  stock_actual?: number
 }
 
 // ---------------------------------------------------------------------------
