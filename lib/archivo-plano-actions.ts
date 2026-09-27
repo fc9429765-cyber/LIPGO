@@ -98,6 +98,11 @@ export async function getArchivoPlano(
         .order("mes", { ascending: false })
         .order("quincena", { ascending: false })
         .order("identificacionempleado", { ascending: true })
+        // ...y novedad + fecha: una persona tiene varias filas por quincena, y
+        // sin orden único la paginación puede duplicar/perder filas en los
+        // cortes de página (ver lib/liquidaciones-actions.ts).
+        .order("nombrenovedad")
+        .order("fechainicio")
         .range(offset, offset + pageSize - 1)
 
       if (error) {

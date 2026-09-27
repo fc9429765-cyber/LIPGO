@@ -396,6 +396,9 @@ export async function getConciliacionAvimol(
         .eq("idempresa", AVIMOL_IDEMPRESA)
         .gte("fecha", desde)
         .lte("fecha", hasta)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("persona")
+        .order("fecha")
         .range(off, off + 999)
       if (error) return { success: false, message: error.message }
       if (!data || data.length === 0) break

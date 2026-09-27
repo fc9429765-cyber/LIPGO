@@ -269,6 +269,9 @@ export function useCostoNomina({
           .in("idempresaliquidacion", ids)
           .gte("fecha", desde)
           .lte("fecha", hasta)
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+          .order("persona")
+          .order("fecha")
           .range(offset, offset + PAGE_SIZE - 1)
 
         if (pageError) throw pageError

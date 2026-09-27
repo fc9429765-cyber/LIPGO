@@ -345,7 +345,9 @@ async function armarContexto(
         .gte("fecha", desde)
         .lte("fecha", hasta)
         .gt("toneladas", 0)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
         .order("fecha", { ascending: true })
+        .order("persona")
         .range(f, t),
     )
     for (const r of hcRows) {
@@ -1068,7 +1070,11 @@ export async function getRevisionNominaProyecto(
           .in("identificacionempleado", lote)
           .eq("mes", String(mes).padStart(2, "0"))
           .eq("quincena", quincena)
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts):
+          // una persona tiene varias novedades por quincena.
           .order("identificacionempleado", { ascending: true })
+          .order("nombrenovedad")
+          .order("fechainicio")
           .range(f, t),
       )
       planoTodo.push(...rows)
@@ -1541,11 +1547,16 @@ export async function getConciliacionQuincena(
     for (let off = 0; ; off += 1000) {
       const { data, error } = await admin
         .rpc("pagonomina_rango", { p_desde: desde, p_hasta: hasta })
-        .select("persona, toneladas, pago_produccion, idempresaliquidacion")
+        // `fecha` va en el select porque es columna de orden (PostgREST no deja
+        // ordenar una función rpc por una columna no seleccionada).
+        .select("persona, fecha, toneladas, pago_produccion, idempresaliquidacion")
         .gte("fecha", desde)
         .lte("fecha", hasta)
         .gt("toneladas", 0)
         .in("idempresaliquidacion", emps)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("persona")
+        .order("fecha")
         .range(off, off + 999)
       if (error) break
       for (const r of data || []) {
@@ -1698,6 +1709,9 @@ export async function getHcPorDia(
         .gte("fecha", desde)
         .lte("fecha", hasta)
         .gt("toneladas", 0)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("persona")
+        .order("fecha")
         .range(off, off + 999)
       if (error) return { success: false, data: [], message: error.message }
       if (!data || data.length === 0) break

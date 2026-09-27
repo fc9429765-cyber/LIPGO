@@ -230,8 +230,12 @@ export default function Nominapersonal() {
         if (fechaInicio) query = query.gte("fecha", fechaInicio)
         if (fechaFin) query = query.lte("fecha", fechaFin)
 
+        // `persona` como desempate: orden único y estable para paginar sin
+        // duplicar/perder filas en los cortes de página (ver
+        // lib/liquidaciones-actions.ts). El orden visual sigue siendo por fecha.
         const { data: dataRaw, error } = await query
           .order("fecha", { ascending: false })
+          .order("persona")
           .range(offset, offset + pageSize - 1)
 
         if (error) {

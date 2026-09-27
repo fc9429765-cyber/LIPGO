@@ -141,6 +141,9 @@ export async function calcularPrestacionesActivos(
         .in("persona", nombres)
         .gte("fecha", periodoDesde)
         .lte("fecha", periodoHasta)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("persona")
+        .order("fecha")
         .range(offset, offset + pageSize - 1)
       if (!data || data.length === 0) break
       filas = filas.concat(data)

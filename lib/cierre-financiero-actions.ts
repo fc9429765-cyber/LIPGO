@@ -562,6 +562,9 @@ async function cierreDeProyecto(
       .eq("idempresa", idempresa)
       .gte("fecha", desde)
       .lte("fecha", fecha)
+      // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+      .order("persona")
+      .order("fecha")
       .range(off, off + 999)
     if (error) {
       notas.push(`No se pudo leer la nómina: ${error.message}. El cierre muestra solo el cobro.`)

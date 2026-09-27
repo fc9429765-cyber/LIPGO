@@ -103,6 +103,9 @@ export async function getNovedadesPeriodo(
           .eq("idempresa", empresaId)
           .gte("fecha", desde)
           .lte("fecha", hasta)
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+          .order("persona")
+          .order("fecha")
           .range(d, h),
       )
       hayPagonomina = true

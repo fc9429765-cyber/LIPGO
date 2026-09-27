@@ -186,7 +186,9 @@ export async function generarArchivoCargaPila(
         .map((i) => i.idempresa as number),
     )
     for (const idEmp of idsEmpresaConRetiro) {
-      const liq = await getLiquidaciones(idEmp)
+      // Modo acotado: solo los retirados del mes, nómina vía pagonomina_rango
+      // (ver getLiquidaciones); el resultado para ellos es el mismo.
+      const liq = await getLiquidaciones(idEmp, { retiroDesde: desde, retiroHasta: hasta })
       if (!liq.success) continue
       for (const lp of liq.data) {
         if (lp.fecha_retiro && lp.fecha_retiro >= desde && lp.fecha_retiro <= hasta && lp.vacaciones > 0) {
@@ -204,6 +206,9 @@ export async function generarArchivoCargaPila(
         .in("persona", nombres)
         .gte("fecha", desde)
         .lte("fecha", hasta)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("persona")
+        .order("fecha")
         .range(offset, offset + pageSize - 1)
       if (!data || data.length === 0) break
       filas = filas.concat(data)

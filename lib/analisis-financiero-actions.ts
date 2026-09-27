@@ -609,6 +609,10 @@ export async function getAnalisisFinanciero(
           .in("idempresaliquidacion", ids)
           .gte("fecha", desde)
           .lte("fecha", hasta)
+          // Orden único y estable para paginar sin duplicar/perder filas en los
+          // cortes de página (ver nota en lib/liquidaciones-actions.ts).
+          .order("persona")
+          .order("fecha")
           .range(off, off + 999)
         if (error) break
         if (!data || data.length === 0) break

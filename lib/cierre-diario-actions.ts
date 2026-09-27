@@ -208,9 +208,13 @@ export async function getCierreDiario(
     for (let off = 0; ; off += 1000) {
       const { data, error } = await sb
         .rpc("pagonomina_rango", { p_desde: dia, p_hasta: dia })
-        .select("idempresa, total_liquidado_dia")
+        // `persona` va en el select porque es la columna de orden: sobre una
+        // función rpc PostgREST rechaza ordenar por una columna no seleccionada.
+        .select("idempresa, persona, total_liquidado_dia")
         .in("idempresa", ids)
         .eq("fecha", dia)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("persona")
         .range(off, off + 999)
       if (error) break // el costo es complementario: sin él el cierre sigue sirviendo
       if (!data || data.length === 0) break

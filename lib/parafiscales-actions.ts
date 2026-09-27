@@ -295,6 +295,9 @@ export async function getParafiscales(
         .in("persona", nombres)
         .gte("fecha", desde)
         .lte("fecha", hasta)
+        // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+        .order("persona")
+        .order("fecha")
         .range(offset, offset + pageSize - 1)
       if (error) return { success: false, data: [], message: error.message }
       if (!data || data.length === 0) break
@@ -389,8 +392,10 @@ export async function getParafiscales(
     // usuario 2026-09-11. Fuente: getLiquidaciones() -- MISMO cálculo (y el
     // mismo override manual `vacaciones_real`) que usa el submódulo
     // Liquidaciones, para no mantener una segunda fórmula que pueda divergir.
-    // Solo se consulta si hay al menos un retiro este mes (la llamada es
-    // pesada -- recalcula TODAS las prestaciones históricas de la empresa).
+    // Solo se consulta si hay al menos un retiro este mes, y en MODO ACOTADO
+    // (solo los retirados del mes, nómina vía pagonomina_rango): el modo
+    // completo recalculaba las prestaciones de TODOS los retirados históricos
+    // de la empresa leyendo la vista pagonomina entera (6-13 s por empresa).
     const vacLiqPorCedula = new Map<string, number>()
     const idsEmpresaConRetiro = new Set(
       Array.from(infoPorNombre.values())
@@ -398,7 +403,7 @@ export async function getParafiscales(
         .map((i) => i.idempresa as number),
     )
     for (const idEmp of idsEmpresaConRetiro) {
-      const liq = await getLiquidaciones(idEmp)
+      const liq = await getLiquidaciones(idEmp, { retiroDesde: desde, retiroHasta: hasta })
       if (!liq.success) continue
       for (const lp of liq.data) {
         if (lp.fecha_retiro && lp.fecha_retiro >= desde && lp.fecha_retiro <= hasta && lp.vacaciones > 0) {

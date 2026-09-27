@@ -108,10 +108,15 @@ export async function calcularServiciosAdicionalesIndupan(
       for (let off = 0; ; off += 1000) {
         const { data, error } = await admin
           .rpc("pagonomina_rango", { p_desde: desde, p_hasta: hasta })
-          .select("fecha, actividad_registrada, horas_hed, horas_hedf, horas_hen, horas_hef, horas_hn")
+          // `persona` va en el select porque es columna de orden (PostgREST no
+          // deja ordenar una función rpc por una columna no seleccionada).
+          .select("fecha, persona, actividad_registrada, horas_hed, horas_hedf, horas_hen, horas_hef, horas_hn")
           .eq("idempresa", INDUPAN_IDEMPRESA)
           .gte("fecha", desde)
           .lte("fecha", hasta)
+          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
+          .order("persona")
+          .order("fecha")
           .range(off, off + 999)
         if (error) {
           alertas.push(`Error consultando pagonomina de Indupan: ${error.message}`)

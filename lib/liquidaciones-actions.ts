@@ -271,8 +271,21 @@ function sumaPeriodo(
   return { dev, dias, diasAux }
 }
 
+/**
+ * Liquidaciones de los retirados de una empresa.
+ *
+ * `opciones` = MODO ACOTADO para consumidores que solo necesitan a quienes se
+ * retiraron en un rango (Parafiscales y el exportador PILA leen únicamente las
+ * `vacaciones` del mes del retiro): se procesan SOLO esos retirados, con su
+ * historia de nómina completa. Para esas personas el resultado es el MISMO que
+ * en el modo completo (verificado byte a byte); solo cambia qué personas vienen
+ * y cuánto tarda (leer la nómina de TODOS los retirados históricos de la
+ * empresa costaba 6-13 s por llamada; la de 1-3 personas, ~1,3 s).
+ * Sin `opciones` (submódulo Liquidaciones): todos los retirados.
+ */
 export async function getLiquidaciones(
   idempresa: number,
+  opciones?: { retiroDesde: string; retiroHasta: string },
 ): Promise<{ success: boolean; data: LiquidacionPersona[]; params?: ParametrosPrestaciones; message?: string }> {
   if (!idempresa) return { success: false, data: [], message: "Selecciona una empresa." }
   try {
@@ -316,6 +329,14 @@ export async function getLiquidaciones(
     // 2) Solo con contrato = número de contrato SIIGO (fuente de verdad).
     for (const [nombre, info] of Array.from(infoPorNombre.entries())) {
       if (info.contratosiigo === "") infoPorNombre.delete(nombre)
+    }
+    // Modo acotado: solo quienes se retiraron dentro del rango pedido (mismo
+    // filtro que ya aplican Parafiscales y el exportador sobre el resultado).
+    if (opciones) {
+      for (const [nombre, info] of Array.from(infoPorNombre.entries())) {
+        const fr = info.fecha_retiro ? String(info.fecha_retiro).slice(0, 10) : null
+        if (!fr || fr < opciones.retiroDesde || fr > opciones.retiroHasta) infoPorNombre.delete(nombre)
+      }
     }
     const nombres = Array.from(infoPorNombre.keys())
     if (nombres.length === 0) return { success: true, data: [], params: await leerParametrosPrestaciones(admin) }
@@ -389,8 +410,16 @@ export async function getLiquidaciones(
 
     // 5) TODAS las novedades de pagonomina de esos retirados (para prestaciones y
     //    pendientes). Paginado.
-    //    Se queda en la VISTA a propósito: necesita la historia completa de cada
-    //    retirado (sin rango), así que `pagonomina_rango` no le ahorra nada.
+    //    Se lee la VISTA completa a propósito, también en modo acotado: cada
+    //    persona necesita su historia ENTERA -- `veniaAnioAnterior` mira si hay
+    //    ALGUNA fila antes del 1-ene, y hay retirados con filas del año anterior
+    //    pero sin diciembre (contratos con huecos); acotar por fecha les cambiaba
+    //    las vacaciones en 1 día causado (RICHARD ANDRES ALTAMAR CUADRADO, MAC
+    //    DONALD DONADO MEJIA, detectado al verificar). El costo de la vista es por
+    //    PÁGINA de 1.000 filas, así que lo que abarata el modo acotado es pedir
+    //    solo a los 1-3 retirados del mes (1 página, ~1,3 s) en vez de a todos
+    //    los históricos de la empresa (5-11 páginas, 6-13 s): mismas filas por
+    //    persona, mismo resultado.
     const cols =
       "fecha, persona, actividad_registrada, novedad_reportada, base_dia, hed, hedf, hen, hef, hn, pago_domingo, recargodominical, bonif_prestacional, total_liquidado_dia, especialidad, toneladas"
     let all: any[] = []
@@ -402,6 +431,15 @@ export async function getLiquidaciones(
         .from("pagonomina")
         .select(cols)
         .in("persona", nombres)
+        // ORDEN ÚNICO Y ESTABLE (persona, fecha). Antes se ordenaba solo por
+        // fecha: con decenas de personas hay muchas filas con la misma fecha en
+        // el corte de cada página de 1.000, y Postgres no garantiza el mismo
+        // desempate entre una página y la siguiente -- una fila se repetía y
+        // otra se perdía. Verificado 2026-09-27: RICHARD ANDRES ALTAMAR CUADRADO
+        // y MAC DONALD DONADO MEJIA recibían el 2026-06-08 DOS veces (261 filas
+        // para 260 fechas), lo que les sumaba un día causado de vacaciones de
+        // más en la liquidación y en el IBC de caja de Parafiscales.
+        .order("persona")
         .order("fecha", { ascending: false })
         .range(offset, offset + pageSize - 1)
       if (error) return { success: false, data: [], message: error.message }
