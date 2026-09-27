@@ -19,10 +19,23 @@
 -- Aditivo e idempotente.
 -- =====================================================================
 
--- (a) Permiso del nuevo submódulo "Autorizaciones por clave" (Configuración › General).
+-- DOS NIVELES QUE NO SE MEZCLAN:
+--   · Gerencia General LIPgo = la DUEÑA del software. Administra la herramienta
+--     (quién tiene qué perfil) y es respaldo de emergencia. NO es el camino normal
+--     para autorizar movimientos del inventario del cliente.
+--   · Gerencia de proyecto = la gerencia del CLIENTE de cada ID (Indupan, Avimol,
+--     cada Cedi). Autoriza SOLO en su proyecto (alcance = su idempresa).
+--
+-- (a) Permiso del nuevo submódulo "Autorizaciones por clave" (Configuración ›
+--     General). Se otorga SOLO a la cuenta `admin` de LIPgo: tener
+--     gestion_usuarios NO basta, porque hoy lo tienen también cuentas de clientes
+--     (Admon Indupan, Gerencia DEMO). Los demás administradores de LIPgo se
+--     habilitan desde Gestión de Usuarios, como cualquier módulo.
 alter table public.permisos_usuarios
   add column if not exists autorizaciones_clave boolean not null default false;
-update public.permisos_usuarios set autorizaciones_clave = true where gestion_usuarios = true;
+update public.permisos_usuarios
+   set autorizaciones_clave = true
+ where usuario_id in (select id from public.profiles where usuario = 'admin');
 
 -- (b) Catálogo de procesos autorizables (el "código" al que se da permiso).
 create table if not exists public.autorizacion_procesos (
@@ -123,16 +136,19 @@ create unique index if not exists ux_autorizacion_usuario_procesos
 alter table public.autorizacion_usuario_procesos disable row level security;
 
 -- Semilla de asignaciones (editable en la pantalla):
---   · Gerencia General LIPgo → quienes hoy administran Gestión de Usuarios.
+--   · Gerencia General LIPgo → SOLO la cuenta `admin` de LIPgo (dueña del
+--     software), alcance todos los proyectos. Verificado 2026-09-27: si se
+--     sembrara por gestion_usuarios entrarían cuentas de CLIENTES.
 --   · Gerencia de proyecto / Calidad / Cartera → los usuarios "Gerencia X",
---     "Calidad X", "Cartera X" de cada proyecto, con alcance a SU proyecto.
+--     "Calidad X", "Cartera X" de cada proyecto (son del cliente), con alcance a
+--     SU proyecto únicamente.
 --   · Cartera → usuarios de LIPgo cuyo nombre coincide con un usuario de
 --     cartera actual (usuariocartera), con alcance a su proyecto.
 insert into public.autorizacion_usuario_perfiles (usuario_id, perfil_id, idempresa, asignado_por)
-select pu.usuario_id, p.id, null, 'sql 203'
-from public.permisos_usuarios pu
+select pr.id, p.id, null, 'sql 203'
+from public.profiles pr
 join public.autorizacion_perfiles p on p.nombre = 'Gerencia General LIPgo'
-where pu.gestion_usuarios = true
+where pr.usuario = 'admin'
 on conflict do nothing;
 
 insert into public.autorizacion_usuario_perfiles (usuario_id, perfil_id, idempresa, asignado_por)
