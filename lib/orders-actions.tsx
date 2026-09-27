@@ -8,6 +8,7 @@ import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import { getCurrentUser, getUserProfile } from "@/lib/auth-actions"
 import { getCurrentEmpresaId } from "@/lib/company-filter"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { autorizar } from "@/lib/autorizaciones-core"
 import { revalidatePath } from "next/cache"
 import { generateAndUploadLoadOrderPDF } from "./pdf-actions" // Added for generateLoadOrder
 import { esPlacaDistribucion, numeroOrdenDistribucion, getPlacasEmpresa, cargarPlacasDistribucion } from "@/lib/distribucion-placas"
@@ -452,24 +453,10 @@ export async function approveOrder(idpedido: number, approvalCode: string) {
   const supabase = await createClient()
 
   try {
-    // Validate approval code against usuariocartera table
-    console.log("[v0] Validating approval code against usuariocartera table")
-    
-    const { data: usuario, error: validationError } = await supabase
-      .from("usuariocartera")
-      .select("id, nombre, contra")
-      .eq("contra", approvalCode)
-      .single()
-
-    if (validationError || !usuario) {
-      console.error("[v0] Invalid approval code:", validationError)
-      return { success: false, message: "Código de aprobación incorrecto" }
-    }
-
     // Check if order exists and is not already approved
     const { data: order, error: fetchError } = await supabase
       .from("pedidoscabecera")
-      .select("aprobado")
+      .select("aprobado, id_empresa")
       .eq("idpedido", idpedido)
       .single()
 
@@ -481,12 +468,25 @@ export async function approveOrder(idpedido: number, approvalCode: string) {
       return { success: false, message: "El pedido ya está aprobado" }
     }
 
+    // Autorización (SQL 203): clave PERSONAL de un usuario cuyo perfil tenga
+    // `ped_aprobar_gerencia` en el proyecto del pedido. Las contraseñas de
+    // `usuariocartera` siguen valiendo solo durante la transición.
+    const auth = await autorizar({
+      proceso: "ped_aprobar_gerencia",
+      idempresa: order.id_empresa,
+      clave: approvalCode,
+      referencia: `pedido ${idpedido}`,
+    })
+    if (!auth.ok) {
+      return { success: false, message: auth.error || "Código de aprobación incorrecto" }
+    }
+
     const { error: updateError } = await supabase
       .from("pedidoscabecera")
       .update({
         aprobado: "si",
         estado: "aprobado",
-        revisiongerencia: usuario.nombre,
+        revisiongerencia: auth.autorizadoPor,
       })
       .eq("idpedido", idpedido)
 
@@ -2289,30 +2289,15 @@ export async function getDestinosFilter() {
 export async function annulOrder(idpedido: number, password: string, observaciones?: string) {
   const supabase = await createClient()
 
-  console.log("[v0] Annul order attempt:", { idpedido, password })
-
-  // Validate password — "LIP123456" (clave general histórica) o "Avimol2026"
-  // (Maria Camila Furnieles / Gestión de Pedidos ID2 Avimol, autorizada a
-  // anular incluso pedidos ya aprobados por gerencia, con la misma clave que
-  // usa para Cartera/Gerencia). Mismo alcance que ya tienen cartera/gerencia
-  // en este módulo: no hay chequeo de empresa a nivel de mutación, la
-  // protección real es que en Gestionar Pedidos cada usuario solo ve/puede
-  // accionar los pedidos de su empresa asignada (perfil_acceso_empresas).
-  const CLAVES_ANULAR = ["LIP123456", "Avimol2026"]
-  if (!CLAVES_ANULAR.includes(password)) {
-    console.log("[v0] Password validation failed")
-    return { success: false, message: "Contraseña incorrecta" }
-  }
+  console.log("[v0] Annul order attempt:", { idpedido })
 
   try {
     // Verify order conditions
     const { data: order, error: fetchError } = await supabase
       .from("pedidoscabecera")
-      .select("aprobado, ocargue, estado")
+      .select("aprobado, ocargue, estado, id_empresa")
       .eq("idpedido", idpedido)
       .single()
-
-    console.log("[v0] Order data fetched:", order)
 
     if (fetchError) {
       console.error("[v0] Fetch error:", fetchError)
@@ -2327,6 +2312,16 @@ export async function annulOrder(idpedido: number, password: string, observacion
     if (order.ocargue && order.ocargue.trim() !== "") {
       console.log("[v0] Order has ocargue:", order.ocargue)
       return { success: false, message: "No se puede anular un pedido con O.Cargue asignada" }
+    }
+
+    // Autorización (SQL 203): clave PERSONAL con el proceso `ped_anular` en el
+    // proyecto del pedido (perfil "Gerencia de proyecto" con alcance a ese
+    // proyecto). Las claves compartidas históricas ("LIP123456", "Avimol2026")
+    // ya no viven en el código: solo valen durante la transición.
+    const auth = await autorizar({ proceso: "ped_anular", idempresa: order.id_empresa, clave: password, referencia: `anular pedido ${idpedido}` })
+    if (!auth.ok) {
+      console.log("[v0] Password validation failed")
+      return { success: false, message: auth.error || "Contraseña incorrecta" }
     }
 
     const { error: updateError } = await supabase
@@ -2353,16 +2348,11 @@ export async function annulOrder(idpedido: number, password: string, observacion
 export async function closePendingOrder(idpedido: number, password: string, observaciones?: string) {
   const supabase = await createClient()
 
-  // Validate password
-  if (password !== "LIP123456") {
-    return { success: false, message: "Contraseña incorrecta" }
-  }
-
   try {
     // Verify order conditions
     const { data: order, error: fetchError } = await supabase
       .from("pedidoscabecera")
-      .select("estado")
+      .select("estado, id_empresa")
       .eq("idpedido", idpedido)
       .single()
 
@@ -2372,6 +2362,12 @@ export async function closePendingOrder(idpedido: number, password: string, obse
 
     if (order.estado?.toLowerCase() !== "parcial") {
       return { success: false, message: "Solo se pueden cerrar pedidos con estado parcial" }
+    }
+
+    // Autorización (SQL 203): proceso `ped_cerrar_pendiente` en el proyecto del pedido.
+    const auth = await autorizar({ proceso: "ped_cerrar_pendiente", idempresa: order.id_empresa, clave: password, referencia: `cerrar pedido ${idpedido}` })
+    if (!auth.ok) {
+      return { success: false, message: auth.error || "Contraseña incorrecta" }
     }
 
     const { error: updateError } = await supabase
@@ -2572,24 +2568,28 @@ export async function deleteLoadOrder(orderId: number) {
   }
 }
 
-// New function to verify cartera password and get username
-export async function verifyCarteraPassword(password: string) {
-  const supabase = await createClient()
+// Verifica la autorización de CARTERA y devuelve el nombre de quien autoriza.
+// SQL 203: clave PERSONAL con el proceso `ped_aprobar_cartera` en el proyecto
+// del pedido (perfil "Cartera"). Las contraseñas de `usuariocartera` siguen
+// valiendo solo durante la transición.
+export async function verifyCarteraPassword(password: string, idpedido?: number | null) {
   try {
-    console.log("[v0] Verifying cartera password")
-
-    const { data, error } = await supabase
-      .from("usuariocartera")
-      .select("nombre, contra")
-      .eq("contra", password)
-      .single()
-
-    if (error || !data) {
-      console.error("[v0] Invalid cartera password:", error)
-      return { success: false, message: "Contraseña de cartera inválida" }
+    let idempresa: number | null = null
+    if (idpedido) {
+      const supabase = await createClient()
+      const { data } = await supabase.from("pedidoscabecera").select("id_empresa").eq("idpedido", idpedido).maybeSingle()
+      idempresa = data?.id_empresa ?? null
     }
-
-    return { success: true, nombre: data.nombre, message: "Contraseña válida" }
+    const auth = await autorizar({
+      proceso: "ped_aprobar_cartera",
+      idempresa,
+      clave: password,
+      referencia: idpedido ? `cartera pedido ${idpedido}` : "cartera",
+    })
+    if (!auth.ok) {
+      return { success: false, message: auth.error || "Contraseña de cartera inválida" }
+    }
+    return { success: true, nombre: auth.autorizadoPor, message: "Contraseña válida" }
   } catch (error) {
     console.error("[v0] Error verifying cartera password:", error)
     return { success: false, message: "Error al verificar contraseña" }

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DatePickerField } from "@/components/ui/date-picker-field"
 import { Label } from "@/components/ui/label"
+import { AyudaClaveAutorizacion } from "@/components/mi-clave-autorizacion"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -581,8 +582,9 @@ function ListadoBonosTab() {
             <>
               <div className="space-y-1">
                 <Label className="flex items-center gap-1.5">
-                  <Lock className="h-3.5 w-3.5" /> Clave de aprobación
+                  <Lock className="h-3.5 w-3.5" /> Tu clave de autorización
                 </Label>
+                <AyudaClaveAutorizacion />
                 <div className="relative w-[200px]">
                   <Input
                     type={mostrarClave ? "text" : "password"}

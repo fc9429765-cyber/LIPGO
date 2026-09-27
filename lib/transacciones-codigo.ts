@@ -292,7 +292,7 @@ export const GUIA_TRANSACCIONES: GuiaTransaccion[] = [
     cuandoUsar: "Calidad decidió que el producto retenido SÍ sirve: regresa de CUARENTENA a una ubicación normal y vuelve a estar disponible.",
     pasos: ["Escribe 343 (pide la clave de la gerencia del proyecto)", "Elige el producto y lote retenido (la ubicación CUARENTENA es automática)", "Ubicación destino, cantidad, motivo, clave → ejecuta"],
     ejemplo: "Se reempacó el lote y calidad lo aprobó → 343 lo devuelve a su ubicación de picking.",
-    advertencia: "La clave es la de la GERENCIA DEL PROYECTO (Indupan, Avimol, cada Cedi), no la general: devolver a venta algo retenido es decisión de esa gerencia.",
+    advertencia: "Autoriza la GERENCIA DEL PROYECTO (Indupan, Avimol, cada Cedi) con su clave personal de autorización, no la gerencia general de LIPgo: devolver a venta algo retenido es decisión de esa gerencia.",
   },
   {
     codigo: "555",
@@ -308,7 +308,7 @@ export const GUIA_TRANSACCIONES: GuiaTransaccion[] = [
 // sin nombres técnicos — cumple la regla de confidencialidad del bot).
 export function guiaCompactaParaLIPbot(): string {
   const lineas = GUIA_TRANSACCIONES.map((g) => {
-    const clave = FIELDSETS[g.codigo]?.requiereClave ? " [requiere clave del responsable + motivo]" : ""
+    const clave = FIELDSETS[g.codigo]?.requiereClave ? " [requiere motivo + clave personal de autorización de quien tenga ese permiso]" : ""
     return `    - ${g.codigo} ${g.nombre}${clave}: ${g.cuandoUsar}`
   }).join("\n")
   return `GUÍA DE TRANSACCIONES DE INVENTARIO (para direccionar al usuario):
@@ -316,7 +316,7 @@ export function guiaCompactaParaLIPbot(): string {
     Las transacciones manuales y correcciones de inventario se hacen en: Almacenamiento → "Transacciones de Inventario" → pestaña "Movimiento por código". El usuario escribe el CÓDIGO y el sistema habilita los campos de ese movimiento. La nomenclatura completa está visible al lado derecho de esa pantalla. Se puede trabajar Sin QR (elegir ubicación/producto/lote manualmente) o Con QR (escanear la estiba y los campos se precargan) — conviven porque aún no todas las estibas tienen QR.
 ${lineas}
     - Los REVERSOS (102/602/552/312) piden buscar y elegir el movimiento original; el sistema muestra cuánto queda reversible y no deja pasar de ahí.
-    - Todo movimiento queda registrado con quién lo hizo; las correcciones exigen además motivo y clave del responsable, y quedan en la pestaña "Historial de correcciones" (revisable y exportable).
+    - Todo movimiento queda registrado con quién lo hizo; las correcciones exigen además motivo y la clave personal de autorización de un usuario con ese permiso (cada usuario crea y recupera su clave en el menú de usuario › "Mi clave de autorización"; los permisos por proceso los da Gestión de Usuarios en "Autorizaciones por clave"), y quedan en la pestaña "Historial de correcciones" (revisable y exportable).
     - La pestaña "Consulta de movimientos" permite ver cualquier movimiento por rango de fechas (desde–hasta) con exportación a Excel.
     - Si el usuario pregunta CÓMO corregir un lote, anular un ingreso/salida/merma, trasladar, bloquear producto o consultar movimientos: explícale el código correcto con sus pasos y ofrécele abrir el módulo "Transacciones de Inventario" (abrir_submodulo).`
 }

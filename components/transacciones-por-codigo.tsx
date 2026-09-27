@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
+import { AyudaClaveAutorizacion } from "@/components/mi-clave-autorizacion"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -673,9 +674,12 @@ export function TransaccionesPorCodigo() {
               {(fs.requiereClave || fs.claveGerenciaProyecto) && (
                 <div>
                   <Label className="text-xs uppercase text-muted-foreground">
-                    {fs.claveGerenciaProyecto ? "Clave de la gerencia del proyecto" : "Clave del responsable"}
+                    {fs.claveGerenciaProyecto ? "Tu clave de autorización (gerencia del proyecto)" : "Tu clave de autorización (responsable)"}
                   </Label>
-                  <Input type="password" value={clave} onChange={(e) => setClave(e.target.value)} className="mt-1" placeholder="••••" />
+                  <Input type="password" value={clave} onChange={(e) => setClave(e.target.value)} className="mt-1" placeholder="••••" autoComplete="off" />
+                  <div className="mt-1">
+                    <AyudaClaveAutorizacion />
+                  </div>
                 </div>
               )}
             </div>

@@ -22,6 +22,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
+import { autorizar } from "@/lib/autorizaciones-core"
 // Las constantes y tipos viven en un módulo aparte: este archivo es
 // `"use server"` y ahí solo se pueden exportar funciones async (exportar un
 // array rompe el arranque de la app). Ver lib/bonos-constants.ts.
@@ -30,12 +31,14 @@ import { NOVEDADES_BONO, TIPOS_BONO, type TipoBono, type EstadoBono } from "@/li
 const num = (v: any) => Number(v || 0)
 
 /**
- * Clave que exige la aprobación de bonos. Vive SOLO aquí a propósito: este
- * archivo es `"use server"` y su código nunca se envía al navegador. Ponerla en
- * `lib/bonos-constants.ts` (que sí importa el cliente) la publicaría en el
- * bundle. Se puede rotar por variable de entorno sin volver a desplegar.
+ * Aprobar bonos exige autorización (SQL 203): clave PERSONAL de un usuario cuyo
+ * perfil tenga el proceso `fin_bonos_aprobar` (perfil "Financiera" o "Gerencia
+ * General LIPgo"). La clave compartida histórica (BONOS_APROBACION_CLAVE) solo
+ * vale durante la transición; vive en lib/autorizaciones-core.ts.
  */
-const CLAVE_APROBACION = process.env.BONOS_APROBACION_CLAVE || "Jeff1234"
+async function autorizarBonos(clave: string, referencia: string) {
+  return autorizar({ proceso: "fin_bonos_aprobar", clave: String(clave ?? ""), referencia })
+}
 
 /** De dónde sale el listado de colaboradores del formulario. */
 export type OrigenColaborador = "operativo" | "administrativo"
@@ -147,7 +150,8 @@ export async function getColaboradoresBonos(
  * desbloquear la sesión una sola vez en vez de pedirla bono por bono.
  */
 export async function verificarClaveBonos(clave: string): Promise<{ success: boolean; message?: string }> {
-  if (String(clave || "") !== CLAVE_APROBACION) return { success: false, message: "Clave incorrecta." }
+  const r = await autorizarBonos(clave, "desbloquear aprobación de bonos")
+  if (!r.ok) return { success: false, message: r.error || "Clave incorrecta." }
   return { success: true }
 }
 
@@ -236,10 +240,10 @@ export async function registrarBono(
 export async function aprobarBono(id: number, clave: string): Promise<{ success: boolean; message?: string }> {
   try {
     if (!id) return { success: false, message: "Bono inválido." }
-    if (String(clave || "") !== CLAVE_APROBACION)
-      return { success: false, message: "Clave de aprobación incorrecta. El bono NO fue aprobado." }
+    const auth = await autorizarBonos(clave, `aprobar bono #${id}`)
+    if (!auth.ok) return { success: false, message: `${auth.error || "Clave de aprobación incorrecta."} El bono NO fue aprobado.` }
     const admin: any = await getSupabaseAdmin()
-    const usuario = await getCurrentUsuarioForInsert()
+    const usuario = auth.autorizadoPor || (await getCurrentUsuarioForInsert())
     const { error } = await admin
       .from("bonos_nomina")
       .update({

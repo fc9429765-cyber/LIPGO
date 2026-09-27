@@ -6,8 +6,12 @@
  * valida, postea a `invtrans` (status aprobado, origen "transaccion manual",
  * cod_movimiento explícito — el trigger de BD recalcula saldos) y deja el
  * registro completo en `inv_correcciones_log` (quién, cuándo, qué, por qué,
- * ids generados) — revisable sin tocar invtrans. Los códigos de CORRECCIÓN
- * exigen además la clave del responsable (`inv_clave_movimiento`).
+ * ids generados) — revisable sin tocar invtrans. Los códigos de CORRECCIÓN,
+ * liberar cuarentena (343) y aprobar ajustes (601/702/555) exigen además la
+ * CLAVE PERSONAL de un usuario cuyo perfil tenga ese proceso autorizado en el
+ * proyecto (lib/autorizaciones-core.ts, SQL 203). Las claves compartidas
+ * anteriores (inv_clave_movimiento, inv_clave_gerencia_proyecto,
+ * inv_clave_aprobacion_ajustes) solo valen durante la transición.
  *
  * Reutiliza los patrones sancionados del módulo (registerInventoryTransaction /
  * registerProductTransfer / postCorreccionInvtrans) sin modificarlos.
@@ -16,6 +20,8 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentUsuarioForInsert } from "@/lib/company-filter"
 import { getColombiaDateTime } from "@/lib/inventory-actions"
+import { autorizar } from "@/lib/autorizaciones-core"
+import { procesoInventarioEjecutar, procesoInventarioAprobar } from "@/lib/autorizaciones"
 import {
   FIELDSETS,
   CODIGOS_REQUIEREN_APROBACION,
@@ -61,22 +67,14 @@ export async function getCatalogoTransacciones(): Promise<{
 }
 
 // ---------------------------------------------------------------------------
-// Clave del responsable (solo códigos de corrección)
+// Clave del responsable (códigos de corrección 309/102/602/552/312): clave
+// PERSONAL + perfil con el proceso `inv_<código>` en el proyecto (SQL 203).
 // ---------------------------------------------------------------------------
 
-async function resolverClave(sb: any, clave: string): Promise<{ ok: boolean; responsable?: string; error?: string }> {
-  const limpia = String(clave || "").trim()
-  if (!limpia) return { ok: false, error: "Este código requiere la clave del responsable." }
-  const { data, error } = await sb
-    .from("inv_clave_movimiento")
-    .select("responsable")
-    .eq("clave", limpia)
-    .eq("activo", true)
-    .limit(1)
-    .maybeSingle()
-  if (error) return { ok: false, error: error.message }
-  if (!data) return { ok: false, error: "Clave incorrecta o inactiva." }
-  return { ok: true, responsable: data.responsable }
+async function resolverClave(clave: string, codigo: string, empresaId: number): Promise<{ ok: boolean; responsable?: string; error?: string }> {
+  if (!String(clave || "").trim()) return { ok: false, error: "Este código requiere tu clave de autorización." }
+  const r = await autorizar({ proceso: procesoInventarioEjecutar(codigo), idempresa: empresaId, clave, referencia: `ejecutar ${codigo}` })
+  return r.ok ? { ok: true, responsable: r.autorizadoPor } : { ok: false, error: r.error }
 }
 
 // ---------------------------------------------------------------------------
@@ -262,14 +260,14 @@ export async function ejecutarTransaccionPorCodigo(payload: EjecutarPayload): Pr
     // Clave del responsable (solo códigos de corrección).
     let autorizadoPor: string | null = null
     if (fs.requiereClave) {
-      const r = await resolverClave(sb, payload.clave || "")
+      if (!String(payload.motivo || "").trim()) return { success: false, message: "Indica el motivo de la corrección." }
+      const r = await resolverClave(payload.clave || "", payload.codigo, empresaId)
       if (!r.ok) return { success: false, message: r.error || "Clave inválida." }
       autorizadoPor = r.responsable || null
-      if (!String(payload.motivo || "").trim()) return { success: false, message: "Indica el motivo de la corrección." }
     }
     // Clave de la GERENCIA DEL PROYECTO (decisiones de calidad: 343 liberar).
     if (fs.claveGerenciaProyecto) {
-      const r = await resolverClaveGerenciaProyecto(sb, empresaId, payload.clave || "")
+      const r = await resolverClaveGerenciaProyecto(empresaId, payload.clave || "")
       if (!r.ok) return { success: false, message: r.error || "Clave inválida." }
       autorizadoPor = r.responsable || null
       if (!String(payload.motivo || "").trim()) return { success: false, message: "Indica el motivo (qué decidió calidad)." }
@@ -475,49 +473,27 @@ export async function ejecutarTransaccionPorCodigo(payload: EjecutarPayload): Pr
 }
 
 // ---------------------------------------------------------------------------
-// Aprobación de Gerencia para 601/702 (SQL 62). Clave DEDICADA en
-// inv_clave_aprobacion_ajustes -- distinta de inv_clave_movimiento (esa es
-// "quién ejecuta" una corrección; esta es "quién autoriza" la solicitud de
-// otra persona, un control más guardado a propósito).
+// Aprobaciones (SQL 203): quien decide sobre el inventario de un proyecto es su
+// propia gerencia (Indupan, Avimol, cada Cedi), no la gerencia general de
+// LIPgo. Se exige la clave PERSONAL de un usuario cuyo perfil (p. ej.
+// "Gerencia de proyecto" con alcance a ESE proyecto) tenga el proceso. Las
+// claves compartidas de antes (inv_clave_gerencia_proyecto,
+// inv_clave_aprobacion_ajustes) solo valen durante la transición.
 // ---------------------------------------------------------------------------
 
-// Clave de la GERENCIA DEL PROYECTO (inv_clave_gerencia_proyecto, SQL 202):
-// quien decide sobre el inventario de un proyecto es su propia gerencia
-// (Indupan, Avimol, cada Cedi), no la gerencia general de LIPgo.
-async function resolverClaveGerenciaProyecto(sb: any, empresaId: number, clave: string): Promise<{ ok: boolean; responsable?: string; error?: string }> {
-  const limpia = String(clave || "").trim()
-  if (!limpia) return { ok: false, error: "Ingresa la clave de la gerencia del proyecto." }
-  const { data, error } = await sb
-    .from("inv_clave_gerencia_proyecto")
-    .select("responsable")
-    .eq("idempresa", empresaId)
-    .eq("clave", limpia)
-    .eq("activo", true)
-    .limit(1)
-    .maybeSingle()
-  if (error) return { ok: false, error: error.message }
-  if (!data) return { ok: false, error: "Clave incorrecta: debe ser la de la gerencia de ESTE proyecto (o estar inactiva)." }
-  return { ok: true, responsable: data.responsable }
+// Liberar de cuarentena (343): proceso `inv_343` en el proyecto.
+async function resolverClaveGerenciaProyecto(empresaId: number, clave: string): Promise<{ ok: boolean; responsable?: string; error?: string }> {
+  if (!String(clave || "").trim()) return { ok: false, error: "Ingresa tu clave de autorización (gerencia del proyecto)." }
+  const r = await autorizar({ proceso: procesoInventarioEjecutar("343"), idempresa: empresaId, clave, referencia: "ejecutar 343" })
+  return r.ok ? { ok: true, responsable: r.autorizadoPor } : { ok: false, error: r.error }
 }
 
-// Aprobación de un ajuste pendiente (601/702/555): vale la clave de la gerencia
-// DEL PROYECTO al que pertenece el ajuste y, como respaldo, la clave general
-// de inv_clave_aprobacion_ajustes (SQL 62).
-async function resolverClaveAprobacion(sb: any, clave: string, empresaId: number): Promise<{ ok: boolean; responsable?: string; error?: string }> {
-  const limpia = String(clave || "").trim()
-  if (!limpia) return { ok: false, error: "Ingresa la clave de aprobación (gerencia del proyecto)." }
-  const proyecto = await resolverClaveGerenciaProyecto(sb, empresaId, limpia)
-  if (proyecto.ok) return proyecto
-  const { data, error } = await sb
-    .from("inv_clave_aprobacion_ajustes")
-    .select("responsable")
-    .eq("clave", limpia)
-    .eq("activo", true)
-    .limit(1)
-    .maybeSingle()
-  if (error) return { ok: false, error: error.message }
-  if (!data) return { ok: false, error: "Clave de aprobación incorrecta o inactiva (debe ser la de la gerencia de este proyecto)." }
-  return { ok: true, responsable: data.responsable }
+// Aprobar/rechazar un ajuste pendiente: proceso `inv_<código>_aprobar`
+// (601/702/555) en el proyecto del ajuste.
+async function resolverClaveAprobacion(clave: string, empresaId: number, codigo: string, referencia: string): Promise<{ ok: boolean; responsable?: string; error?: string }> {
+  if (!String(clave || "").trim()) return { ok: false, error: "Ingresa tu clave de autorización (gerencia del proyecto)." }
+  const r = await autorizar({ proceso: procesoInventarioAprobar(codigo), idempresa: empresaId, clave, referencia })
+  return r.ok ? { ok: true, responsable: r.autorizadoPor } : { ok: false, error: r.error }
 }
 
 /**
@@ -694,9 +670,9 @@ export async function aprobarAjustePendiente(id: number, claveAprobacion: string
     if (errGet) return { success: false, message: errGet.message }
     if (!pendiente) return { success: false, message: "La solicitud no existe." }
     if (pendiente.estado !== "pendiente") return { success: false, message: `Esta solicitud ya quedó "${pendiente.estado}" -- no se puede volver a aprobar.` }
-    // La clave se valida contra el PROYECTO del ajuste (su gerencia), con la
-    // clave general como respaldo.
-    const auth = await resolverClaveAprobacion(sb, claveAprobacion, Number(pendiente.idempresa))
+    // La clave se valida contra el PROYECTO del ajuste (su gerencia) y el
+    // código concreto (inv_601_aprobar / inv_702_aprobar / inv_555_aprobar).
+    const auth = await resolverClaveAprobacion(claveAprobacion, Number(pendiente.idempresa), String(pendiente.codigo), `aprobar ajuste #${id}`)
     if (!auth.ok) return { success: false, message: auth.error || "Clave inválida." }
 
     const resultado = await ejecutarTransaccionPorCodigo({ ...pendiente.payload, __aprobado: true })
@@ -735,12 +711,12 @@ export async function rechazarAjustePendiente(id: number, claveAprobacion: strin
     const sb: any = await getSupabaseAdmin()
     if (!String(motivoRechazo || "").trim()) return { success: false, message: "Indica el motivo del rechazo." }
 
-    const { data: pendiente, error: errGet } = await sb.from("inv_ajustes_pendientes").select("id, estado, idempresa").eq("id", id).maybeSingle()
+    const { data: pendiente, error: errGet } = await sb.from("inv_ajustes_pendientes").select("id, estado, idempresa, codigo").eq("id", id).maybeSingle()
     if (errGet) return { success: false, message: errGet.message }
     if (!pendiente) return { success: false, message: "La solicitud no existe." }
     if (pendiente.estado !== "pendiente") return { success: false, message: `Esta solicitud ya quedó "${pendiente.estado}".` }
-    // Clave de la gerencia DEL PROYECTO del ajuste (o la general como respaldo).
-    const auth = await resolverClaveAprobacion(sb, claveAprobacion, Number(pendiente.idempresa))
+    // Clave personal con el proceso de aprobación de ESE código en ESE proyecto.
+    const auth = await resolverClaveAprobacion(claveAprobacion, Number(pendiente.idempresa), String(pendiente.codigo), `rechazar ajuste #${id}`)
     if (!auth.ok) return { success: false, message: auth.error || "Clave inválida." }
 
     const { error } = await sb

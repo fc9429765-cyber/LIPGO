@@ -85,6 +85,7 @@ const BitacoraAuditoria = dynamic(() => import("@/components/configuration/bitac
 const PlacasDistribucion = dynamic(() => import("@/components/configuration/placas-distribucion"), { loading: ModuleLoading })
 const MuellesEmpresaConfig = dynamic(() => import("@/components/configuration/muelles-empresa"), { loading: ModuleLoading })
 const UserAccessModule = dynamic(() => import("@/components/user-access-module").then((m) => m.UserAccessModule), { loading: ModuleLoading })
+const AutorizacionesClave = dynamic(() => import("@/components/configuration/autorizaciones-clave"), { loading: ModuleLoading })
 const HeadcountManagement = dynamic(() => import("@/components/headcount-management"), { loading: ModuleLoading })
 const Tolva = dynamic(() => import("@/components/tolva").then((m) => m.Tolva), { loading: ModuleLoading })
 const VerTolva = dynamic(() => import("@/components/ver-tolva"), { loading: ModuleLoading })
@@ -807,6 +808,10 @@ export function MainContent({
           ) : selectedModule === "Accesos de Usuario" ? (
             <PermissionGuard moduleName="Accesos de Usuario">
               <UserAccessModule />
+            </PermissionGuard>
+          ) : selectedModule === "Autorizaciones por clave" ? (
+            <PermissionGuard moduleName="Autorizaciones por clave">
+              <AutorizacionesClave />
             </PermissionGuard>
           ) : selectedModule === "Bitácora de Auditoría" ? (
             <PermissionGuard moduleName="Bitácora de Auditoría">

@@ -197,6 +197,9 @@ export interface UserPermissions {
   // obligatorio guardado en ordenes_correcciones; el detalle campo-por-campo
   // ya lo cubre el trigger genérico fn_auditoria().
   correccion_ordenes: boolean
+  // Configuración › General › "Autorizaciones por clave" (SQL 203): perfiles por
+  // puesto, permisos por proceso/código, claves personales. Solo administradores.
+  autorizaciones_clave: boolean
   // Ciclo de Facturación: anexo enviado -> firmado -> factura enviada ->
   // firmada -> cierre, más cartera/cobro. Visibilidad general +
   // 2 capacidades separadas (sin rol de usuario real en el sistema).
@@ -429,6 +432,7 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   Localizaciones: "config_localizaciones",
   "Gestión de Usuarios": "gestion_usuarios",
   "Accesos de Usuario": "accesos_usuario",
+  "Autorizaciones por clave": "autorizaciones_clave",
   "Bitácora de Auditoría": "bitacora_auditoria",
   "Placas de Distribución": "placas_distribucion",
   "Muelles de Cargue": "muelles_empresa",

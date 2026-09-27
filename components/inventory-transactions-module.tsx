@@ -14,6 +14,7 @@ import { DatePickerField } from "@/components/ui/date-picker-field"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
+import { AyudaClaveAutorizacion } from "@/components/mi-clave-autorizacion"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/components/auth-provider"
@@ -533,8 +534,11 @@ function AprobacionesPendientes() {
                 </div>
               )}
               <div>
-                <Label className="text-xs uppercase text-muted-foreground">Clave de la gerencia del proyecto</Label>
-                <Input type="password" value={clave} onChange={(e) => setClave(e.target.value)} className="mt-1" placeholder="••••" />
+                <Label className="text-xs uppercase text-muted-foreground">Tu clave de autorización (gerencia del proyecto)</Label>
+                <Input type="password" value={clave} onChange={(e) => setClave(e.target.value)} className="mt-1" placeholder="••••" autoComplete="off" />
+                <div className="mt-1">
+                  <AyudaClaveAutorizacion />
+                </div>
               </div>
               {accion === "aprobar" && (
                 <p className="text-xs font-medium" style={{ color: "#C0392B" }}>

@@ -72,6 +72,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { AyudaClaveAutorizacion } from "@/components/mi-clave-autorizacion"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -402,7 +403,7 @@ export function OrdersManagement(_props?: { onEditOrder?: (orderId: number) => v
       setShowApprovalPassword(false)
       loadOrders()
     } else {
-      setApprovalError("Contraseña errada")
+      setApprovalError(result.message || "Clave incorrecta")
     }
   }
 
@@ -424,7 +425,7 @@ export function OrdersManagement(_props?: { onEditOrder?: (orderId: number) => v
     setLoadingCartera(true)
     try {
       // Verify the password
-      const verifyResult = await verifyCarteraPassword(carteraPassword)
+      const verifyResult = await verifyCarteraPassword(carteraPassword, approvingCartera)
 
       if (!verifyResult.success) {
         toast({
@@ -2167,7 +2168,10 @@ export function OrdersManagement(_props?: { onEditOrder?: (orderId: number) => v
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="approval-code">Contraseña de Aprobación</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="approval-code">Clave de autorización (gerencia)</Label>
+                <AyudaClaveAutorizacion />
+              </div>
               <div className="relative">
                 <Input
                   id="approval-code"
@@ -2231,7 +2235,10 @@ export function OrdersManagement(_props?: { onEditOrder?: (orderId: number) => v
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="annul-password">Contraseña</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="annul-password">Clave de autorización</Label>
+                <AyudaClaveAutorizacion />
+              </div>
               <div className="relative">
                 <Input
                   id="annul-password"
@@ -2284,7 +2291,10 @@ export function OrdersManagement(_props?: { onEditOrder?: (orderId: number) => v
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="close-pending-password">Contraseña</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="close-pending-password">Clave de autorización</Label>
+                <AyudaClaveAutorizacion />
+              </div>
               <div className="relative">
                 <Input
                   id="close-pending-password"
@@ -2438,7 +2448,10 @@ export function OrdersManagement(_props?: { onEditOrder?: (orderId: number) => v
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="cartera-password">Contraseña de Cartera</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="cartera-password">Clave de autorización (cartera)</Label>
+                <AyudaClaveAutorizacion />
+              </div>
               <Input
                 id="cartera-password"
                 type="password"

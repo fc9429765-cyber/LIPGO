@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Lock, AlertTriangle, Loader2, ShieldCheck } from "lucide-react"
 import { verificarClaveFinanciera } from "@/lib/gestion-financiera-clave-actions"
+import { AyudaClaveAutorizacion } from "@/components/mi-clave-autorizacion"
 
 const SESSION_KEY = "lipgo_gf_unlocked"
 
@@ -64,12 +65,13 @@ export function ClaveFinancieraGuard({ children }: { children: React.ReactNode }
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            Control adicional para proteger la información financiera de LIP. Ingresa la clave del módulo para
-            continuar.
+            Control adicional para proteger la información financiera de LIP. Ingresa tu clave de autorización (tu
+            perfil debe tener el proceso “Entrar a Gestión Financiera”).
           </p>
           <Input
             type="password"
-            placeholder="Clave del módulo"
+            placeholder="Tu clave de autorización"
+            autoComplete="off"
             value={clave}
             onChange={(e) => setClave(e.target.value)}
             onKeyDown={(e) => {
@@ -86,6 +88,9 @@ export function ClaveFinancieraGuard({ children }: { children: React.ReactNode }
             {verificando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
             Entrar
           </Button>
+          <div className="text-center">
+            <AyudaClaveAutorizacion />
+          </div>
         </CardContent>
       </Card>
     </div>

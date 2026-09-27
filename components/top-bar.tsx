@@ -2,9 +2,10 @@
 
 import { useState } from "react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
- import { Bell, User, LogOut, MessageCircle, Building2, ChevronDown, Clock, Users, Calendar, AlertTriangle, Truck, Timer, DollarSign, Package, ClipboardList, ClipboardCheck, Wrench, ShieldAlert } from "lucide-react"
+ import { Bell, User, LogOut, MessageCircle, Building2, ChevronDown, Clock, Users, Calendar, AlertTriangle, Truck, Timer, DollarSign, Package, ClipboardList, ClipboardCheck, Wrench, ShieldAlert, KeyRound } from "lucide-react"
 import { ColombiaClock } from "./colombia-clock"
 import { useAuth } from "@/components/auth-provider"
+import { MiClaveAutorizacionDialog } from "@/components/mi-clave-autorizacion"
 import { useRouter } from "next/navigation"
 import { useUnreadMessages } from "@/hooks/useUnreadMessages"
 import { usePendingTurnos } from "@/hooks/usePendingTurnos"
@@ -51,6 +52,8 @@ export function TopBar() {
   } = useAuth()
   const router = useRouter()
   const unreadCount = useUnreadMessages(profile?.id)
+  // "Mi clave de autorización" (SQL 203): autoservicio de la clave personal.
+  const [claveDialogOpen, setClaveDialogOpen] = useState(false)
   const { pendingSolicitudes, count: pendingTurnosCount } = usePendingTurnos(selectedEmpresaId)
   const { alerts: preoperacionalAlerts, count: preoperacionalAlertCount, hasPermission: hasPrechequeoPermission } = usePreoperacionalAlerts(selectedEmpresaId, profile?.id)
   const { alerts: rendimientoAlerts, count: rendimientoAlertCount, hasPermission: hasDashboardOperacionPermission } = useRendimientoAlerts(selectedEmpresaId, profile?.id)
@@ -917,12 +920,18 @@ export function TopBar() {
                   </div>
                 )}
                 <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setClaveDialogOpen(true)} className="cursor-pointer">
+                  <KeyRound className="mr-2 h-4 w-4" />
+                  Mi clave de autorización
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut} className="text-destructive cursor-pointer">
                   <LogOut className="mr-2 h-4 w-4" />
                   Cerrar Sesión
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <MiClaveAutorizacionDialog open={claveDialogOpen} onOpenChange={setClaveDialogOpen} />
           </div>
         </div>
       </div>

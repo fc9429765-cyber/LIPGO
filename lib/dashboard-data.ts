@@ -1,4 +1,4 @@
-import { Gift, Truck, Forklift, Scale, ClipboardCheck, Package, FileText, CheckCircle, Box, PackagePlus, BarChart3, Package2, ArrowRightLeft, History, Search, LayoutDashboard, Activity, FileCheck, Receipt, Clock, Users, Eye, Settings, Type as type, LucideIcon, CreditCard, UserCheck, Store, Tag, Layers, MapPin, Warehouse, Gauge, QrCode, Sparkles, BadgeCheck, BookOpen, Lock, ClipboardList, CalendarDays, NotebookPen, GraduationCap, Wallet, Banknote, Calculator, CalendarClock, FolderOpen, FolderArchive, UserCog, HeartHandshake, ShieldCheck, Stethoscope, AlertTriangle, Star, Send, Landmark, UserPlus, LayoutGrid, FileSpreadsheet, FileEdit } from "lucide-react"
+import { Gift, Truck, Forklift, Scale, ClipboardCheck, Package, FileText, CheckCircle, Box, PackagePlus, BarChart3, Package2, ArrowRightLeft, History, Search, LayoutDashboard, Activity, FileCheck, Receipt, Clock, Users, Eye, Settings, Type as type, LucideIcon, CreditCard, UserCheck, Store, Tag, Layers, MapPin, Warehouse, Gauge, QrCode, Sparkles, BadgeCheck, BookOpen, Lock, ClipboardList, CalendarDays, NotebookPen, GraduationCap, Wallet, Banknote, Calculator, CalendarClock, FolderOpen, FolderArchive, UserCog, HeartHandshake, ShieldCheck, Stethoscope, AlertTriangle, Star, Send, Landmark, UserPlus, LayoutGrid, FileSpreadsheet, FileEdit, KeyRound } from "lucide-react"
 
 export interface Module {
   name: string
@@ -577,6 +577,7 @@ export const groups: Group[] = [
           { name: "Vendedores", icon: UserCheck },
           { name: "Gestión de Usuarios", icon: Users },
           { name: "Accesos de Usuario", icon: Lock },
+          { name: "Autorizaciones por clave", icon: KeyRound },
           { name: "Bitácora de Auditoría", icon: History },
           { name: "Placas de Distribución", icon: Truck },
           { name: "Muelles de Cargue", icon: Warehouse },
