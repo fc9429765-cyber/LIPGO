@@ -62,5 +62,9 @@ for (const r of perms ?? []) {
   const { id: _id, ...resto } = r
   out[`${nombre.get(r.usuario_id) ?? "?"} <${r.usuario_id}>`] = resto
 }
-writeFileSync(a, JSON.stringify(out, Object.keys(out).sort(), 2), "utf8")
+// OJO: no usar un array como "replacer" de JSON.stringify (filtraría las claves
+// de las filas y dejaría los objetos vacíos). Se ordena construyendo el objeto.
+const ordenado: Record<string, Record<string, unknown>> = {}
+for (const k of Object.keys(out).sort()) ordenado[k] = out[k]
+writeFileSync(a, JSON.stringify(ordenado, null, 2), "utf8")
 console.log(`Foto guardada: ${a} (${Object.keys(out).length} usuarios, ${new Set(Object.values(out).flatMap((r) => Object.keys(r))).size} columnas)`)
