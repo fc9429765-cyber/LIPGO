@@ -24,7 +24,11 @@
 --
 -- Uso desde la app: supabase.rpc("pagonomina_rango", { p_desde, p_hasta })
 -- (admite .eq/.in/.select encima, como cualquier tabla).
--- Generado por script a partir de scripts/053_pagonomina_reemplazo.sql.
+--
+-- ARCHIVO GENERADO — NO EDITAR A MANO. Sale de scripts/053_pagonomina_reemplazo.sql
+-- con `node scripts/generar_200_201_funciones_rango.mjs`. Si se cambia la
+-- vista (053), hay que regenerar este archivo Y volver a correrlo en Supabase:
+-- la base no sincroniza la función con la vista, y la app lee la función.
 -- =====================================================================
 
 drop function if exists public.pagonomina_rango(date, date);

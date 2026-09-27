@@ -233,7 +233,7 @@ export async function generarArchivoCargaPila(
     const bonoRealPorCedulaQuincena = new Map<string, number>()
     if (identificaciones.length > 0) {
       const { data: bonoRows, error: bonoErr } = await admin
-        .from("archivoplano")
+        .rpc("archivoplano_periodo", { p_anio: anio, p_mes: mes })
         .select("identificacionempleado, quincena, cantidadvalor")
         .in("identificacionempleado", identificaciones)
         .eq("anio", anio)

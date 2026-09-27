@@ -1,134 +1,47 @@
--- ============================================================================
--- DESPLIEGUE — reemplazo de la vista archivoplano
+-- =====================================================================
+-- 201 — archivoplano_periodo(p_anio, p_mes): el MISMO archivo plano que la
+--       vista archivoplano, calculado solo para un mes (ambas quincenas).
 --
---   OJO (2026-09-27): la app ya NO lee esta vista (salvo Archivo plano en modo
---   "Todos") sino la función archivoplano_periodo (scripts/201), que es una
---   COPIA GENERADA de este mismo cuerpo acotada a un mes. Postgres no la
---   sincroniza: tras cambiar y correr esta vista hay que ejecutar
---   `node scripts/generar_200_201_funciones_rango.mjs` y correr en Supabase el
---   201 regenerado — si no, la app sigue con la lógica vieja EN SILENCIO.
+-- Por qué: la vista archivoplano se apoya en la vista pagonomina COMPLETA
+-- (toda la historia) y luego agrupa por quincena; cualquier filtro por mes se
+-- aplica después de haberlo calculado todo (~6 s por consulta; la usan
+-- Nómina › Archivo plano, Parafiscales — en bucle desde Estado de Resultados —
+-- y Revisión de nómina).
 --
---   VISTA EN VIVO sobre `pagonomina`: cualquier ajuste (horas, jornada, novedades)
---   se refleja al instante en el archivo plano de nómina (SIIGO). Misma fuente de
---   verdad que el IBC de Parafiscales.
---   · RETIRADOS (headcount.estado = 'Inactivo'): sus quincenas YA CERRADAS
---     (anteriores a la de su retiro) siguen viajando al plano normal, igual
---     que cuando estaban activos -- SOLO se excluye su quincena de CIERRE
---     (la nómina pendiente hasta la fecha de retiro), que se paga por el
---     submódulo Liquidaciones, salvo que el retiro sea >= 2026-09-09
---     (`NOMINA_PENDIENTE_EN_PLANO_DESDE` en lib/liquidaciones-actions.ts --
---     si se mueve ese corte, mover también los 4 WHERE de este archivo).
---     FIX 2026-09-09: antes el filtro miraba el ESTADO ACTUAL sin fecha, así
---     que la historia COMPLETA de cualquier retirado desaparecía de esta
---     vista (agosto incluido, para alguien retirado en septiembre) -- 8/8
---     retirados de agosto verificados con la planilla PILA real de Siigo
---     tenían 0 filas en archivoplano para TODO su historial.
---   · JORNADA por FECHA (Ley 2101): las horas del recargo/dominical usan la jornada
---     vigente en la fecha desde `parametros_legales_vigencia` — LA MISMA fuente
---     que pagonomina (antes leía jornada_legal y podían divergir). jun-2026 →
---     7,3333; desde 16-jul-2026 → 7. Requiere 085_create_parametros_legales_vigencia.sql.
---   · nominaproyectada = salario quincenal por trabajador (antes fijo 875452).
---   · AJUSTE NÓMINA ANTERIOR (Revisión de nómina; antes "Ajuste de
---     Proyecciones"): liquida, en la quincena SIGUIENTE, la diferencia entre
---     el "día pleno" pagado y lo realmente movido el último día de la
---     quincena anterior. Solo los APROBADOS. Ya NO tiene novedad propia
---     (antes 72-ingreso/73-deducción): el positivo Y el negativo se FUNDEN en
---     la novedad 52- normal de la quincena que aplica (ver `ajustes_aplicables`
---     y `agrupado_quincena.total_bono_nomina`) — es el MISMO concepto de bono
---     de productividad, solo que del día de cierre. El piso en $0 de
---     `nivelacion.bono_final` protege al trabajador igual que en cualquier
---     quincena floja: si el negativo del ajuste supera lo acumulado, el 52-
---     de esa quincena queda en $0, nunca se genera una deducción aparte — la
---     empresa absorbe el sobrante. Requiere scripts/098_create_ajustes_proyeccion.sql.
---   · EXCLUIR EL DÍA DE CIERRE DEL BONO DE LA MISMA QUINCENA (desde 2026-08-15,
---     ver `total_bono_nomina` en `agrupado_quincena`): el 15 y el último día
---     del mes se pagan por el "día pleno" (base fija, ver 053_pagonomina_reemplazo.sql)
---     y su diferencia por tonelaje va SIEMPRE diferida a la quincena siguiente
---     vía Ajuste Nómina Anterior — nunca dentro de la misma quincena. Sin esto,
---     esa diferencia se pagaría dos veces (novedad 52- de esta quincena Y otra
---     vez fundida en el 52- de la siguiente).
---   · FASE 2 — DIFERIR LOS ADICIONALES DE TURNO DEL DÍA DE CIERRE (desde
---     2026-08-15, columna `base_datos.fecha_efectiva_turno`): la BASE del
---     turno el día de cierre no cambia (ni siquiera viaja por este archivo,
---     Siigo la paga sola). Lo que sí cambia son sus NOVEDADES adicionales
---     de ESE día — horas extra (10/07/11/12/26) y recargo dominical o
---     festivo (08/25) — que ahora se agrupan por `fecha_efectiva_turno` en
---     vez de la fecha real: para cualquier día normal es la misma fecha, pero
---     para el 15 o el último día del mes es esa fecha + 1 día, lo que cae
---     exactamente en la quincena/mes/año siguiente (aritmética de fechas de
---     Postgres, sin lógica de calendario a mano). El WHERE de las ramas 08/25
---     sigue mirando la fecha REAL (si ESE día fue domingo o no) — solo el "a
---     qué quincena pertenece" se desplaza. Antes del 2026-08-15 se conserva
---     el comportamiento viejo. La rama 10 dejó de leer de `nivelacion` (que
---     sigue sirviendo solo al bono de destajo, sin tocar) y ahora suma directo
---     de `base_datos`, igual que las otras ramas de horas.
---   · BONOS no prestacionales (Compensación › Bonos): rama propia al final que
---     lee `bonos_nomina` (solo APROBADOS), una fila por código de novedad
---     (43/50/66). NO se mezclan con la novedad 52- del bono de productividad.
---     Requiere scripts/096_create_bonos_nomina.sql.
---   · BONO DE PRODUCTIVIDAD (excedente de destajo): DESDE LA QUINCENA DEL
---     16-JUL-2026 viaja como '52-Bonificación Por Productividad-Ingreso'; hasta
---     la 1ª quincena de julio sigue saliendo como '71-Bonificación Ajuste
---     Toneladas-Ingreso', porque esos planos ya se enviaron a Siigo con ese
---     código. Cambia SOLO la etiqueta: el cálculo es el mismo en ambas ramas.
---   · CONSOLIDADO POR PERSONA, NO POR ID TRABAJADO (novedad 52-/71-): se agrupa
---     por el ID de ORIGEN de Head Count (`base_datos.idempresa_home`), no por el
---     ID donde se movió el tonelaje ese día (`base_datos.idempresa`, que las
---     demás ramas — Días, Horas, Bonos, Anticipo — SÍ siguen usando, sin
---     cambio). Antes, alguien que ayudaba en otro ID la misma quincena quedaba
---     con una fila de bono POR CADA ID, y si solo se descargaba/subía el plano
---     de uno de esos IDs la plata del otro nunca llegaba a Siigo. Caso real:
---     ARLEIS JESUS CABELLO JULIO, quincena 16-31 ago 2026: $219.694 en el
---     plano de ID1 + $165.485 en el de ID3, dos filas del MISMO contrato.
---   · NOVEDAD 08 vs 25 (domingo/festivo trabajado): la decide
---     `pagonomina.recargo_dominical_tasa_completa` (tarifa completa 1+pct →
---     08 "Hora extra recargo dominical o festivo"; solo el pct → 25 "Recargo
---     dominical o festivo") — YA NO `pago_domingo` (el pago del día de
---     descanso de quien NO trabajó, sin relación con la tarifa aplicada: todo
---     domingo/festivo TRABAJADO caía siempre en 25, incluso a tarifa
---     completa). Caso real: ROBERTO ENRIQUE HOYOS VIDEZ (ID2), domingo
---     30-ago-2026, 7 días seguidos sin descanso → tarifa completa
---     (58.363,50 × 1,9 = 110.890,65, verificado) y el plano lo mandaba en 25.
---   · 08/25 YA NO EXIGEN `dow = 0` (corregido): el filtro exigia que el dia
---     fuera domingo, asi que cualquier FESTIVO ENTRE SEMANA (lunes, martes,
---     etc.) quedaba fuera de las DOS ramas -- el recargo no se perdia en
---     LIPgo, pero JAMAS llegaba al plano de Siigo. Caso real: lunes
---     17-ago-2026 (festivo) y viernes 07-ago-2026 (festivo), 19
---     personas-caso, $2.788.449 nunca enviados. `recargo_dominical_tasa_completa`
---     ya viene gateada en pagonomina por dia domingo O festivo, asi que
---     repetir el chequeo de dia de semana aqui era redundante y, peor,
---     excluia el caso festivo. La quincena del 07-ago YA se envio a Siigo:
---     requiere correccion MANUAL aparte (no la resuelve este despliegue).
---   · ANTICIPO DE NÓMINA (Gestión de Solicitudes › Anticipo): rama propia al
---     final que lee `solicitudes_trabajadores` DIRECTO (mismo patrón que
---     bonos_nomina — cédula como llave natural, no el nombre frágil de
---     pagonomina). Solo tipo='anticipo' y estado 'aprobada'/'completada' (la
---     firma del empleado en el portal es posterior a la aprobación y no debe
---     hacer desaparecer el descuento). Quincena por `fecha_aprobacion`
---     (cuándo se aprobó, no cuándo se pidió). Novedad única:
---     "56-Dcto. Anticipo de Nomina-Deducción". Requiere
---     scripts/119_add_fecha_aprobacion_solicitudes.sql.
---   · NOMBRE DEL EMPLEADO (`nombreempleado`, columna 5): Siigo lo exige justo
---     después de la cédula. Sale de `headcount.nombre` — que es la misma llave
---     con la que esta vista une contra pagonomina (h.nombre = p.persona), así
---     que no introduce una segunda fuente de verdad para el nombre.
---   REVERSIBLE: definición previa en git (scripts/050_vistas_financieras.sql).
+-- Qué cambia: NADA en la lógica. Es el cuerpo de la vista (scripts/059) con
+-- dos acotaciones: `base_datos` lee pagonomina_rango(último día del mes
+-- anterior, último día del mes) en vez de pagonomina, y el resultado se
+-- filtra a mes = p_mes. Las ramas que no salen de pagonomina (Ajuste Nómina
+-- Anterior, Bonos, Anticipos) quedan igual que en la vista: se filtran solo
+-- por mes, como hace la vista (y sus consumidores) hoy.
 --
--- OJO — ESTE SCRIPT USA DROP + CREATE, NO "CREATE OR REPLACE":
--- Postgres solo deja AÑADIR columnas AL FINAL con CREATE OR REPLACE VIEW;
--- insertar `nombreempleado` en medio (posición 5) da error 42P16. Va todo
--- dentro de una transacción para que la vista nunca quede caída: si el CREATE
--- falla, el DROP se revierte solo.
--- Verificado antes de hacerlo: ninguna otra vista, función o script depende de
--- `archivoplano` (la dependencia es al revés — ella lee pagonomina, headcount,
--- parametros_legales_vigencia, bonos_nomina y ajustes_proyeccion).
--- ============================================================================
+-- La vista archivoplano NO se toca. Los consumidores se migran tras verificar
+-- igualdad exacta (mismas filas, mismos valores) contra la vista por mes.
+--
+-- Uso desde la app: supabase.rpc("archivoplano_periodo", { p_anio, p_mes })
+-- y encima .eq("quincena", q) / .eq("idempresa", id) / .in(...) como siempre.
+--
+-- ARCHIVO GENERADO — NO EDITAR A MANO. Sale de scripts/059_archivoplano_reemplazo.sql
+-- con `node scripts/generar_200_201_funciones_rango.mjs`. Si se cambia la
+-- vista (059) — o la 053, de la que depende vía pagonomina_rango — hay que
+-- regenerar y volver a correr en Supabase: la base no sincroniza la función
+-- con la vista, y la app lee la función.
+-- =====================================================================
 
-BEGIN;
+drop function if exists public.archivoplano_periodo(integer, integer);
 
-DROP VIEW IF EXISTS public.archivoplano;
-
-create view public.archivoplano as
+create function public.archivoplano_periodo(p_anio integer, p_mes integer)
+returns setof public.archivoplano
+language sql
+stable
+-- SECURITY DEFINER por la misma razón que pagonomina_rango (scripts/200):
+-- comportarse exactamente como la vista, que corre con los privilegios de su
+-- dueño, sin importar qué rol la llame.
+security definer
+set search_path = public
+as $fn$
+ SELECT ap.*
+   FROM (
  WITH base_datos AS (
          SELECT p.fecha,
             p.idempresa,
@@ -208,7 +121,15 @@ create view public.archivoplano as
                     ELSE p.fecha
                 END AS fecha_efectiva_turno,
             to_char((p.fecha)::timestamp with time zone, 'DD/MM/YYYY'::text) AS fecha_evento
-           FROM (pagonomina p
+           -- FUENTE ACOTADA: la nómina del mes pedido vía pagonomina_rango (misma
+           -- lógica que la vista pagonomina, verificada fila por fila), desde UN
+           -- DÍA ANTES del mes: `fecha_efectiva_turno` corre el día de cierre
+           -- (15 y último del mes) a la quincena SIGUIENTE, así que las horas y
+           -- recargos del último día del mes anterior caen en la 1ª quincena de
+           -- este mes. Lo que ese día extra genere bajo el mes anterior se descarta
+           -- en el WHERE final; lo que el último día de ESTE mes corra al mes
+           -- siguiente también (igual que en la vista, donde sale bajo ese mes).
+           FROM (pagonomina_rango((make_date(p_anio, p_mes, 1) - 1), ((make_date(p_anio, p_mes, 1) + interval '1 month' - interval '1 day')::date)) p
              -- TRIM en los DOS lados, igual que en pagonomina: `headcount.nombre`
              -- puede traer espacios de sobra del digitado y sin TRIM el cruce falla
              -- en silencio, dejando la fila sin cédula (y por tanto sin destinatario
@@ -858,9 +779,13 @@ UNION ALL
              )
            )
          ))
-  -- ORDER BY POSICIONAL: 1 = mes, 2 = quincena, 4 = identificacionempleado.
-  -- `nombreempleado` entró en la 5, así que las posiciones 1, 2 y 4 no se
-  -- movieron y este ORDER BY sigue significando lo mismo.
-  ORDER BY 1 DESC, 2, 4;
+        ) ap
+  -- Solo el mes pedido: descarta lo que el día extra del mes anterior y el
+  -- corrimiento del día de cierre generen bajo otros meses.
+  WHERE (ap.mes = to_char(make_date(p_anio, p_mes, 1), 'MM'::text))
+  ORDER BY ap.mes DESC, ap.quincena, ap.identificacionempleado
+$fn$;
 
-COMMIT;
+-- Verificación (debe devolver las mismas filas que la vista para el mes):
+-- select count(*) from public.archivoplano where mes = '09';
+-- select count(*) from public.archivoplano_periodo(2026, 9);

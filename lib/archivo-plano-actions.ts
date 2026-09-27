@@ -43,6 +43,18 @@ export interface FilaArchivoPlano {
 const COLUMNAS =
   "identificacionempleado, nombreempleado, contratoempleado, nombrenovedad, tiponovedad, cantidadvalor, nominaproyectada, fechainicio, fechafin, diasnohabiles, mes, quincena"
 
+/** Año al que pertenece el mes elegido en la pestaña (que no pide año): la
+ * ocurrencia MÁS RECIENTE de ese mes en hora de Bogotá. En enero-2027, "12"
+ * es diciembre-2026. Antes la vista se filtraba solo por `mes`, así que
+ * mezclaba el mismo mes de años distintos en cuanto hubiera más de un año. */
+function anioDelMes(mes: number): number {
+  const [anioHoy, mesHoy] = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota", year: "numeric", month: "2-digit" })
+    .format(new Date())
+    .split("-")
+    .map(Number)
+  return mes <= mesHoy ? anioHoy : anioHoy - 1
+}
+
 /**
  * Trae el archivo plano de una empresa, opcionalmente acotado a un mes y una
  * quincena.
@@ -63,20 +75,29 @@ export async function getArchivoPlano(
     const filas: FilaArchivoPlano[] = []
     const pageSize = 1000
 
-    for (let offset = 0; ; offset += pageSize) {
-      let q = admin.from("archivoplano").select(COLUMNAS).eq("idempresa", idempresa)
+    const m = String(mes ?? "").trim()
+    const n = m ? Number(m) : null
 
-      const m = String(mes ?? "").trim()
-      if (m) {
-        const n = Number(m)
-        q = q.in("mes", [String(n), String(n).padStart(2, "0")])
-      }
+    for (let offset = 0; ; offset += pageSize) {
+      // Con mes: `archivoplano_periodo` (scripts/201) calcula SOLO ese mes —
+      // mismo plano que la vista, verificado fila por fila — en vez de armar
+      // toda la historia y filtrar después. Sin mes ("Todos"): la vista
+      // completa, como antes; es la única forma de ver todo el histórico.
+      let q = (n ? admin.rpc("archivoplano_periodo", { p_anio: anioDelMes(n), p_mes: n }) : admin.from("archivoplano"))
+        .select(COLUMNAS)
+        .eq("idempresa", idempresa)
+
+      if (n) q = q.in("mes", [String(n), String(n).padStart(2, "0")])
       const qn = String(quincena ?? "").trim()
       if (qn) q = q.eq("quincena", Number(qn))
 
+      // Tercer criterio = cédula (el mismo con el que la vista ordena sus filas):
+      // sin él, el orden dentro de una quincena quedaba al azar del motor y
+      // podía cambiar entre una consulta y otra.
       const { data, error } = await q
         .order("mes", { ascending: false })
         .order("quincena", { ascending: false })
+        .order("identificacionempleado", { ascending: true })
         .range(offset, offset + pageSize - 1)
 
       if (error) {

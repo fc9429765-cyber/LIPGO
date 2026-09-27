@@ -2,6 +2,14 @@
 -- DESPLIEGUE — reemplazo de la vista pagonomina
 --   (recargos por persona + dominical % + FILTRO de vínculo laboral)
 -- ----------------------------------------------------------------------------
+-- OJO (2026-09-27): la app ya NO lee esta vista (salvo Liquidaciones) sino la
+-- función pagonomina_rango (scripts/200), que es una COPIA GENERADA de este
+-- mismo cuerpo acotada a un rango de fechas; y archivoplano_periodo (201)
+-- se apoya en ella. Postgres no las sincroniza: tras cambiar y correr esta
+-- vista hay que ejecutar `node scripts/generar_200_201_funciones_rango.mjs` y
+-- correr en Supabase el 200 y el 201 regenerados — si no, la app sigue
+-- pagando con la lógica vieja EN SILENCIO.
+-- ----------------------------------------------------------------------------
 -- CAMBIO 2026-09-11 — "38- Suspensión temporal de Contrato- Deducción" (nueva
 -- novedad, lib/asistencia-catalogos.ts) se agregó a TODOS los ARRAY[...] donde
 -- ya vivía '38- Licencia no remunerada- Deducción' (es_falta_penalizable,

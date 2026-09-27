@@ -425,7 +425,7 @@ export async function getParafiscales(
       const identificaciones = Array.from(infoPorNombre.values()).map((i) => i.identificacion).filter(Boolean)
       if (identificaciones.length > 0) {
         const { data: bonoRows, error: bonoErr } = await admin
-          .from("archivoplano")
+          .rpc("archivoplano_periodo", { p_anio: anio, p_mes: mes })
           .select("identificacionempleado, quincena, cantidadvalor")
           .in("identificacionempleado", identificaciones)
           .eq("anio", anio)

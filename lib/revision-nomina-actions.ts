@@ -903,7 +903,7 @@ export async function getRevisionNomina(
     let planoRows: any[] = []
     if (identificacion) {
       const { data: pl } = await admin
-        .from("archivoplano")
+        .rpc("archivoplano_periodo", { p_anio: anio, p_mes: mes })
         .select("nombrenovedad, tiponovedad, cantidadvalor, nominaproyectada, fechainicio, quincena, mes")
         .eq("identificacionempleado", identificacion)
         .eq("mes", String(mes).padStart(2, "0"))
@@ -1063,7 +1063,7 @@ export async function getRevisionNominaProyecto(
     for (const lote of enLotes(Array.from(new Set(cedulas)), 50)) {
       const rows = await fetchAllRows((f, t) =>
         admin
-          .from("archivoplano")
+          .rpc("archivoplano_periodo", { p_anio: anio, p_mes: mes })
           .select("identificacionempleado, nombrenovedad, tiponovedad, cantidadvalor, nominaproyectada, fechainicio, quincena, mes")
           .in("identificacionempleado", lote)
           .eq("mes", String(mes).padStart(2, "0"))
