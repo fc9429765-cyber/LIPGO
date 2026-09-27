@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
- import { Bell, User, LogOut, MessageCircle, Building2, ChevronDown, Clock, Users, Calendar, AlertTriangle, Truck, Timer, DollarSign, Package, ClipboardList, ClipboardCheck, Wrench } from "lucide-react"
+ import { Bell, User, LogOut, MessageCircle, Building2, ChevronDown, Clock, Users, Calendar, AlertTriangle, Truck, Timer, DollarSign, Package, ClipboardList, ClipboardCheck, Wrench, ShieldAlert } from "lucide-react"
 import { ColombiaClock } from "./colombia-clock"
 import { useAuth } from "@/components/auth-provider"
 import { useRouter } from "next/navigation"
@@ -17,6 +17,7 @@ import { useInventarioAlerts } from "@/hooks/useInventarioAlerts"
 import { useAsistenciaAlerts } from "@/hooks/useAsistenciaAlerts"
 import { useOperacionesDiaAlerts } from "@/hooks/useOperacionesDiaAlerts"
 import { useConteoCiclicoAlerts } from "@/hooks/useConteoCiclicoAlerts"
+import { useAjustesInventarioAlerts } from "@/hooks/useAjustesInventarioAlerts"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -77,6 +78,11 @@ export function TopBar() {
     count: conteoCiclicoAlertCount,
     hasPermission: hasConteoCiclicoPermission,
   } = useConteoCiclicoAlerts(selectedEmpresaId, profile?.id)
+  const {
+    alerts: ajustesInventarioAlerts,
+    count: ajustesInventarioAlertCount,
+    hasPermission: hasAjustesInventarioPermission,
+  } = useAjustesInventarioAlerts(selectedEmpresaId, profile?.id)
   const [turnosOpen, setTurnosOpen] = useState(false)
   const [prechequeoOpen, setPrechequeoOpen] = useState(false)
   const [rendimientoOpen, setRendimientoOpen] = useState(false)
@@ -88,6 +94,7 @@ export function TopBar() {
   const [asistenciaSinSalidaOpen, setAsistenciaSinSalidaOpen] = useState(false)
   const [operacionesDiaOpen, setOperacionesDiaOpen] = useState(false)
   const [conteoCiclicoOpen, setConteoCiclicoOpen] = useState(false)
+  const [ajustesInventarioOpen, setAjustesInventarioOpen] = useState(false)
 
   const hasTurnosAlerts = pendingTurnosCount > 0
   const hasPrechequeoAlerts = hasPrechequeoPermission && preoperacionalAlertCount > 0
@@ -103,6 +110,8 @@ export function TopBar() {
   const hasOperacionesDiaAlerts =
     hasOperacionesDiaPermission && operacionesDiaAlertCount > 0
   const hasConteoCiclicoAlerts = hasConteoCiclicoPermission && conteoCiclicoAlertCount > 0
+  const hasAjustesInventarioAlerts = hasAjustesInventarioPermission && ajustesInventarioAlertCount > 0
+  const ajustesPendientesCount = ajustesInventarioAlerts.filter((a) => a.tipo === "pendiente").length
 
   const handleEmpresaChange = (value: string) => {
     const newId = parseInt(value, 10)
@@ -239,6 +248,62 @@ export function TopBar() {
                         </p>
                       </div>
                     )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
+
+            {/* Ajustes manuales de inventario por código (601/701/702): pendientes de
+                aprobación de Gerencia y ejecutados en los últimos 7 días. Nace del
+                incidente de Cedi Funza (2026-09-23): un ajuste 702 tapó un Descargue
+                duplicado y nadie lo vio. */}
+            {hasAjustesInventarioAlerts && (
+              <Popover open={ajustesInventarioOpen} onOpenChange={setAjustesInventarioOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    className="relative p-1 sm:p-2 rounded-lg hover:bg-rose-100 transition-colors"
+                    title="Ajustes manuales de inventario"
+                  >
+                    <ShieldAlert className="h-4 w-4 sm:h-5 sm:w-5 text-rose-600" />
+                    <span className={`absolute top-0 right-0 flex items-center justify-center h-5 w-5 text-xs font-bold text-white rounded-full ${ajustesPendientesCount > 0 ? "bg-rose-600 animate-pulse" : "bg-rose-400"}`}>
+                      {ajustesInventarioAlertCount > 9 ? "9+" : ajustesInventarioAlertCount}
+                    </span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-96 p-0" align="end">
+                  <div className="p-3 border-b bg-rose-50">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-semibold text-sm flex items-center gap-2 text-rose-700">
+                        <ShieldAlert className="h-4 w-4" />
+                        Ajustes manuales de inventario
+                      </h4>
+                      <Badge variant="secondary" className="bg-rose-100 text-rose-700">
+                        {ajustesPendientesCount > 0
+                          ? `${ajustesPendientesCount} por aprobar`
+                          : `${ajustesInventarioAlertCount} reciente${ajustesInventarioAlertCount !== 1 ? "s" : ""}`}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-rose-600 mt-1">
+                      Salidas/ingresos por código (601/701/702) pendientes de aprobación o ejecutados en los últimos 7 días — un ajuste manual
+                      puede estar tapando un error real (orden duplicada, descargue mal registrado). Se aprueban en Transacciones de Inventario › Por código.
+                    </p>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto">
+                    <div className="divide-y">
+                      {ajustesInventarioAlerts.map((a) => (
+                        <div key={`${a.tipo}-${a.id}`} className="p-3 hover:bg-rose-50/50 transition-colors">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-rose-700">{a.mensaje}</p>
+                              {a.motivo && <p className="text-xs text-muted-foreground mt-0.5">Motivo: {a.motivo}</p>}
+                            </div>
+                            <Badge variant="outline" className="text-xs shrink-0 border-rose-200 text-rose-600">
+                              {a.tipo === "pendiente" ? "Por aprobar" : "Ejecutado"}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </PopoverContent>
               </Popover>
