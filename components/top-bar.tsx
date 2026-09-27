@@ -285,7 +285,7 @@ export function TopBar() {
                     </div>
                     <p className="text-xs text-rose-600 mt-1">
                       Salidas/ingresos por código (601/701/702) pendientes de aprobación o ejecutados en los últimos 7 días — un ajuste manual
-                      puede estar tapando un error real (orden duplicada, descargue mal registrado). Se aprueban en Transacciones de Inventario › Por código.
+                      puede estar tapando un error real (orden duplicada, descargue mal registrado). Se aprueban o rechazan en Transacciones de Inventario › pestaña "Aprobaciones pendientes".
                     </p>
                   </div>
                   <div className="max-h-72 overflow-y-auto">
