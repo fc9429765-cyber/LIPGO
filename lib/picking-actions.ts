@@ -1194,6 +1194,15 @@ export async function confirmPicking(
 
     const { id: _id, ...rest } = originalRow as Record<string, any>
 
+    // STOCK BLOQUEADO (calidad, 2026-09-27): una estiba en CUARENTENA sigue en
+    // el inventario pero NO se despacha. Se libera con 343 (clave de la
+    // gerencia del proyecto) o se desecha con 555 -- nunca sale por picking.
+    if (/CUARENTENA/i.test(String(rest.location ?? ""))) {
+      throw new Error(
+        `La estiba del lote ${rest.lote ?? ""} está BLOQUEADA en CUARENTENA (calidad) y no se puede despachar. Si calidad ya la aprobó, libérala primero con el código 343 en Transacciones de Inventario.`,
+      )
+    }
+
     // Salida aprobada por estiba: la cantidad es el total escaneado (incluye
     // lo que luego se descuenta como avería, según la regla de negocio).
     const salidaRows = scans.map((scan) => ({

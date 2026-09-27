@@ -29,6 +29,8 @@ import {
   getAjustesPendientes,
   aprobarAjustePendiente,
   rechazarAjustePendiente,
+  getStockCuarentena,
+  type StockCuarentenaRow,
 } from "@/lib/transacciones-codigo-actions"
 import { FIELDSETS, GUIA_TRANSACCIONES, type CorreccionLogRow, type AjustePendiente } from "@/lib/transacciones-codigo"
 import { ShieldCheck, BookOpen, Check, X } from "lucide-react"
@@ -443,9 +445,10 @@ function AprobacionesPendientes() {
   return (
     <div className="space-y-3">
       <Card className="p-3 text-sm text-muted-foreground">
-        Los códigos <b>601</b> (Despacho manual) y <b>702</b> (Faltante) sacan producto sin una orden de cargue detrás y
-        sin ser avería/reproceso — quedan aquí, sin tocar el inventario, hasta que Gerencia los apruebe o los rechace
-        con su clave.
+        Los códigos <b>601</b> (Despacho manual), <b>702</b> (Faltante de conteo) y <b>555</b> (Desecho por calidad desde
+        cuarentena) sacan producto sin una orden de cargue detrás — quedan aquí, sin tocar el inventario, hasta que la
+        <b> gerencia del proyecto</b> los apruebe o los rechace con su clave. Mira la columna "Stock hoy": si es menor a lo
+        pedido, el producto ya salió por otra vía y la solicitud se rechaza.
       </Card>
 
       <Card className="overflow-hidden">
@@ -530,7 +533,7 @@ function AprobacionesPendientes() {
                 </div>
               )}
               <div>
-                <Label className="text-xs uppercase text-muted-foreground">Clave de aprobación de Gerencia</Label>
+                <Label className="text-xs uppercase text-muted-foreground">Clave de la gerencia del proyecto</Label>
                 <Input type="password" value={clave} onChange={(e) => setClave(e.target.value)} className="mt-1" placeholder="••••" />
               </div>
               {accion === "aprobar" && (
@@ -618,6 +621,99 @@ function GuiaTransacciones() {
 // Wrapper del módulo
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Cuarentena (calidad): stock BLOQUEADO del proyecto. Sigue siendo inventario
+// (se ve y se valora), pero no está disponible para despacho: picking lo
+// rechaza. Sale con 343 (liberar, clave de la gerencia del proyecto) o 555
+// (desecho, aprobación de esa misma gerencia). Equivale al stock bloqueado de
+// SAP (mov. 344/343/555). Ver scripts/202_cuarentena_calidad.sql.
+// ---------------------------------------------------------------------------
+function StockCuarentena() {
+  const { selectedEmpresaId } = useAuth()
+  const [filas, setFilas] = useState<StockCuarentenaRow[]>([])
+  const [ubicacion, setUbicacion] = useState<string | null>(null)
+  const [aviso, setAviso] = useState<string | null>(null)
+  const [cargando, setCargando] = useState(false)
+
+  const cargar = async () => {
+    if (!selectedEmpresaId) return
+    setCargando(true)
+    const r = await getStockCuarentena(Number(selectedEmpresaId))
+    setFilas(r.data)
+    setUbicacion(r.ubicacion)
+    setAviso(r.message ?? null)
+    setCargando(false)
+  }
+  useEffect(() => {
+    cargar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEmpresaId])
+
+  const total = filas.reduce((s, f) => s + f.stock_actual, 0)
+
+  return (
+    <div className="space-y-3">
+      <Card className="p-3 text-sm text-muted-foreground">
+        Producto <b>bloqueado por calidad</b> (contaminado, vencido, húmedo, con plaga, no conforme). Sigue en el inventario
+        pero <b>no está disponible</b>: el picking lo rechaza. Se bloquea con <b>344</b> (sin clave), se libera con <b>343</b>{" "}
+        (clave de la gerencia del proyecto) o se desecha con <b>555</b> (queda en Aprobaciones pendientes hasta que esa
+        gerencia lo apruebe). Nunca se usa 702 para calidad: 702 es solo diferencia de conteo.
+        {ubicacion && <span className="ml-1">Ubicación: <b>{ubicacion}</b>.</span>}
+      </Card>
+      {aviso && <Card className="p-3 text-sm text-amber-800 bg-amber-50 border-amber-300">{aviso}</Card>}
+
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-between border-b px-3 py-2">
+          <span className="text-sm font-medium">
+            {filas.length} lote{filas.length !== 1 ? "s" : ""} bloqueado{filas.length !== 1 ? "s" : ""} · {total.toLocaleString("es-CO")} und
+          </span>
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={cargar} disabled={cargando}>
+            {cargando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Actualizar"}
+          </Button>
+        </div>
+        <div className="max-h-[65vh] overflow-auto">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead className="sticky top-0 bg-background">
+              <tr className="border-b text-left text-[11px] uppercase text-muted-foreground">
+                <th className="px-2 py-2">Producto</th>
+                <th className="px-2 py-2">Lote</th>
+                <th className="px-2 py-2 text-right">Bloqueado (und)</th>
+                <th className="px-2 py-2">Desde</th>
+                <th className="px-2 py-2 text-right">Días</th>
+                <th className="px-2 py-2">Motivo del bloqueo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((f) => (
+                <tr key={`${f.producto}|${f.lote}`} className="border-b last:border-0 align-top">
+                  <td className="px-2 py-1.5 text-xs">
+                    {f.producto}
+                    {f.codproducto && <span className="ml-1 text-muted-foreground">({f.codproducto})</span>}
+                  </td>
+                  <td className="px-2 py-1.5 text-xs">{f.lote}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{f.stock_actual.toLocaleString("es-CO")}</td>
+                  <td className="px-2 py-1.5 text-xs">{f.bloqueado_desde ? fmtFechaHora(f.bloqueado_desde) : "—"}</td>
+                  <td className={`px-2 py-1.5 text-right tabular-nums text-xs ${(f.dias_bloqueado ?? 0) > 15 ? "font-semibold text-red-600" : ""}`}>
+                    {f.dias_bloqueado ?? "—"}
+                  </td>
+                  <td className="max-w-[260px] px-2 py-1.5 text-xs text-muted-foreground">{f.motivo_bloqueo || "—"}</td>
+                </tr>
+              ))}
+              {!cargando && filas.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-6 text-center text-sm text-muted-foreground">
+                    No hay producto bloqueado en cuarentena en este proyecto.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
 export function InventoryTransactionsModule() {
   const [tab, setTab] = useState("codigo")
   const tabs = useMemo(
@@ -627,6 +723,7 @@ export function InventoryTransactionsModule() {
       { v: "consulta", l: "Consulta de movimientos" },
       { v: "historial", l: "Historial de correcciones" },
       { v: "aprobaciones", l: "Aprobaciones pendientes" },
+      { v: "cuarentena", l: "Cuarentena (calidad)" },
       { v: "guia", l: "Guía" },
     ],
     [],
@@ -648,6 +745,7 @@ export function InventoryTransactionsModule() {
         <TabsContent value="consulta" className="pt-3"><ConsultaMovimientos /></TabsContent>
         <TabsContent value="historial" className="pt-3"><HistorialCorrecciones /></TabsContent>
         <TabsContent value="aprobaciones" className="pt-3"><AprobacionesPendientes /></TabsContent>
+        <TabsContent value="cuarentena" className="pt-3"><StockCuarentena /></TabsContent>
         <TabsContent value="guia" className="pt-3"><GuiaTransacciones /></TabsContent>
       </Tabs>
     </div>

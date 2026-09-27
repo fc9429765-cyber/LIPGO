@@ -19,6 +19,9 @@ export interface FieldSet {
   destino: "ubicacion" | "loteProductoUbicacion" | "cuarentena" | null
   referencia: "entrada" | "salida" | "reproceso" | "traslado" | "ocargueOpcional" | null // buscar movimiento original
   cantidadContra: "stock" | "reversible" | null
+  /** Pide la clave de la GERENCIA DEL PROYECTO (inv_clave_gerencia_proyecto),
+   *  no la clave general de movimientos: decisiones de calidad (343). */
+  claveGerenciaProyecto?: boolean
 }
 
 export const FIELDSETS: Record<string, FieldSet> = {
@@ -38,9 +41,29 @@ export const FIELDSETS: Record<string, FieldSet> = {
   "602": { requiereClave: true, origen: null, destino: null, referencia: "salida", cantidadContra: "reversible" },
   "552": { requiereClave: true, origen: null, destino: null, referencia: "reproceso", cantidadContra: "reversible" },
   "312": { requiereClave: true, origen: null, destino: null, referencia: "traslado", cantidadContra: "reversible" },
-  "344": { requiereClave: true, origen: "conStock", destino: "cuarentena", referencia: null, cantidadContra: "stock" },
-  "343": { requiereClave: true, origen: "cuarentena", destino: "ubicacion", referencia: null, cantidadContra: "stock" },
+  // CALIDAD (estilo SAP, 2026-09-27). Bloquear NO pide clave: es operativo, el
+  // producto sigue en el inventario, solo deja de estar disponible. Liberar sí:
+  // devolver a venta algo retenido es una decisión de calidad de la GERENCIA
+  // DEL PROYECTO (clave por proyecto, no la general de LIPgo). Desechar (555)
+  // es salida definitiva: pasa por la cola de aprobación de esa misma gerencia.
+  "344": { requiereClave: false, origen: "conStock", destino: "cuarentena", referencia: null, cantidadContra: "stock" },
+  "343": { requiereClave: false, claveGerenciaProyecto: true, origen: "cuarentena", destino: "ubicacion", referencia: null, cantidadContra: "stock" },
+  "555": { requiereClave: false, origen: "cuarentena", destino: null, referencia: null, cantidadContra: "stock" },
 }
+
+// Motivos que describen un problema de CALIDAD. Con estos motivos NO se acepta
+// un 702 (faltante de conteo) ni un 601 (despacho sin orden): el camino
+// correcto es 344 (bloquear en cuarentena) y, si no se recupera, 555 (desecho
+// con aprobación). Caso real 26-sep-2026: 120 und "producto contaminado"
+// salieron por 702 en Avimol. "Avería" NO está aquí a propósito: eso es 551.
+export const PATRON_MOTIVO_CALIDAD =
+  /contamin|calidad|vencid|caducad|humed|plaga|hongo|moho|olor|infest|mal estado|no conforme|cuarentena|bloque|rechaz/i
+export const CODIGOS_MAL_USADOS_PARA_CALIDAD = new Set(["702", "601"])
+export function esMotivoDeCalidad(motivo: unknown): boolean {
+  return PATRON_MOTIVO_CALIDAD.test(String(motivo ?? ""))
+}
+export const MENSAJE_REDIRECCION_CALIDAD =
+  "Ese motivo describe un problema de CALIDAD, no un faltante ni un despacho: el producto no se saca del inventario, se BLOQUEA. Usa 344 (pasa a CUARENTENA, sigue en inventario pero no disponible) y, si calidad decide que no se recupera, 555 (desecho, con aprobación de la gerencia del proyecto). Si se recupera, 343 lo libera."
 
 export const CODIGOS_CORRECCION = Object.keys(FIELDSETS).filter((c) => FIELDSETS[c].requiereClave)
 
@@ -114,12 +137,14 @@ export interface EjecutarPayload {
 // Quedan "pendiente" en inv_ajustes_pendientes hasta que Gerencia los apruebe
 // con la clave de inv_clave_aprobacion_ajustes (SQL 62, incidente 2026-09-23:
 // Descargue duplicado en Cedi Funza + ajuste 702 que lo tapó sin resolverlo).
-export const CODIGOS_REQUIEREN_APROBACION = new Set(["601", "702"])
+// 555 (desecho por calidad) también: salida definitiva, la aprueba la
+// gerencia del proyecto (inv_clave_gerencia_proyecto) o la general.
+export const CODIGOS_REQUIEREN_APROBACION = new Set(["601", "702", "555"])
 
 export interface AjustePendiente {
   id: number
   idempresa: number
-  codigo: "601" | "702"
+  codigo: "601" | "702" | "555"
   payload: EjecutarPayload
   producto: string | null
   lote: string | null
@@ -254,18 +279,28 @@ export const GUIA_TRANSACCIONES: GuiaTransaccion[] = [
   },
   {
     codigo: "344",
-    nombre: "Bloqueo / cuarentena",
-    cuandoUsar: "Retener producto (calidad, vencimiento, revisión) sin sacarlo del inventario: se mueve a la ubicación CUARENTENA.",
-    pasos: ["Escribe 344 (pide clave)", "Elige ubicación, producto y lote a retener", "Cantidad, motivo, clave → ejecuta (el destino CUARENTENA es automático)"],
-    ejemplo: "Un lote con empaque dudoso queda retenido mientras calidad lo revisa → 344.",
-    advertencia: "Requiere que exista una ubicación llamada CUARENTENA en Configuración; si no existe, el sistema lo indica.",
+    nombre: "Bloqueo / cuarentena (calidad)",
+    cuandoUsar:
+      "Producto contaminado, vencido, húmedo, con plaga o cualquier duda de calidad: NO se saca del inventario, se BLOQUEA. Pasa a la ubicación CUARENTENA, sigue contando como inventario pero deja de estar disponible para despacho. Así funciona en SAP (stock bloqueado, mov. 344).",
+    pasos: ["Escribe 344 (no pide clave: bloquear es operativo)", "Elige ubicación, producto y lote a retener", "Cantidad y motivo → ejecuta (el destino CUARENTENA es automático)"],
+    ejemplo: "120 sacos con olor a contaminación → 344 los pasa a CUARENTENA mientras calidad decide; nunca 702.",
+    advertencia: "El sistema rechaza un 702 o 601 cuyo motivo describa un problema de calidad y te manda aquí. Después: 343 si se recupera, 555 si se desecha.",
   },
   {
     codigo: "343",
-    nombre: "Desbloqueo",
-    cuandoUsar: "Liberar producto retenido: regresa de CUARENTENA a una ubicación normal.",
-    pasos: ["Escribe 343 (pide clave)", "Elige el producto y lote retenido (la ubicación CUARENTENA es automática)", "Ubicación destino, cantidad, motivo, clave → ejecuta"],
-    ejemplo: "Calidad aprobó el lote retenido → 343 lo devuelve a su ubicación de picking.",
+    nombre: "Liberar de cuarentena",
+    cuandoUsar: "Calidad decidió que el producto retenido SÍ sirve: regresa de CUARENTENA a una ubicación normal y vuelve a estar disponible.",
+    pasos: ["Escribe 343 (pide la clave de la gerencia del proyecto)", "Elige el producto y lote retenido (la ubicación CUARENTENA es automática)", "Ubicación destino, cantidad, motivo, clave → ejecuta"],
+    ejemplo: "Se reempacó el lote y calidad lo aprobó → 343 lo devuelve a su ubicación de picking.",
+    advertencia: "La clave es la de la GERENCIA DEL PROYECTO (Indupan, Avimol, cada Cedi), no la general: devolver a venta algo retenido es decisión de esa gerencia.",
+  },
+  {
+    codigo: "555",
+    nombre: "Desecho por calidad",
+    cuandoUsar: "Calidad decidió que el producto retenido en CUARENTENA NO se recupera: sale definitivamente del inventario. Es el equivalente SAP del desecho desde stock bloqueado (mov. 555).",
+    pasos: ["Escribe 555", "Elige el producto y lote retenido (la ubicación CUARENTENA es automática)", "Cantidad y motivo → 'Enviar a Gerencia' (queda en Aprobaciones pendientes)", "La gerencia del proyecto aprueba con su clave y ahí sale del inventario"],
+    ejemplo: "El lote contaminado no se pudo recuperar y se destruyó con acta → 555 con el número del acta en el motivo.",
+    advertencia: "Solo sale de CUARENTENA: si el producto aún está en una ubicación normal, primero 344. Nunca uses 702 para esto (702 = diferencia de conteo).",
   },
 ]
 

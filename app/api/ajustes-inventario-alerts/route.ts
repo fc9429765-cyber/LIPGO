@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
         .from("inv_correcciones_log")
         .select("id, codigo, producto, lote_origen, cantidad, motivo, realizado_por, autorizado_por, created_at")
         .eq("idempresa", empresaIdNum)
-        .in("codigo", ["701", "702", "601"])
+        .in("codigo", ["701", "702", "601", "555"])
         .gte("created_at", desde)
         .order("created_at", { ascending: false })
         .limit(20),

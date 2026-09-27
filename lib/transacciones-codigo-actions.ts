@@ -19,6 +19,9 @@ import { getColombiaDateTime } from "@/lib/inventory-actions"
 import {
   FIELDSETS,
   CODIGOS_REQUIEREN_APROBACION,
+  CODIGOS_MAL_USADOS_PARA_CALIDAD,
+  esMotivoDeCalidad,
+  MENSAJE_REDIRECCION_CALIDAD,
   type CatalogoTransaccion,
   type MovimientoOriginal,
   type EjecutarPayload,
@@ -264,6 +267,13 @@ export async function ejecutarTransaccionPorCodigo(payload: EjecutarPayload): Pr
       autorizadoPor = r.responsable || null
       if (!String(payload.motivo || "").trim()) return { success: false, message: "Indica el motivo de la corrección." }
     }
+    // Clave de la GERENCIA DEL PROYECTO (decisiones de calidad: 343 liberar).
+    if (fs.claveGerenciaProyecto) {
+      const r = await resolverClaveGerenciaProyecto(sb, empresaId, payload.clave || "")
+      if (!r.ok) return { success: false, message: r.error || "Clave inválida." }
+      autorizadoPor = r.responsable || null
+      if (!String(payload.motivo || "").trim()) return { success: false, message: "Indica el motivo (qué decidió calidad)." }
+    }
 
     // Referencia (reversos): validar reversible restante.
     let ref: MovimientoOriginal | null = null
@@ -354,6 +364,7 @@ export async function ejecutarTransaccionPorCodigo(payload: EjecutarPayload): Pr
         break
       case "601":
       case "702":
+      case "555": // desecho por calidad: salida definitiva desde CUARENTENA (location ya resuelta arriba)
         filas.push(base({ tipomov: "Salida" }))
         break
       case "551":
@@ -470,9 +481,33 @@ export async function ejecutarTransaccionPorCodigo(payload: EjecutarPayload): Pr
 // otra persona, un control más guardado a propósito).
 // ---------------------------------------------------------------------------
 
-async function resolverClaveAprobacion(sb: any, clave: string): Promise<{ ok: boolean; responsable?: string; error?: string }> {
+// Clave de la GERENCIA DEL PROYECTO (inv_clave_gerencia_proyecto, SQL 202):
+// quien decide sobre el inventario de un proyecto es su propia gerencia
+// (Indupan, Avimol, cada Cedi), no la gerencia general de LIPgo.
+async function resolverClaveGerenciaProyecto(sb: any, empresaId: number, clave: string): Promise<{ ok: boolean; responsable?: string; error?: string }> {
   const limpia = String(clave || "").trim()
-  if (!limpia) return { ok: false, error: "Ingresa la clave de aprobación de Gerencia." }
+  if (!limpia) return { ok: false, error: "Ingresa la clave de la gerencia del proyecto." }
+  const { data, error } = await sb
+    .from("inv_clave_gerencia_proyecto")
+    .select("responsable")
+    .eq("idempresa", empresaId)
+    .eq("clave", limpia)
+    .eq("activo", true)
+    .limit(1)
+    .maybeSingle()
+  if (error) return { ok: false, error: error.message }
+  if (!data) return { ok: false, error: "Clave incorrecta: debe ser la de la gerencia de ESTE proyecto (o estar inactiva)." }
+  return { ok: true, responsable: data.responsable }
+}
+
+// Aprobación de un ajuste pendiente (601/702/555): vale la clave de la gerencia
+// DEL PROYECTO al que pertenece el ajuste y, como respaldo, la clave general
+// de inv_clave_aprobacion_ajustes (SQL 62).
+async function resolverClaveAprobacion(sb: any, clave: string, empresaId: number): Promise<{ ok: boolean; responsable?: string; error?: string }> {
+  const limpia = String(clave || "").trim()
+  if (!limpia) return { ok: false, error: "Ingresa la clave de aprobación (gerencia del proyecto)." }
+  const proyecto = await resolverClaveGerenciaProyecto(sb, empresaId, limpia)
+  if (proyecto.ok) return proyecto
   const { data, error } = await sb
     .from("inv_clave_aprobacion_ajustes")
     .select("responsable")
@@ -481,7 +516,7 @@ async function resolverClaveAprobacion(sb: any, clave: string): Promise<{ ok: bo
     .limit(1)
     .maybeSingle()
   if (error) return { ok: false, error: error.message }
-  if (!data) return { ok: false, error: "Clave de aprobación incorrecta o inactiva." }
+  if (!data) return { ok: false, error: "Clave de aprobación incorrecta o inactiva (debe ser la de la gerencia de este proyecto)." }
   return { ok: true, responsable: data.responsable }
 }
 
@@ -508,11 +543,25 @@ export async function solicitarAjustePendiente(payload: EjecutarPayload): Promis
     if (!cantidad) return { success: false, message: "Indica la cantidad." }
     const producto = payload.producto?.trim() || ""
     const lote = payload.lote?.trim() || ""
-    const location = payload.location?.trim() || ""
-    if (!producto || !lote || !location) return { success: false, message: "Faltan producto, lote o ubicación." }
+    let location = payload.location?.trim() || ""
     if (!String(payload.motivo || "").trim()) return { success: false, message: "Indica el motivo del ajuste." }
 
+    // CALIDAD (2026-09-27): un 702 (faltante de conteo) o un 601 (despacho sin
+    // orden) con un motivo que describe contaminación, vencimiento, plaga, etc.
+    // es el código EQUIVOCADO -- ese producto no se saca, se bloquea (344) y
+    // luego se libera (343) o se desecha (555). Se rechaza y se redirige.
+    if (CODIGOS_MAL_USADOS_PARA_CALIDAD.has(payload.codigo) && esMotivoDeCalidad(payload.motivo)) {
+      return { success: false, message: MENSAJE_REDIRECCION_CALIDAD }
+    }
+
     const sb: any = await getSupabaseAdmin()
+    // 555 sale SOLO desde CUARENTENA: la ubicación es automática.
+    if (FIELDSETS[payload.codigo]?.origen === "cuarentena") {
+      const cuarentena = await ubicacionCuarentena(sb, empresaId)
+      if (!cuarentena) return { success: false, message: "No existe una ubicación CUARENTENA en este proyecto (la crea scripts/202_cuarentena_calidad.sql)." }
+      location = cuarentena
+    }
+    if (!producto || !lote || !location) return { success: false, message: "Faltan producto, lote o ubicación." }
     const stock = await stockDeLote(sb, empresaId, producto, lote, location)
     if (cantidad > stock) return { success: false, message: `La cantidad (${cantidad}) supera el stock del lote en esa ubicación (${stock}).` }
 
@@ -570,6 +619,70 @@ export async function getAjustesPendientes(filtros?: {
   }
 }
 
+export interface StockCuarentenaRow {
+  producto: string
+  codproducto: string | null
+  lote: string
+  stock_actual: number
+  /** Fecha del último bloqueo (344) de ese producto/lote; null si no se encontró. */
+  bloqueado_desde: string | null
+  dias_bloqueado: number | null
+  motivo_bloqueo: string | null
+}
+
+/** Stock BLOQUEADO por calidad (ubicación CUARENTENA) del proyecto: qué hay,
+ * desde cuándo y por qué. Lo que aparece aquí sigue siendo inventario, pero no
+ * está disponible; sale con 343 (liberar) o 555 (desecho aprobado). */
+export async function getStockCuarentena(idempresa: number): Promise<{ success: boolean; data: StockCuarentenaRow[]; ubicacion: string | null; message?: string }> {
+  try {
+    const sb: any = await getSupabaseAdmin()
+    const cuarentena = await ubicacionCuarentena(sb, idempresa)
+    if (!cuarentena) return { success: true, data: [], ubicacion: null, message: "Este proyecto no tiene ubicación CUARENTENA (la crea scripts/202_cuarentena_calidad.sql)." }
+    const { data: saldos, error } = await sb
+      .from("saldoinvdetalle")
+      .select("nombreproducto, codproducto, lote, stock_actual")
+      .eq("idempresa", idempresa)
+      .eq("location", cuarentena)
+      .gt("stock_actual", 0)
+      .order("nombreproducto")
+      .order("lote")
+    if (error) return { success: false, data: [], ubicacion: cuarentena, message: error.message }
+    // Último bloqueo (entrada 344 a CUARENTENA) por producto+lote, para saber
+    // desde cuándo está retenido y el motivo con que se bloqueó.
+    const { data: bloqueos } = await sb
+      .from("invtrans")
+      .select("nombreproducto, lote, creado, observaciones")
+      .eq("idempresa", idempresa)
+      .eq("location", cuarentena)
+      .eq("tipomov", "Entrada")
+      .eq("cod_movimiento", "344")
+      .order("creado", { ascending: false })
+      .limit(1000)
+    const ultimo = new Map<string, { creado: string; motivo: string | null }>()
+    for (const b of bloqueos ?? []) {
+      const k = `${b.nombreproducto}|${b.lote}`
+      if (!ultimo.has(k)) ultimo.set(k, { creado: b.creado, motivo: b.observaciones ?? null })
+    }
+    const hoy = Date.now()
+    const data: StockCuarentenaRow[] = (saldos ?? []).map((s: any) => {
+      const u = ultimo.get(`${s.nombreproducto}|${s.lote}`)
+      const desde = u?.creado ?? null
+      return {
+        producto: s.nombreproducto,
+        codproducto: s.codproducto ?? null,
+        lote: s.lote,
+        stock_actual: Number(s.stock_actual) || 0,
+        bloqueado_desde: desde,
+        dias_bloqueado: desde ? Math.max(0, Math.floor((hoy - new Date(desde).getTime()) / 86_400_000)) : null,
+        motivo_bloqueo: u?.motivo ?? null,
+      }
+    })
+    return { success: true, data, ubicacion: cuarentena }
+  } catch (e: any) {
+    return { success: false, data: [], ubicacion: null, message: e?.message || "Error al leer la cuarentena." }
+  }
+}
+
 /** Gerencia aprueba: verifica la clave y RECIÉN AHÍ ejecuta el ajuste real (reusa ejecutarTransaccionPorCodigo con el payload guardado, sin reinterpretarlo). */
 export async function aprobarAjustePendiente(id: number, claveAprobacion: string): Promise<{
   success: boolean
@@ -577,13 +690,14 @@ export async function aprobarAjustePendiente(id: number, claveAprobacion: string
 }> {
   try {
     const sb: any = await getSupabaseAdmin()
-    const auth = await resolverClaveAprobacion(sb, claveAprobacion)
-    if (!auth.ok) return { success: false, message: auth.error || "Clave inválida." }
-
     const { data: pendiente, error: errGet } = await sb.from("inv_ajustes_pendientes").select("*").eq("id", id).maybeSingle()
     if (errGet) return { success: false, message: errGet.message }
     if (!pendiente) return { success: false, message: "La solicitud no existe." }
     if (pendiente.estado !== "pendiente") return { success: false, message: `Esta solicitud ya quedó "${pendiente.estado}" -- no se puede volver a aprobar.` }
+    // La clave se valida contra el PROYECTO del ajuste (su gerencia), con la
+    // clave general como respaldo.
+    const auth = await resolverClaveAprobacion(sb, claveAprobacion, Number(pendiente.idempresa))
+    if (!auth.ok) return { success: false, message: auth.error || "Clave inválida." }
 
     const resultado = await ejecutarTransaccionPorCodigo({ ...pendiente.payload, __aprobado: true })
     if (!resultado.success) {
@@ -619,14 +733,15 @@ export async function rechazarAjustePendiente(id: number, claveAprobacion: strin
 }> {
   try {
     const sb: any = await getSupabaseAdmin()
-    const auth = await resolverClaveAprobacion(sb, claveAprobacion)
-    if (!auth.ok) return { success: false, message: auth.error || "Clave inválida." }
     if (!String(motivoRechazo || "").trim()) return { success: false, message: "Indica el motivo del rechazo." }
 
-    const { data: pendiente, error: errGet } = await sb.from("inv_ajustes_pendientes").select("id, estado").eq("id", id).maybeSingle()
+    const { data: pendiente, error: errGet } = await sb.from("inv_ajustes_pendientes").select("id, estado, idempresa").eq("id", id).maybeSingle()
     if (errGet) return { success: false, message: errGet.message }
     if (!pendiente) return { success: false, message: "La solicitud no existe." }
     if (pendiente.estado !== "pendiente") return { success: false, message: `Esta solicitud ya quedó "${pendiente.estado}".` }
+    // Clave de la gerencia DEL PROYECTO del ajuste (o la general como respaldo).
+    const auth = await resolverClaveAprobacion(sb, claveAprobacion, Number(pendiente.idempresa))
+    if (!auth.ok) return { success: false, message: auth.error || "Clave inválida." }
 
     const { error } = await sb
       .from("inv_ajustes_pendientes")

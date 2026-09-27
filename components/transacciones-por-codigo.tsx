@@ -23,7 +23,15 @@ import {
   ejecutarTransaccionPorCodigo,
   solicitarAjustePendiente,
 } from "@/lib/transacciones-codigo-actions"
-import { FIELDSETS, CODIGOS_REQUIEREN_APROBACION, type CatalogoTransaccion, type MovimientoOriginal } from "@/lib/transacciones-codigo"
+import {
+  FIELDSETS,
+  CODIGOS_REQUIEREN_APROBACION,
+  CODIGOS_MAL_USADOS_PARA_CALIDAD,
+  esMotivoDeCalidad,
+  MENSAJE_REDIRECCION_CALIDAD,
+  type CatalogoTransaccion,
+  type MovimientoOriginal,
+} from "@/lib/transacciones-codigo"
 import {
   getLocationsFromSaldoInvDetalle,
   getDestinationLocationsFromLocationsTable,
@@ -124,7 +132,15 @@ export function TransaccionesPorCodigo() {
     limpiarCampos()
     if (!fs || !selectedEmpresaId) return
     if (fs.origen === "conStock" || fs.origen === "cuarentena") {
-      getLocationsFromSaldoInvDetalle(undefined, selectedEmpresaId).then(setUbicaciones)
+      getLocationsFromSaldoInvDetalle(undefined, selectedEmpresaId).then((u) => {
+        setUbicaciones(u)
+        // Origen CUARENTENA (343 liberar / 555 desechar): la ubicación es
+        // automática -- se fija aquí para que carguen productos y lotes con stock.
+        if (fs.origen === "cuarentena") {
+          const q = u.find((x: string) => /CUARENTENA/i.test(x))
+          if (q) setLocation(q)
+        }
+      })
     }
     if (fs.origen === "libre") {
       getDestinationLocationsFromLocationsTable(selectedEmpresaId).then(setUbicaciones)
@@ -139,14 +155,14 @@ export function TransaccionesPorCodigo() {
 
   // Cascadas de origen con stock
   useEffect(() => {
-    if (!fs || fs.origen !== "conStock" || !location || !selectedEmpresaId) return
+    if (!fs || (fs.origen !== "conStock" && fs.origen !== "cuarentena") || !location || !selectedEmpresaId) return
     getProductosFromSaldoInvDetalleByLocation(location, true, selectedEmpresaId).then(setProductos)
     if (prefillRef.current > 0) prefillRef.current--
     else { setProducto(""); setLote(""); setLotes([]) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location])
   useEffect(() => {
-    if (!fs || fs.origen !== "conStock" || !location || !producto || !selectedEmpresaId) return
+    if (!fs || (fs.origen !== "conStock" && fs.origen !== "cuarentena") || !location || !producto || !selectedEmpresaId) return
     getLotesFromSaldoInvDetalleByLocationAndProduct(location, producto, true, selectedEmpresaId).then(setLotes)
     if (prefillRef.current > 0) prefillRef.current--
     else setLote("")
@@ -231,13 +247,17 @@ export function TransaccionesPorCodigo() {
     const c = Number(cantidad)
     if (!Number.isFinite(c) || c <= 0) return false
     if (fs.requiereClave && (!clave.trim() || !motivo.trim())) return false
+    if (fs.claveGerenciaProyecto && (!clave.trim() || !motivo.trim())) return false
     if (requiereAprobacion && !motivo.trim()) return false
+    // Motivo de CALIDAD en un 702/601: código equivocado, no se deja enviar (el
+    // aviso bajo el motivo explica que el camino es 344 → 343/555).
+    if (CODIGOS_MAL_USADOS_PARA_CALIDAD.has(codigo) && esMotivoDeCalidad(motivo)) return false
     if (fs.referencia && fs.referencia !== "ocargueOpcional") return !!refSel
     if (!producto.trim() || !lote.trim() || !location.trim()) return false
     if (fs.destino === "ubicacion" && !locationDestino.trim()) return false
     if (fs.destino === "loteProductoUbicacion" && !loteDestino.trim() && !locationDestino.trim() && !productoDestino.trim()) return false
     return true
-  }, [fs, requiereAprobacion, selectedEmpresaId, cantidad, clave, motivo, refSel, producto, lote, location, locationDestino, loteDestino, productoDestino])
+  }, [fs, codigo, requiereAprobacion, selectedEmpresaId, cantidad, clave, motivo, refSel, producto, lote, location, locationDestino, loteDestino, productoDestino])
 
   const ejecutar = async () => {
     if (!fs || !selectedEmpresaId) return
@@ -321,9 +341,14 @@ export function TransaccionesPorCodigo() {
                 <ShieldCheck className="h-3 w-3" /> Requiere clave
               </Badge>
             )}
+            {fs?.claveGerenciaProyecto && (
+              <Badge variant="outline" className="ml-auto gap-1 text-[10px]" style={{ color: "#C0392B", borderColor: "#C0392B" }}>
+                <ShieldCheck className="h-3 w-3" /> Requiere clave de la gerencia del proyecto
+              </Badge>
+            )}
             {requiereAprobacion && (
               <Badge variant="outline" className="ml-auto gap-1 text-[10px]" style={{ color: "#C0392B", borderColor: "#C0392B" }}>
-                <ShieldCheck className="h-3 w-3" /> Requiere aprobación de Gerencia
+                <ShieldCheck className="h-3 w-3" /> Requiere aprobación de la gerencia del proyecto
               </Badge>
             )}
           </div>
@@ -636,13 +661,20 @@ export function TransaccionesPorCodigo() {
                   <p className="mt-1 text-xs text-destructive">Máximo reversible: {refSel.reversible}</p>
                 )}
               </div>
-              <div className={fs.requiereClave ? "" : "sm:col-span-2"}>
-                <Label className="text-xs uppercase text-muted-foreground">Motivo{fs.requiereClave || requiereAprobacion ? "" : " (opcional)"}</Label>
+              <div className={fs.requiereClave || fs.claveGerenciaProyecto ? "" : "sm:col-span-2"}>
+                <Label className="text-xs uppercase text-muted-foreground">Motivo{fs.requiereClave || fs.claveGerenciaProyecto || requiereAprobacion ? "" : " (opcional)"}</Label>
                 <Textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={1} className="mt-1" placeholder="Por qué se hace este movimiento" />
+                {CODIGOS_MAL_USADOS_PARA_CALIDAD.has(codigo) && esMotivoDeCalidad(motivo) && (
+                  <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
+                    <b>Código equivocado para este motivo.</b> {MENSAJE_REDIRECCION_CALIDAD}
+                  </div>
+                )}
               </div>
-              {fs.requiereClave && (
+              {(fs.requiereClave || fs.claveGerenciaProyecto) && (
                 <div>
-                  <Label className="text-xs uppercase text-muted-foreground">Clave del responsable</Label>
+                  <Label className="text-xs uppercase text-muted-foreground">
+                    {fs.claveGerenciaProyecto ? "Clave de la gerencia del proyecto" : "Clave del responsable"}
+                  </Label>
                   <Input type="password" value={clave} onChange={(e) => setClave(e.target.value)} className="mt-1" placeholder="••••" />
                 </div>
               )}
