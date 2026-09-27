@@ -19,6 +19,7 @@ import {
   verifyCarteraPassword,
   approveCartera,
 } from "@/lib/orders-actions"
+import { PERIODOS_LISTADO, PERIODO_LISTADO_DEFECTO, desdeDePeriodo, type PeriodoListado } from "@/lib/periodo-listados"
 import {
   getBodegasByCliente, // Import new function
   getEmpresaById, // Import getEmpresaById
@@ -139,6 +140,9 @@ export function OrdersManagement(_props?: { onEditOrder?: (orderId: number) => v
   const [vendedorFilter, setVendedorFilter] = useState<string>("todos")
   const [destinoFilter, setDestinoFilter] = useState<string>("todos")
   const [estadoFilter, setEstadoFilter] = useState<string>("todos")
+  // Periodo que se CARGA del servidor (ver lib/periodo-listados.ts). Los demás
+  // filtros, incluidos los de fecha, aplican en memoria dentro de este periodo.
+  const [periodo, setPeriodo] = useState<PeriodoListado>(PERIODO_LISTADO_DEFECTO)
   const [fechaDesde, setFechaDesde] = useState<string>("")
   const [fechaHasta, setFechaHasta] = useState<string>("")
 
@@ -234,7 +238,7 @@ export function OrdersManagement(_props?: { onEditOrder?: (orderId: number) => v
 
   const loadOrders = async () => {
     setLoading(true)
-    const result = await getOrders(selectedEmpresaId)
+    const result = await getOrders(selectedEmpresaId, { desde: desdeDePeriodo(periodo) })
     if (result.success) {
       setOrders(result.data || [])
     } else {
@@ -284,7 +288,8 @@ export function OrdersManagement(_props?: { onEditOrder?: (orderId: number) => v
       loadOrders()
       loadFilterOptions()
     }
-  }, [selectedEmpresaId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEmpresaId, periodo])
 
   const handleViewDetails = (idpedido: number) => {
     setSelectedOrder(idpedido)
@@ -1721,6 +1726,24 @@ export function OrdersManagement(_props?: { onEditOrder?: (orderId: number) => v
                           </Command>
                         </PopoverContent>
                       </Popover>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="filter-periodo" className="text-xs sm:text-sm">
+                        Periodo
+                      </Label>
+                      <Select value={periodo} onValueChange={(v) => setPeriodo(v as PeriodoListado)}>
+                        <SelectTrigger className="w-full h-8 sm:h-9 text-xs" id="filter-periodo">
+                          <SelectValue placeholder="Periodo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PERIODOS_LISTADO.map((p) => (
+                            <SelectItem key={p.valor} value={p.valor} className="text-xs">
+                              {p.etiqueta}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="space-y-2">

@@ -214,7 +214,10 @@ function GenerateLoadOrdersComponent() {
 
   const loadOrders = async () => {
     setLoading(true)
-    const result = await getOrders()
+    // Solo pedidos ABIERTOS, sin límite de fecha: un pedido pendiente puede ser
+    // viejo y no debe desaparecer de aquí (el filtro de estado de abajo se
+    // conserva como segunda barrera).
+    const result = await getOrders(undefined, { soloAbiertos: true })
     if (result.success && result.data) {
       let filteredOrders = result.data
 

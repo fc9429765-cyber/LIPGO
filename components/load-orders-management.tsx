@@ -32,6 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { getLoadOrders, deleteLoadOrder } from "@/lib/orders-actions"
+import { PERIODOS_LISTADO, PERIODO_LISTADO_DEFECTO, desdeDePeriodo, type PeriodoListado } from "@/lib/periodo-listados"
 import { getAvailableVehiclesForAssignment, assignVehicleToLoadOrder } from "@/lib/vehicle-actions"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/components/auth-provider"
@@ -77,6 +78,9 @@ export function LoadOrdersManagement() {
   const [orders, setOrders] = useState<LoadOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<"pendiente" | "finalizada" | "todas">("todas")
+  // Periodo que se CARGA del servidor (ver lib/periodo-listados.ts); no aplica a
+  // "Pendientes", que siempre trae todas.
+  const [periodo, setPeriodo] = useState<PeriodoListado>(PERIODO_LISTADO_DEFECTO)
   const [filteredOrders, setFilteredOrders] = useState<LoadOrder[]>([])
   const [showDateDialog, setShowDateDialog] = useState(false)
   const [editingOrder, setEditingOrder] = useState<LoadOrder | null>(null)
@@ -102,7 +106,8 @@ export function LoadOrdersManagement() {
 
   useEffect(() => {
     loadOrders()
-  }, [statusFilter, selectedEmpresaId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, periodo, selectedEmpresaId])
 
   useEffect(() => {
     applyFilters()
@@ -131,7 +136,7 @@ export function LoadOrdersManagement() {
 
   const loadOrders = async () => {
     setLoading(true)
-    const result = await getLoadOrders(statusFilter, false, selectedEmpresaId)
+    const result = await getLoadOrders(statusFilter, false, selectedEmpresaId, desdeDePeriodo(periodo))
 
     if (result.success && result.data) {
       setOrders(result.data)
@@ -470,6 +475,20 @@ export function LoadOrdersManagement() {
               <SelectItem value="finalizada">Finalizadas</SelectItem>
             </SelectContent>
           </Select>
+          {statusFilter !== "pendiente" && (
+            <Select value={periodo} onValueChange={(v) => setPeriodo(v as PeriodoListado)}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="Periodo" />
+              </SelectTrigger>
+              <SelectContent>
+                {PERIODOS_LISTADO.map((p) => (
+                  <SelectItem key={p.valor} value={p.valor}>
+                    {p.etiqueta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Button onClick={loadOrders} disabled={loading} variant="outline" className="w-full sm:w-auto bg-transparent">
             <RefreshCwIcon className="h-4 w-4 mr-2" />
             Actualizar

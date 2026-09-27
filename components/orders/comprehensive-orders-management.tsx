@@ -14,6 +14,7 @@ import {
   verifyCarteraPassword,
   approveCartera,
 } from "@/lib/orders-actions"
+import { PERIODOS_LISTADO, PERIODO_LISTADO_DEFECTO, desdeDePeriodo, type PeriodoListado } from "@/lib/periodo-listados"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DatePickerField } from "@/components/ui/date-picker-field"
@@ -120,6 +121,9 @@ export function ComprehensiveOrdersManagement() {
   const [destinoFilter, setDestinoFilter] = useState<string>("todos")
   const [estadoFilter, setEstadoFilter] = useState<string>("todos")
   const [ownerFilter, setOwnerFilter] = useState<string>("todos")
+  // Periodo que se CARGA del servidor (ver lib/periodo-listados.ts). Los demás
+  // filtros, incluidos los de fecha, aplican en memoria dentro de este periodo.
+  const [periodo, setPeriodo] = useState<PeriodoListado>(PERIODO_LISTADO_DEFECTO)
   const [fechaDesde, setFechaDesde] = useState<string>("")
   const [fechaHasta, setFechaHasta] = useState<string>("")
   const [openClienteCombobox, setOpenClienteCombobox] = useState(false)
@@ -160,7 +164,7 @@ export function ComprehensiveOrdersManagement() {
 
   const loadOrders = async () => {
     setLoading(true)
-    const result = await getAllOrders()
+    const result = await getAllOrders({ desde: desdeDePeriodo(periodo) })
     if (result.success) {
       setOrders(result.data || [])
     } else {
@@ -213,7 +217,8 @@ export function ComprehensiveOrdersManagement() {
   useEffect(() => {
     loadOrders()
     loadFilterOptions()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodo])
 
   const handleEdit = (order: Order) => {
     // Bloquear edicion si el pedido ya fue aprobado.
@@ -612,7 +617,23 @@ export function ComprehensiveOrdersManagement() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
+            <div>
+              <Label className="text-xs">Periodo</Label>
+              <Select value={periodo} onValueChange={(v) => setPeriodo(v as PeriodoListado)}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PERIODOS_LISTADO.map((p) => (
+                    <SelectItem key={p.valor} value={p.valor}>
+                      {p.etiqueta}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div>
               <Label className="text-xs">Aprobado</Label>
               <Select value={aprobadoFilter} onValueChange={setAprobadoFilter}>

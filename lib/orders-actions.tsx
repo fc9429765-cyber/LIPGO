@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase-client"
 import { fetchAllRows } from "@/lib/fetch-all-rows"
+import { desdeDePeriodo, hoyBogotaISO, restarDiasISO, PERIODO_LISTADO_DEFECTO } from "@/lib/periodo-listados"
 import { getColombiaDateTime, getColombiaDate, getColombiaTime, dateInputToColombiaDate } from "@/lib/date-utils"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import { getCurrentUser, getUserProfile } from "@/lib/auth-actions"
@@ -139,39 +140,52 @@ export async function getAccessibleEmpresesFromPermisos(): Promise<Array<{ id: n
   }
 }
 
-export async function getOrders(selectedEmpresaId?: number | null) {
+/** Opciones de los listados de pedidos (ver lib/periodo-listados.ts). */
+export interface OpcionesPedidos {
+  /** 'YYYY-MM-DD' desde el que se traen pedidos (por `fecha`); `null` = todo el
+   *  historial; ausente = últimos 90 días. */
+  desde?: string | null
+  /** Solo pedidos ABIERTOS (estado distinto de entregado / entrega parcial /
+   *  anulado, o sin estado), sin límite de fecha: los usa Generar Órdenes de
+   *  Cargue, donde un pedido pendiente puede ser viejo y no debe desaparecer. */
+  soloAbiertos?: boolean
+}
+
+// Periodo/estado sobre el builder de pedidoscabecera. Antes las pantallas
+// pedían "todo" y Supabase lo recortaba en silencio a los 1.000 pedidos más
+// recientes; ahora se acota por periodo y se pagina COMPLETO dentro de él.
+function aplicarOpcionesPedidos(q: any, opciones?: OpcionesPedidos) {
+  if (opciones?.soloAbiertos) {
+    // Misma regla que aplicaba Generar Órdenes en el cliente (sin estado = abierto).
+    return q.or("estado.is.null,and(estado.not.ilike.entregado,estado.not.ilike.entrega parcial,estado.not.ilike.anulado)")
+  }
+  const desde = opciones?.desde === undefined ? desdeDePeriodo(PERIODO_LISTADO_DEFECTO, hoyBogotaISO()) : opciones.desde
+  return desde ? q.gte("fecha", desde) : q
+}
+
+export async function getOrders(selectedEmpresaId?: number | null, opciones?: OpcionesPedidos) {
   const supabase = await createClient()
   try {
     // Get all empresas accessible to the user from perfil_acceso_empresas
     const accessibleEmpresas = await getUserAccessibleEmpresas()
-    
+
     // Get all owners accessible to the user from perfil_acceso_owners
     const accessibleOwners = await getUserAccessibleOwners()
 
     console.log("[v0] Filtering orders by empresas:", accessibleEmpresas, "selectedEmpresaId:", selectedEmpresaId, "and owners:", accessibleOwners)
 
-    let query = supabase.from("pedidoscabecera").select("*").order("idpedido", { ascending: false })
-
-    // If a specific empresa is selected, filter by that empresa only (if user has access)
-    if (selectedEmpresaId && accessibleEmpresas.includes(selectedEmpresaId)) {
-      query = query.eq("id_empresa", selectedEmpresaId)
-    } else {
-      // Otherwise filter by all accessible empresas
-      query = query.in("id_empresa", accessibleEmpresas)
+    const construir = () => {
+      // Orden único (idpedido) para paginar sin repetir/perder filas.
+      let q = supabase.from("pedidoscabecera").select("*").order("idpedido", { ascending: false })
+      // If a specific empresa is selected, filter by that empresa only (if user has access)
+      if (selectedEmpresaId && accessibleEmpresas.includes(selectedEmpresaId)) q = q.eq("id_empresa", selectedEmpresaId)
+      else q = q.in("id_empresa", accessibleEmpresas) // Otherwise filter by all accessible empresas
+      // Filter by accessible owners in empresafactura field (if user has owner permissions)
+      if (accessibleOwners.length > 0) q = q.in("empresafactura", accessibleOwners)
+      return aplicarOpcionesPedidos(q, opciones)
     }
 
-    // Filter by accessible owners in empresafactura field (if user has owner permissions)
-    if (accessibleOwners.length > 0) {
-      query = query.in("empresafactura", accessibleOwners)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
-      console.error("Error fetching orders:", error)
-      return { success: false, message: error.message }
-    }
-
+    const data = await fetchAllRows((from, to) => construir().range(from, to))
     return { success: true, data }
   } catch (error) {
     console.error("Unexpected error:", error)
@@ -179,7 +193,7 @@ export async function getOrders(selectedEmpresaId?: number | null) {
   }
 }
 
-export async function getAllOrders() {
+export async function getAllOrders(opciones?: OpcionesPedidos) {
   const supabase = await createClient()
   try {
     // Get all empresas accessible to the user from perfil_acceso_empresas
@@ -190,28 +204,21 @@ export async function getAllOrders() {
 
     console.log("[v0] getAllOrders - Filtering by empresas:", accessibleEmpresas, "and owners:", accessibleOwners)
 
-    let query = supabase.from("pedidoscabecera").select("*").order("idpedido", { ascending: false })
-
-    // Filter by accessible empresas
-    query = query.in("id_empresa", accessibleEmpresas)
-
-    // Filter by accessible owners in empresafactura field (if user has owner permissions)
-    if (accessibleOwners.length > 0) {
-      query = query.in("empresafactura", accessibleOwners)
-    }
-
     // Nota: "proyeccion" es un concepto de cabeceraoc (órdenes), NO de pedidoscabecera.
     // pedidoscabecera no tiene columna tipooperacion, así que no se filtra aquí
     // (antes esto rompía la consulta con error 42703).
-
-    const { data, error } = await query
-
-    if (error) {
-      console.error("Error fetching all orders:", error)
-      return { success: false, message: error.message }
+    const construir = () => {
+      // Orden único (idpedido) para paginar sin repetir/perder filas.
+      let q = supabase.from("pedidoscabecera").select("*").order("idpedido", { ascending: false })
+      // Filter by accessible empresas
+      q = q.in("id_empresa", accessibleEmpresas)
+      // Filter by accessible owners in empresafactura field (if user has owner permissions)
+      if (accessibleOwners.length > 0) q = q.in("empresafactura", accessibleOwners)
+      return aplicarOpcionesPedidos(q, opciones)
     }
 
-    console.log("[v0] getAllOrders - Found", data?.length || 0, "orders for empresas:", accessibleEmpresas)
+    const data = await fetchAllRows((from, to) => construir().range(from, to))
+    console.log("[v0] getAllOrders - Found", data.length, "orders for empresas:", accessibleEmpresas)
     return { success: true, data }
   } catch (error) {
     console.error("Unexpected error:", error)
@@ -1469,7 +1476,14 @@ export async function updateLoadOrderFechaCargue(orderId: number, fechaCargue: s
   }
 }
 
-export async function getLoadOrders(statusFilter: "pendiente" | "finalizada" | "todas" = "todas", onlyWithoutBatch: boolean = false, selectedEmpresaId?: number | null) {
+export async function getLoadOrders(
+  statusFilter: "pendiente" | "finalizada" | "todas" = "todas",
+  onlyWithoutBatch: boolean = false,
+  selectedEmpresaId?: number | null,
+  /** 'YYYY-MM-DD' desde el que se traen órdenes (por `fechaorden`); `null` = todo
+   *  el historial; ausente = últimos 90 días. No aplica a "pendiente". */
+  desde?: string | null,
+) {
   const supabase = await createClient()
   try {
     // Use selectedEmpresaId if provided, otherwise fall back to current user's empresa_id
@@ -1515,11 +1529,22 @@ export async function getLoadOrders(statusFilter: "pendiente" | "finalizada" | "
       query = query.eq("status", "finalizado")
     }
 
-    const { data, error } = await query
+    // PERIODO (ver lib/periodo-listados.ts): "pendiente" no se acota (son pocas
+    // y pueden ser viejas); "finalizada"/"todas" traen por defecto los últimos
+    // 90 días, `desde = null` = todo el historial. Y se pagina COMPLETO dentro
+    // del periodo: antes "todas" llegaba recortada en silencio a las 1.000
+    // órdenes más recientes (Supabase corta ahí).
+    if (statusFilter !== "pendiente") {
+      const d = desde === undefined ? desdeDePeriodo(PERIODO_LISTADO_DEFECTO, hoyBogotaISO()) : desde
+      if (d) query = query.gte("fechaorden", d)
+    }
 
-    if (error) {
-      console.error("Error fetching load orders:", error)
-      return { success: false, message: error.message }
+    let data: any[]
+    try {
+      data = await fetchAllRows((from, to) => query.range(from, to))
+    } catch (e: any) {
+      console.error("Error fetching load orders:", e)
+      return { success: false, message: e?.message || "Error al cargar órdenes" }
     }
 
     // Alerta: Distribución creada A MANO (no por la automatización +D). La
@@ -1811,16 +1836,26 @@ export async function getVehiclesForSanitaryRegistry() {
   try {
     const empresaId = await getCurrentEmpresaIdForInsert()
 
-    const { data, error } = await supabase
-      .from("cabeceraoc")
-      .select("id, placa, ordendecargue, conductor, tipoproducto")
-      .eq("idempresa", empresaId)
-      .is("horasanitario", null)
-      .order("id", { ascending: false })
-
-    if (error) {
-      console.error("Error fetching vehicles for sanitary registry:", error)
-      return { success: false, message: error.message }
+    // Vehículos pendientes de registro sanitario de los ÚLTIMOS 30 DÍAS,
+    // paginado. Antes traía toda la historia sin `horasanitario` (miles de
+    // órdenes viejas que ya nunca se registrarán) y Supabase la recortaba en
+    // silencio a las 1.000 más recientes.
+    const desde = restarDiasISO(hoyBogotaISO(), 30)
+    let data: any[]
+    try {
+      data = await fetchAllRows((from, to) =>
+        supabase
+          .from("cabeceraoc")
+          .select("id, placa, ordendecargue, conductor, tipoproducto")
+          .eq("idempresa", empresaId)
+          .is("horasanitario", null)
+          .gte("fechaorden", desde)
+          .order("id", { ascending: false })
+          .range(from, to),
+      )
+    } catch (e: any) {
+      console.error("Error fetching vehicles for sanitary registry:", e)
+      return { success: false, message: e?.message || "Error al cargar vehículos" }
     }
 
     return { success: true, data }
