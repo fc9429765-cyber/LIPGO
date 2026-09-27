@@ -24,3 +24,7 @@ node_modules
 /*.zip
 # Artefacto de build de TypeScript
 tsconfig.tsbuildinfo
+
+# Scripts y extractos de diagnóstico de sesiones de trabajo (no son parte del software).
+# Los históricos viven en scratchpad_archivo/; cualquier scratchpad_* nuevo también queda fuera del repo.
+scratchpad_*
