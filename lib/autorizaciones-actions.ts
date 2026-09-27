@@ -27,7 +27,7 @@ import {
   hashCodigoRecuperacion,
   generarClaveProvisional,
 } from "@/lib/autorizaciones-crypto"
-import { correoConfigurado, enviarCorreo } from "@/lib/email"
+import { correoConfigurado, enviarCorreo, remitenteCorreo, remitenteEsDePrueba } from "@/lib/email"
 import {
   CONFIG_TRANSICION,
   MAX_INTENTOS_CLAVE,
@@ -301,6 +301,7 @@ export async function solicitarCodigoRecuperacion(): Promise<Resp<{ destino: str
     })
     if (!envio.ok) {
       await sb.from("autorizacion_recuperacion").delete().eq("id", fila.id)
+      await logInterno({ usuario_id: user.id, usuario, proceso: "clave_personal", resultado: "codigo_no_enviado", detalle: { destino, error: envio.detalle ?? envio.error ?? null } })
       return { success: false, message: envio.error || "No se pudo enviar el correo." }
     }
     await logInterno({ usuario_id: user.id, usuario, proceso: "clave_personal", resultado: "codigo_enviado", detalle: { destino } })
@@ -386,6 +387,7 @@ export async function adminGetResumen(): Promise<Resp<{ data: ResumenAutorizacio
   try {
     if (!(await assertAdmin())) return { success: false, message: "No autorizado" }
     const sb: any = await getSupabaseAdminAsSystem()
+    const adminUser = await getCurrentUser().catch(() => null)
     const [
       { data: procesos },
       { data: perfiles },
@@ -450,6 +452,9 @@ export async function adminGetResumen(): Promise<Resp<{ data: ResumenAutorizacio
         empresas: (emps ?? []).map((e: any) => ({ id: Number(e.id), nombre: String(e.nombre) })),
         transicionHasta,
         correoConfigurado: correoConfigurado(),
+        correoRemitente: remitenteCorreo(),
+        correoRemitentePrueba: remitenteEsDePrueba(),
+        correoAdmin: adminUser?.email ?? null,
       },
     }
   } catch (e: any) {
@@ -642,6 +647,37 @@ export async function adminEliminarClave(usuarioId: string): Promise<Resp> {
     return { success: true }
   } catch (e: any) {
     return { success: false, message: e?.message || "No se pudo eliminar la clave." }
+  }
+}
+
+/**
+ * Envía un correo de PRUEBA al correo del administrador en sesión y devuelve la
+ * respuesta exacta del proveedor. Sirve para diagnosticar la configuración de
+ * Resend (API key, remitente, dominio verificado) desde el propio despliegue,
+ * que es donde viven las variables de entorno.
+ */
+export async function adminProbarCorreo(): Promise<Resp<{ detalle: string; remitente: string; destino: string }>> {
+  try {
+    if (!(await assertAdmin())) return { success: false, message: "No autorizado" }
+    const user = await getCurrentUser()
+    const destino = String(user?.email || "").trim()
+    if (!destino.includes("@")) return { success: false, message: "Tu usuario no tiene un correo válido para recibir la prueba." }
+    const remitente = remitenteCorreo()
+    if (!correoConfigurado()) {
+      return { success: false, remitente, destino, message: "RESEND_API_KEY no está definida en el entorno de este despliegue. En Vercel: Settings › Environment Variables › agregar RESEND_API_KEY (y EMAIL_FROM) y volver a desplegar." }
+    }
+    const r = await enviarCorreo({
+      to: destino,
+      subject: "LIPgo · prueba de correo (Autorizaciones por clave)",
+      text: `Prueba de envío desde LIPgo. Remitente: ${remitente}. Si lees esto, la recuperación de clave por correo funciona.`,
+      html: `<p>Prueba de envío desde <b>LIPgo</b>.</p><p>Remitente: ${remitente}</p><p>Si lees esto, la recuperación de clave por correo funciona.</p>`,
+    })
+    const admin = await getCurrentUsuarioForInsert()
+    await logInterno({ usuario_id: user?.id ?? null, usuario: admin, proceso: "admin_correo", resultado: r.ok ? "prueba_enviada" : "prueba_fallida", autorizado_por: admin, detalle: { destino: enmascararCorreo(destino), remitente, error: r.detalle ?? r.error ?? null } })
+    if (!r.ok) return { success: false, remitente, destino, message: r.error, detalle: r.detalle ?? "" }
+    return { success: true, remitente, destino, message: `Correo de prueba enviado a ${destino} desde ${remitente}. Revisa la bandeja (y spam).`, detalle: "HTTP 200" }
+  } catch (e: any) {
+    return { success: false, message: e?.message || "No se pudo probar el correo." }
   }
 }
 

@@ -69,6 +69,7 @@ import {
   adminGetResumen,
   adminGuardarExcepcion,
   adminGuardarPerfil,
+  adminProbarCorreo,
   adminQuitarExcepcion,
   adminQuitarPerfil,
   adminSetTransicion,
@@ -102,6 +103,7 @@ const PROCESO_INTERNO_LABEL: Record<string, string> = {
   admin_asignacion: "Asignación de perfil (admin)",
   admin_excepcion: "Excepción (admin)",
   admin_transicion: "Transición (admin)",
+  admin_correo: "Prueba de correo (admin)",
 }
 const RESULTADO_INTERNO_LABEL: Record<string, string> = {
   creada: "Clave creada",
@@ -109,6 +111,9 @@ const RESULTADO_INTERNO_LABEL: Record<string, string> = {
   definida_desde_provisional: "Clave definida (desde provisional)",
   recuperada_por_correo: "Clave recuperada por correo",
   codigo_enviado: "Código de recuperación enviado",
+  codigo_no_enviado: "Código NO enviado (falló el correo)",
+  prueba_enviada: "Correo de prueba enviado",
+  prueba_fallida: "Correo de prueba falló",
   provisional_asignada: "Clave provisional asignada",
   desbloqueada: "Clave desbloqueada",
   eliminada_por_admin: "Clave eliminada por admin",
@@ -128,6 +133,17 @@ export default function AutorizacionesClave() {
   const { selectedEmpresaId } = useAuth()
   const [data, setData] = useState<ResumenAutorizaciones | null>(null)
   const [loading, setLoading] = useState(true)
+  const [probandoCorreo, setProbandoCorreo] = useState(false)
+  const [resultadoCorreo, setResultadoCorreo] = useState<{ ok: boolean; texto: string } | null>(null)
+
+  const probarCorreo = async () => {
+    setProbandoCorreo(true)
+    setResultadoCorreo(null)
+    const r = await adminProbarCorreo()
+    setProbandoCorreo(false)
+    setResultadoCorreo({ ok: r.success, texto: `${r.message ?? ""}${r.detalle && !r.success ? ` (${r.detalle})` : ""}` })
+    toast({ title: r.success ? "Correo de prueba enviado" : "El correo no salió", description: r.message, variant: r.success ? undefined : "destructive" })
+  }
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -178,9 +194,14 @@ export default function AutorizacionesClave() {
             <Building2 className="h-3 w-3" /> {nombreProyecto}
           </Badge>
           {data && (
-            <Badge variant="outline" className="gap-1">
+            <Badge variant="outline" className="gap-1" title={`Remitente: ${data.correoRemitente}`}>
               <Mail className="h-3 w-3" /> Correo {data.correoConfigurado ? "configurado" : "no configurado"}
             </Badge>
+          )}
+          {data?.correoConfigurado && (
+            <Button variant="outline" size="sm" onClick={probarCorreo} disabled={probandoCorreo} className="gap-1.5" title={`Envía una prueba a ${data.correoAdmin ?? "tu correo"}`}>
+              {probandoCorreo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />} Probar correo
+            </Button>
           )}
           <Button variant="outline" size="sm" onClick={cargar} disabled={loading} className="gap-1.5">
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Actualizar
@@ -218,10 +239,32 @@ export default function AutorizacionesClave() {
             <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <p>
-                El envío de correos no está configurado (variable <code>RESEND_API_KEY</code>), así que la recuperación de clave por
-                correo está desactivada. Mientras tanto, quien olvide su clave la recupera con una <b>clave provisional</b> que tú
-                generas aquí (menú ⋯ del usuario) y él cambia al primer uso.
+                El envío de correos no está configurado en este despliegue (variable <code>RESEND_API_KEY</code>), así que la
+                recuperación de clave por correo está desactivada. En Vercel: Settings › Environment Variables › agrega{" "}
+                <code>RESEND_API_KEY</code> y <code>EMAIL_FROM</code> y <b>vuelve a desplegar</b> (las variables nuevas solo aplican en
+                un despliegue nuevo). Mientras tanto, quien olvide su clave la recupera con una <b>clave provisional</b> que tú generas
+                aquí (menú ⋯ del usuario) y él cambia al primer uso.
               </p>
+            </div>
+          )}
+          {data.correoConfigurado && data.correoRemitentePrueba && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>
+                La API key está, pero el remitente es el de <b>prueba de Resend</b> (<code>{data.correoRemitente}</code>): Resend solo
+                entrega esos correos al dueño de la cuenta de Resend; a cualquier otro usuario le falla. Para que llegue a todos: en
+                Resend › Domains verifica el dominio (p. ej. lip-sas.com) con sus registros DNS, y en Vercel define{" "}
+                <code>EMAIL_FROM</code> = <code>LIPgo &lt;no-reply@lip-sas.com&gt;</code> y vuelve a desplegar. Usa “Probar correo” para
+                confirmar.
+              </p>
+            </div>
+          )}
+          {resultadoCorreo && (
+            <div
+              className={`flex items-start gap-2 rounded-lg border p-3 text-sm ${resultadoCorreo.ok ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "border-red-300 bg-red-50 text-red-900"}`}
+            >
+              {resultadoCorreo.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}
+              <p className="break-words">{resultadoCorreo.texto}</p>
             </div>
           )}
 

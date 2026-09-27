@@ -117,6 +117,12 @@ export interface ResumenAutorizaciones {
   empresas: { id: number; nombre: string }[]
   transicionHasta: string | null
   correoConfigurado: boolean
+  /** Remitente en uso (EMAIL_FROM o el de prueba de Resend). */
+  correoRemitente: string
+  /** true si el remitente es el de prueba de Resend: solo llega al dueño de la cuenta de Resend. */
+  correoRemitentePrueba: boolean
+  /** Correo del administrador en sesión (destino del botón "Probar correo"). */
+  correoAdmin: string | null
 }
 
 export interface LogAutorizacion {
