@@ -144,10 +144,11 @@ create unique index if not exists ux_autorizacion_usuario_procesos
 alter table public.autorizacion_usuario_procesos disable row level security;
 
 -- Semilla de asignaciones (editable en la pantalla):
---   · Gerencia General LIPgo → SOLO la cuenta `admin` de LIPgo (dueña del
---     software), alcance todos los proyectos. A los demás administradores de
---     LIPgo (p. ej. Admon Indupan) se lo asigna la gerencia desde la pantalla si
---     lo considera; este perfil autoriza TODO en TODOS los proyectos y es respaldo.
+--   · Gerencia General LIPgo → SOLO la cuenta de la DUEÑA del software: la
+--     Gerencia de LIP entra con admonind@lipgo.app (perfil "Admon Indupan").
+--     NO es la cuenta `admin` (admin@lipgocrm.com). Alcance: todos los
+--     proyectos. Este perfil autoriza TODO y es respaldo; a otros
+--     administradores se lo asigna la gerencia desde la pantalla si lo considera.
 --   · Gerencia de proyecto / Calidad / Cartera → los usuarios "Gerencia X",
 --     "Calidad X", "Cartera X" de cada proyecto (son del cliente), con alcance a
 --     SU proyecto únicamente.
@@ -157,7 +158,7 @@ insert into public.autorizacion_usuario_perfiles (usuario_id, perfil_id, idempre
 select pr.id, p.id, null, 'sql 203'
 from public.profiles pr
 join public.autorizacion_perfiles p on p.nombre = 'Gerencia General LIPgo'
-where pr.usuario = 'admin'
+where pr.id in (select u.id from auth.users u where lower(u.email) = 'admonind@lipgo.app')
 on conflict do nothing;
 
 -- "Gerencia Indupan" (perfil sin cuenta de acceso) es la misma persona que
