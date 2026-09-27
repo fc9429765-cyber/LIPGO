@@ -99,7 +99,7 @@ insert into public.autorizacion_perfiles (nombre, descripcion) values
   ('Gerencia de proyecto', 'Gerencia del cliente/proyecto (Indupan, Avimol, cada Cedi): aprueba ajustes 601/702/555, libera cuarentena, aprueba y anula pedidos. Asignar con alcance a SU proyecto.'),
   ('Calidad', 'Decide sobre producto retenido: libera de cuarentena (343). Bloquear (344) y solicitar desecho (555) no piden clave.'),
   ('Cartera', 'Revisión de cartera de pedidos.'),
-  ('Coordinación de inventario', 'Ejecuta correcciones de inventario (309/102/602/552/312) con motivo; quedan en el historial de correcciones.'),
+  ('Coordinador LIP', 'Persona encargada por LIP en cada ID (proyecto). Ejecuta con motivo las correcciones de inventario (309/102/602/552/312), que quedan en el historial de correcciones. Asignar con alcance a SU proyecto.'),
   ('Financiera', 'Acceso al grupo Gestión Financiera y aprobación de bonos.')
 on conflict (nombre) do nothing;
 
@@ -111,7 +111,7 @@ join public.autorizacion_procesos pr on (
   or (p.nombre = 'Gerencia de proyecto' and pr.codigo in ('inv_601_aprobar','inv_702_aprobar','inv_555_aprobar','inv_343','ped_aprobar_gerencia','ped_anular','ped_cerrar_pendiente'))
   or (p.nombre = 'Calidad' and pr.codigo in ('inv_343'))
   or (p.nombre = 'Cartera' and pr.codigo in ('ped_aprobar_cartera'))
-  or (p.nombre = 'Coordinación de inventario' and pr.codigo in ('inv_309','inv_102','inv_602','inv_552','inv_312'))
+  or (p.nombre = 'Coordinador LIP' and pr.codigo in ('inv_309','inv_102','inv_602','inv_552','inv_312'))
   or (p.nombre = 'Financiera' and pr.codigo in ('fin_gestion_financiera','fin_bonos_aprobar'))
 )
 on conflict do nothing;
@@ -154,6 +154,8 @@ alter table public.autorizacion_usuario_procesos disable row level security;
 --     SU proyecto únicamente.
 --   · Cartera → usuarios de LIPgo cuyo nombre coincide con un usuario de
 --     cartera actual (usuariocartera), con alcance a su proyecto.
+--   · Coordinador LIP → los usuarios "Coordinador <sitio>" (encargados por LIP
+--     en cada ID), con alcance a su proyecto. "Coordinador SST" no es de sitio.
 insert into public.autorizacion_usuario_perfiles (usuario_id, perfil_id, idempresa, asignado_por)
 select pr.id, p.id, null, 'sql 203'
 from public.profiles pr
@@ -185,6 +187,15 @@ join public.autorizacion_perfiles p on p.nombre = 'Cartera'
 where pr.empresa_id is not null
   and (pr.usuario ilike 'cartera%'
        or exists (select 1 from public.usuariocartera uc where lower(trim(uc.nombre)) = lower(trim(pr.usuario))))
+on conflict do nothing;
+
+insert into public.autorizacion_usuario_perfiles (usuario_id, perfil_id, idempresa, asignado_por)
+select pr.id, p.id, pr.empresa_id, 'sql 203'
+from public.profiles pr
+join public.autorizacion_perfiles p on p.nombre = 'Coordinador LIP'
+where pr.empresa_id is not null
+  and pr.usuario ilike 'coordinador%'
+  and pr.usuario not ilike '%sst%'
 on conflict do nothing;
 
 -- (e) Clave personal (hash), recuperación y bitácora.
