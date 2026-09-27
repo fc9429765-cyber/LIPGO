@@ -1,7 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typescript: {
-    ignoreBuildErrors: true,
+    // Los errores de tipos VUELVEN a bloquear el build (2026-09-27). Estuvo en
+    // `true` mientras el repo arrastraba errores; hoy `npx tsc --noEmit` está en
+    // cero y así se queda: un error de tipos no debe llegar a producción sin
+    // que nadie lo vea. Si el build de Vercel falla por tipos, se corrige el
+    // tipo -- no se vuelve a poner `true`.
+    ignoreBuildErrors: false,
   },
   images: {
     unoptimized: true,
