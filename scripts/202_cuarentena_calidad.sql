@@ -44,8 +44,15 @@ where not exists (select 1 from public.inv_clave_gerencia_proyecto c where c.ide
 -- (b) Ubicación CUARENTENA en cada proyecto (344 la usa como destino, 343 y
 --     555 como origen). Se cuelga de la bodega con más ubicaciones del
 --     proyecto. `activo` es texto en esta tabla ('true'), igual que las demás.
-insert into public.locations (codigo, nombre, "Descripción", idempresa, activo, bodega)
-select 'CUARENTENA',
+--
+--     OJO: la secuencia de `locations.id` está DESINCRONIZADA (hay filas
+--     insertadas con id manual), así que el id automático choca
+--     (23505 duplicate key "locations_pkey"). Se asigna el id explícito
+--     (max + n) y de paso se resincroniza la secuencia si existe, para que
+--     el próximo insert desde la app tampoco choque.
+insert into public.locations (id, codigo, nombre, "Descripción", idempresa, activo, bodega)
+select (select coalesce(max(id), 0) from public.locations) + row_number() over (order by e.id),
+       'CUARENTENA',
        'Cuarentena — bloqueo por calidad (344)',
        'Producto retenido por calidad: sigue en el inventario pero NO está disponible para despacho. Sale con 343 (liberar) o 555 (desechar, requiere aprobación de la gerencia del proyecto).',
        e.id,
@@ -56,6 +63,15 @@ select 'CUARENTENA',
 from public.empresas e
 where e.id in (1, 2, 3, 4)
   and not exists (select 1 from public.locations l where l.idempresa = e.id and upper(l.codigo) like '%CUARENTENA%');
+
+do $$
+declare seq text;
+begin
+  seq := pg_get_serial_sequence('public.locations', 'id');
+  if seq is not null then
+    perform setval(seq, (select coalesce(max(id), 1) from public.locations));
+  end if;
+end $$;
 
 -- (c) 555 en la nomenclatura y en la cola de aprobación.
 insert into public.sig_tipos_movimiento (codigo_sap, nombre, clase, origen_lipgo, descripcion, afecta_stock, orden, activo)
