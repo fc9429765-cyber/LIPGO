@@ -288,7 +288,7 @@ export async function getParafiscales(
     const pageSize = 1000
     for (let offset = 0; ; offset += pageSize) {
       const { data, error } = await admin
-        .from("pagonomina")
+        .rpc("pagonomina_rango", { p_desde: desde, p_hasta: hasta })
         .select(
           "persona, fecha, total_liquidado_dia, novedad_reportada, especialidad, bonif_no_prestacional",
         )

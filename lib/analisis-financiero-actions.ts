@@ -604,7 +604,7 @@ export async function getAnalisisFinanciero(
       const bonoQ = new Map<string, number>()
       for (let off = 0; ; off += 1000) {
         const { data, error } = await sb
-          .from("pagonomina")
+          .rpc("pagonomina_rango", { p_desde: desde, p_hasta: hasta })
           .select("idempresaliquidacion, persona, fecha, total_liquidado_dia, bonif_prestacional")
           .in("idempresaliquidacion", ids)
           .gte("fecha", desde)

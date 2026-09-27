@@ -74,7 +74,7 @@ async function getHorasExtraRecientes(admin: any, persona: string, fechaRef: str
   const fmtDate = (dt: Date) => `${dt.getFullYear()}-${p2(dt.getMonth() + 1)}-${p2(dt.getDate())}`
 
   const { data } = await admin
-    .from("pagonomina")
+    .rpc("pagonomina_rango", { p_desde: fmtDate(desde), p_hasta: fmtDate(ref) })
     .select("horas_hed, horas_hedf, horas_hen, horas_hef, horas_hn")
     .eq("persona", persona)
     .gte("fecha", fmtDate(desde))

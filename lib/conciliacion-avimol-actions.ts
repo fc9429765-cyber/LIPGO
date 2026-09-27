@@ -389,7 +389,7 @@ export async function getConciliacionAvimol(
     const filasPago: any[] = []
     for (let off = 0; ; off += 1000) {
       const { data, error } = await admin
-        .from("pagonomina")
+        .rpc("pagonomina_rango", { p_desde: desde, p_hasta: hasta })
         .select(
           "fecha, persona, actividad_registrada, novedad_reportada, base_dia, total_recargos, hed, hedf, hen, hef, hn, horas_hed, horas_hedf, horas_hen, horas_hef, horas_hn, pago_domingo, recargodominical, total_liquidado_dia",
         )

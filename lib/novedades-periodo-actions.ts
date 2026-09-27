@@ -98,7 +98,7 @@ export async function getNovedadesPeriodo(
     try {
       const pn = await traerTodo((d, h) =>
         sb
-          .from("pagonomina")
+          .rpc("pagonomina_rango", { p_desde: desde, p_hasta: hasta })
           .select("fecha, persona, novedad_reportada, base_dia, total_liquidado_dia")
           .eq("idempresa", empresaId)
           .gte("fecha", desde)

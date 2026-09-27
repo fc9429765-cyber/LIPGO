@@ -389,6 +389,8 @@ export async function getLiquidaciones(
 
     // 5) TODAS las novedades de pagonomina de esos retirados (para prestaciones y
     //    pendientes). Paginado.
+    //    Se queda en la VISTA a propósito: necesita la historia completa de cada
+    //    retirado (sin rango), así que `pagonomina_rango` no le ahorra nada.
     const cols =
       "fecha, persona, actividad_registrada, novedad_reportada, base_dia, hed, hedf, hen, hef, hn, pago_domingo, recargodominical, bonif_prestacional, total_liquidado_dia, especialidad, toneladas"
     let all: any[] = []

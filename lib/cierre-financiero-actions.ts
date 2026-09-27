@@ -555,7 +555,7 @@ async function cierreDeProyecto(
   }> = []
   for (let off = 0; ; off += 1000) {
     const { data, error } = await sb
-      .from("pagonomina")
+      .rpc("pagonomina_rango", { p_desde: desde, p_hasta: fecha })
       .select(
         "fecha, persona, actividad_registrada, total_liquidado_dia, total_recargos, bonif_prestacional, pago_produccion, idempresa, idempresaliquidacion",
       )

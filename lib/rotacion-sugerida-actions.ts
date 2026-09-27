@@ -278,7 +278,7 @@ export async function sugerirRotacion(
   const horasExtraPorNombreNorm = new Map<string, number>()
   if (nombres.length > 0) {
     const { data: pnRows } = await admin
-      .from("pagonomina")
+      .rpc("pagonomina_rango", { p_desde: desde7, p_hasta: fecha })
       .select("persona, horas_hed, horas_hedf, horas_hen, horas_hef, horas_hn")
       .in("persona", nombres)
       .gte("fecha", desde7)

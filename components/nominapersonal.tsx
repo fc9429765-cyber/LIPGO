@@ -100,6 +100,9 @@ export default function Nominapersonal() {
   const [filtroFechaInicioLiq, setFiltroFechaInicioLiq] = useState("")
   const [filtroFechaFinLiq, setFiltroFechaFinLiq] = useState("")
   const [filtroPersonaLiq, setFiltroPersonaLiq] = useState("")
+  // 'YYYY-MM-DD' en hora local del navegador (el usuario está en Colombia).
+  const fechaLocalISO = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
   // Sub-tab dentro de "Ver Liquidacion":
   //  - "detalle": tabla existente fila a fila.
   //  - "consolidado": agrupa por dia con desglose de personas al expandir.
@@ -206,8 +209,15 @@ export default function Nominapersonal() {
         // a la empresa CONTRATANTE de la liquidacion, mientras que
         // `idempresa` corresponde a la empresa donde se registro la
         // operacion. Las demas pestanas siguen usando `idempresa`.
+        // `pagonomina_rango` calcula la nómina SOLO para el rango pedido (misma
+        // lógica que la vista `pagonomina`, verificada fila por fila). Si el
+        // usuario deja una fecha vacía y da "Buscar", se respeta su intención de
+        // ver todo hacia atrás / hasta hoy — igual que antes, solo que más lento.
         let query = supabase
-          .from("pagonomina")
+          .rpc("pagonomina_rango", {
+            p_desde: fechaInicio || "2000-01-01",
+            p_hasta: fechaFin || fechaLocalISO(new Date()),
+          })
           .select(
             "fecha, persona, actividad_registrada, novedad_reportada, toneladas, pago_produccion, base_dia, bonif_prestacional, bonif_no_prestacional, hed, hedf, hen, hef, hn, pago_domingo, recargodominical, total_liquidado_dia",
           )
@@ -220,7 +230,7 @@ export default function Nominapersonal() {
         if (fechaInicio) query = query.gte("fecha", fechaInicio)
         if (fechaFin) query = query.lte("fecha", fechaFin)
 
-        const { data, error } = await query
+        const { data: dataRaw, error } = await query
           .order("fecha", { ascending: false })
           .range(offset, offset + pageSize - 1)
 
@@ -229,6 +239,9 @@ export default function Nominapersonal() {
           toast({ title: "Error", description: "Error al cargar datos", variant: "destructive" })
           return
         }
+        // `.rpc()` tipa el resultado como T | T[] porque no sabe que la función
+        // devuelve un SET de filas; siempre es un arreglo.
+        const data = (dataRaw ?? []) as any[]
 
         if (!data || data.length === 0) {
           hasMore = false
@@ -834,8 +847,19 @@ export default function Nominapersonal() {
 
   useEffect(() => {
     if (selectedEmpresaId && viewMode === "liquidacion") {
-      loadLiquidaciones()
+      // Primera carga: MES EN CURSO. Antes entraba sin fechas y traía TODA la
+      // historia de la empresa (~40 consultas de 1.000 filas, la pantalla más
+      // lenta del módulo) para una tarjeta que dice "Total liquidado del mes".
+      // Las fechas quedan visibles en los filtros; el usuario las cambia y da
+      // "Buscar" si necesita otro periodo.
+      const hoy = fechaLocalISO(new Date())
+      const ini = filtroFechaInicioLiq || `${hoy.slice(0, 7)}-01`
+      const fin = filtroFechaFinLiq || hoy
+      if (!filtroFechaInicioLiq) setFiltroFechaInicioLiq(ini)
+      if (!filtroFechaFinLiq) setFiltroFechaFinLiq(fin)
+      loadLiquidaciones(ini, fin)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEmpresaId, viewMode])
 
   // Los filtros de mes/quincena se aplican EN LA BASE, así que cambiarlos

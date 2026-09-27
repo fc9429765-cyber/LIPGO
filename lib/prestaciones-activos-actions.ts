@@ -136,7 +136,7 @@ export async function calcularPrestacionesActivos(
     const pageSize = 1000
     for (let offset = 0; ; offset += pageSize) {
       const { data } = await admin
-        .from("pagonomina")
+        .rpc("pagonomina_rango", { p_desde: periodoDesde, p_hasta: periodoHasta })
         .select("persona, fecha, total_liquidado_dia, actividad_registrada, novedad_reportada, bonif_prestacional, toneladas")
         .in("persona", nombres)
         .gte("fecha", periodoDesde)

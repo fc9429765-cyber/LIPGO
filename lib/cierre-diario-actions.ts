@@ -207,7 +207,7 @@ export async function getCierreDiario(
     const costoDe = new Map<number, number>()
     for (let off = 0; ; off += 1000) {
       const { data, error } = await sb
-        .from("pagonomina")
+        .rpc("pagonomina_rango", { p_desde: dia, p_hasta: dia })
         .select("idempresa, total_liquidado_dia")
         .in("idempresa", ids)
         .eq("fecha", dia)

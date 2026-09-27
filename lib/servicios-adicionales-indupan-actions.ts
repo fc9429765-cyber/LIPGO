@@ -107,7 +107,7 @@ export async function calcularServiciosAdicionalesIndupan(
     if (solicitadasHEPorFechaPuesto.size > 0) {
       for (let off = 0; ; off += 1000) {
         const { data, error } = await admin
-          .from("pagonomina")
+          .rpc("pagonomina_rango", { p_desde: desde, p_hasta: hasta })
           .select("fecha, actividad_registrada, horas_hed, horas_hedf, horas_hen, horas_hef, horas_hn")
           .eq("idempresa", INDUPAN_IDEMPRESA)
           .gte("fecha", desde)

@@ -339,7 +339,7 @@ async function armarContexto(
   if (proyectos.size > 0) {
     const hcRows = await fetchAllRows((f, t) =>
       admin
-        .from("pagonomina")
+        .rpc("pagonomina_rango", { p_desde: desde, p_hasta: hasta })
         .select("fecha, persona, idempresaliquidacion, especialidad")
         .in("idempresaliquidacion", Array.from(proyectos))
         .gte("fecha", desde)
@@ -890,7 +890,7 @@ export async function getRevisionNomina(
 
     // A) Días de la quincena (pagonomina — modelo nuevo ya liquida base por día)
     const { data: filas, error: errPn } = await admin
-      .from("pagonomina")
+      .rpc("pagonomina_rango", { p_desde: desde, p_hasta: hasta })
       .select(PN_COLS)
       .eq("persona", persona)
       .gte("fecha", desde)
@@ -1039,7 +1039,7 @@ export async function getRevisionNominaProyecto(
     for (const lote of enLotes(personas, 50)) {
       const rows = await fetchAllRows((f, t) =>
         admin
-          .from("pagonomina")
+          .rpc("pagonomina_rango", { p_desde: desde, p_hasta: hasta })
           .select(PN_COLS)
           .in("persona", lote)
           .gte("fecha", desde)
@@ -1540,7 +1540,7 @@ export async function getConciliacionQuincena(
     //    nómina, con sus filtros de vínculo/retiro/fecha). Referencia por persona.
     for (let off = 0; ; off += 1000) {
       const { data, error } = await admin
-        .from("pagonomina")
+        .rpc("pagonomina_rango", { p_desde: desde, p_hasta: hasta })
         .select("persona, toneladas, pago_produccion, idempresaliquidacion")
         .gte("fecha", desde)
         .lte("fecha", hasta)
@@ -1693,7 +1693,7 @@ export async function getHcPorDia(
     const rows: any[] = []
     for (let off = 0; ; off += 1000) {
       const { data, error } = await admin
-        .from("pagonomina")
+        .rpc("pagonomina_rango", { p_desde: desde, p_hasta: hasta })
         .select("fecha, persona, idempresaliquidacion, especialidad, toneladas")
         .gte("fecha", desde)
         .lte("fecha", hasta)

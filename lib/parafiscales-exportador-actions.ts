@@ -199,7 +199,7 @@ export async function generarArchivoCargaPila(
     const pageSize = 1000
     for (let offset = 0; ; offset += pageSize) {
       const { data } = await admin
-        .from("pagonomina")
+        .rpc("pagonomina_rango", { p_desde: desde, p_hasta: hasta })
         .select("persona, fecha, total_liquidado_dia, novedad_reportada")
         .in("persona", nombres)
         .gte("fecha", desde)

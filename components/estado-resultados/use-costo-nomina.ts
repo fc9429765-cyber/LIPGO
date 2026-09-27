@@ -263,8 +263,8 @@ export function useCostoNomina({
         // Nominapersonal. Asi la tarjeta "Total liquidado del mes" y el
         // costo de nomina del estado de resultados muestran exactamente
         // el mismo total para una misma empresa y periodo.
-        const { data: page, error: pageError } = await supabase
-          .from("pagonomina")
+        const { data: pageData, error: pageError } = await supabase
+          .rpc("pagonomina_rango", { p_desde: desde, p_hasta: hasta })
           .select("persona, fecha, bonif_prestacional, total_liquidado_dia")
           .in("idempresaliquidacion", ids)
           .gte("fecha", desde)
@@ -272,7 +272,10 @@ export function useCostoNomina({
           .range(offset, offset + PAGE_SIZE - 1)
 
         if (pageError) throw pageError
-        if (!page || page.length === 0) break
+        // `.rpc()` tipa el resultado como T | T[] porque no sabe que la función
+        // devuelve un SET de filas; siempre es un arreglo.
+        const page = (pageData ?? []) as typeof allRows
+        if (page.length === 0) break
 
         allRows.push(...page)
         if (page.length < PAGE_SIZE) break
