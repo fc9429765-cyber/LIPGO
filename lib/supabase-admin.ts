@@ -2,6 +2,7 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 import { createServerClient } from "@/lib/supabase-server"
+import { fetchConAvisoTruncamiento } from "@/lib/supabase-fetch-truncamiento"
 import { cache } from "react"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -25,7 +26,9 @@ const clientsByActor = new Map<string, DBClient>()
 function buildClient(auditUser?: string): DBClient {
   return createClient(supabaseUrl, supabaseServiceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
-    ...(auditUser ? { global: { headers: { "x-audit-user": auditUser } } } : {}),
+    // `fetch` envuelto: avisa en el log cuando una consulta se trunca en
+    // silencio a 1.000 filas (ver lib/supabase-fetch-truncamiento.ts).
+    global: { fetch: fetchConAvisoTruncamiento, ...(auditUser ? { headers: { "x-audit-user": auditUser } } : {}) },
   })
 }
 

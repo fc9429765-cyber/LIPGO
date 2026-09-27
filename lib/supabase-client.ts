@@ -1,4 +1,5 @@
 import { createClient as createSupabaseClient, type SupabaseClient } from "@supabase/supabase-js"
+import { fetchConAvisoTruncamiento } from "@/lib/supabase-fetch-truncamiento"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey =
@@ -14,16 +15,20 @@ type DBClient = SupabaseClient<any, any, any>
 // Singleton pattern to prevent multiple GoTrueClient instances
 let supabaseInstance: DBClient | null = null
 
+// `fetch` envuelto: avisa en la consola cuando una consulta se trunca en
+// silencio a 1.000 filas (ver lib/supabase-fetch-truncamiento.ts).
+const OPCIONES = { global: { fetch: fetchConAvisoTruncamiento } }
+
 export async function createClient(): Promise<DBClient> {
   if (!supabaseInstance) {
-    supabaseInstance = createSupabaseClient(supabaseUrl, supabaseKey)
+    supabaseInstance = createSupabaseClient(supabaseUrl, supabaseKey, OPCIONES)
   }
   return supabaseInstance
 }
 
 export const supabase: DBClient = (() => {
   if (!supabaseInstance) {
-    supabaseInstance = createSupabaseClient(supabaseUrl, supabaseKey)
+    supabaseInstance = createSupabaseClient(supabaseUrl, supabaseKey, OPCIONES)
   }
   return supabaseInstance
 })()

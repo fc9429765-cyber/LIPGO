@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase-client"
+import { fetchAllRows } from "@/lib/fetch-all-rows"
 import { generateAndUploadBatchAssignmentPDF } from "@/lib/pdf-actions"
 import { getColombiaDate, getColombiaISO, getColombiaTime } from "@/lib/date-utils"
 import { getCurrentUserContext } from "@/lib/company-filter"
@@ -543,23 +544,16 @@ export async function getBatchHistoryFilters(selectedEmpresaId?: number | null) 
       .eq("activo", true)
       .order("nombre", { ascending: true })
 
-    // Get unique productos - filter by empresa
-    const { data: productosData } = await supabase
-      .from("historicolotes")
-      .select("producto")
-      .eq("idempresa", currentEmpresaId)
-      .order("producto")
-
-    // Get unique placas - filter by empresa
-    const { data: placasData } = await supabase
-      .from("historicolotes")
-      .select("placa")
-      .eq("idempresa", currentEmpresaId)
-      .order("placa")
+    // Productos y placas distintos -- PAGINADO: historicolotes tiene miles de
+    // filas por empresa y Supabase corta en 1.000 sin avisar, así que los
+    // filtros perdían opciones. Una sola pasada por las dos columnas.
+    const filasLotes = await fetchAllRows((from, to) =>
+      supabase.from("historicolotes").select("producto, placa").eq("idempresa", currentEmpresaId).order("id").range(from, to),
+    )
 
     const clientes = (clientesData?.map((item) => item.nombre).filter(Boolean) || []) as string[]
-    const productos = Array.from(new Set(productosData?.map((item) => item.producto).filter(Boolean))) as string[]
-    const placas = Array.from(new Set(placasData?.map((item) => item.placa).filter(Boolean))) as string[]
+    const productos = Array.from(new Set(filasLotes.map((item) => item.producto).filter(Boolean))).sort() as string[]
+    const placas = Array.from(new Set(filasLotes.map((item) => item.placa).filter(Boolean))).sort() as string[]
 
     return {
       clientes,
@@ -668,18 +662,20 @@ export async function getOrdenesForAnnulment(): Promise<string[]> {
   try {
     const supabase = await createClient()
 
-    const { data, error } = await supabase
-      .from("historicolotes")
-      .select("ordendecargue")
-      .order("ordendecargue", { ascending: true })
-
-    if (error) {
+    // PAGINADO: historicolotes tiene más de 20.000 filas y Supabase corta en
+    // 1.000 sin avisar -- el desplegable de órdenes a anular quedaba incompleto.
+    let data: any[]
+    try {
+      data = await fetchAllRows((from, to) =>
+        supabase.from("historicolotes").select("ordendecargue").order("ordendecargue", { ascending: true }).order("id").range(from, to),
+      )
+    } catch (error) {
       console.error("[v0] Error fetching ordenes de cargue:", error)
       return []
     }
 
     // Get unique values
-    const uniqueOrdenes = Array.from(new Set(data?.map((item) => item.ordendecargue).filter(Boolean))) as string[]
+    const uniqueOrdenes = Array.from(new Set(data.map((item) => item.ordendecargue).filter(Boolean))) as string[]
     return uniqueOrdenes
   } catch (error) {
     console.error("[v0] Unexpected error:", error)

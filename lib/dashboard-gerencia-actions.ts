@@ -10,6 +10,7 @@
  */
 
 import { createClient } from "@/lib/supabase-client"
+import { fetchAllRows } from "@/lib/fetch-all-rows"
 import { getCurrentEmpresaId } from "@/lib/company-filter"
 import { getMetaDiaForEmpresa, rewriteMetaDiaRows } from "@/lib/empresa-meta-dia"
 
@@ -219,11 +220,19 @@ async function fetchOcupacion(empresaId: number): Promise<OcupacionAlmacen> {
 
   const codigos = locations.map((l: any) => l.codigo).filter(Boolean)
 
-  const { data: saldos } = await supabase
-    .from("saldoinvdetalle")
-    .select("location, stock_actual")
-    .eq("idempresa", empresaId)
-    .in("location", codigos)
+  // PAGINADO: saldoinvdetalle supera las 1.000 filas por empresa y Supabase
+  // corta ahí en silencio -- la ocupación del almacén salía subestimada.
+  const saldos = await fetchAllRows((from, to) =>
+    supabase
+      .from("saldoinvdetalle")
+      .select("location, stock_actual")
+      .eq("idempresa", empresaId)
+      .in("location", codigos)
+      .order("location")
+      .order("idproducto")
+      .order("lote")
+      .range(from, to),
+  )
 
   // Stock actual agregado por location.
   const stockPorLocation = new Map<string, number>()
@@ -532,10 +541,16 @@ export async function getGerenciaDashboardData(
       .eq("idempresa", empresaId)
       .eq("fechallegada", today)
 
+    // Operaciones DEL DÍA (`fechacargue = hoy`, mismo criterio que fetchRecibo /
+    // fetchToneladasDelMes y que el Dashboard de Operaciones). Antes no tenía
+    // filtro de fecha: leía toda la historia de la vista (8.700+ filas) que
+    // Supabase cortaba en 1.000 sin avisar, así que "vehículos despachados",
+    // "toneladas procesadas" y el OTIF salían de un recorte arbitrario.
     const { data: opsDia } = await supabase
       .from("dashboardoperaciones")
       .select("pesoorden, tipooperacion, estado")
       .eq("idempresa", empresaId)
+      .eq("fechacargue", today)
       .neq("tipooperacion", "Tolva")
       .neq("tipooperacion", "Tolva f")
       .neq("tipooperacion", "proyeccion")

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase-client"
+import { fetchAllRows } from "@/lib/fetch-all-rows"
 import { Tolva } from "@/components/tolva"
 import { Edit2, Eye, Trash2 } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
@@ -48,14 +49,21 @@ export default function VerTolva() {
       // genera saveTolva cuando la fecha cae en domingo). Si filtramos
       // solo por "Tolva" los registros de domingo no apareceran en la
       // vista — mismo modulo, distinto sufijo.
-      const { data: tolvasData, error: tolvasError } = await supabase
-        .from("cabeceraoc")
-        .select("*")
-        .eq("idempresa", selectedEmpresaId)
-        .in("tipooperacion", ["Tolva", "Tolva f"])
-        .order("fechaorden", { ascending: false })
-
-      if (tolvasError) {
+      // PAGINADO con orden único (fechaorden desc, id): hoy son 379 tolvas en
+      // ID1, pero la lista crece y Supabase corta en 1.000 sin avisar.
+      let tolvasData: any[]
+      try {
+        tolvasData = await fetchAllRows((from, to) =>
+          supabase
+            .from("cabeceraoc")
+            .select("*")
+            .eq("idempresa", selectedEmpresaId)
+            .in("tipooperacion", ["Tolva", "Tolva f"])
+            .order("fechaorden", { ascending: false })
+            .order("id", { ascending: false })
+            .range(from, to),
+        )
+      } catch (tolvasError) {
         console.error("[v0] Error loading tolvas:", tolvasError)
         toast({
           title: "Error",
@@ -65,24 +73,28 @@ export default function VerTolva() {
         return
       }
 
-      // Fetch details for each tolva
-      if (tolvasData) {
-        const tolvasWithDetails = await Promise.all(
-          tolvasData.map(async (tolva) => {
-            const { data: detalles } = await supabase
-              .from("detalleoc")
-              .select("id, producto, cantidad, toneladas")
-              .eq("idorden", tolva.id)
-
-            return {
-              ...tolva,
-              detalles: detalles || [],
-            }
-          }),
+      // Detalles en LOTES de 100 órdenes, paginados (antes: una consulta POR
+      // tolva -- 379 peticiones al abrir la pestaña).
+      const detallesPorOrden = new Map<number, NonNullable<TolvaRecord["detalles"]>>()
+      const ids = tolvasData.map((t) => Number(t.id))
+      for (let i = 0; i < ids.length; i += 100) {
+        const lote = ids.slice(i, i + 100)
+        const detalles = await fetchAllRows((from, to) =>
+          supabase
+            .from("detalleoc")
+            .select("id, idorden, producto, cantidad, toneladas")
+            .in("idorden", lote)
+            .order("id")
+            .range(from, to),
         )
-
-        setTolvas(tolvasWithDetails as TolvaRecord[])
+        for (const d of detalles) {
+          const arr = detallesPorOrden.get(Number(d.idorden)) || []
+          arr.push({ id: d.id, producto: d.producto, cantidad: d.cantidad, toneladas: d.toneladas })
+          detallesPorOrden.set(Number(d.idorden), arr)
+        }
       }
+
+      setTolvas(tolvasData.map((t) => ({ ...t, detalles: detallesPorOrden.get(Number(t.id)) || [] })) as TolvaRecord[])
     } catch (error) {
       console.error("[v0] Error loading tolvas:", error)
       toast({

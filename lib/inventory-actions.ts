@@ -81,18 +81,26 @@ export async function getLocationsFromSaldoInvDetalleForTransactions(
     const supabase = await createClient()
     const empresaId = selectedEmpresaId ?? (await getCurrentEmpresaId())
 
-    const { data, error } = await supabase
-      .from("saldoinvdetalle")
-      .select("location")
-      .eq("idempresa", empresaId)
-      .order("location", { ascending: true })
-
-    if (error) {
+    // PAGINADO: saldoinvdetalle supera las 1.000 filas por empresa y Supabase
+    // corta ahí en silencio -- el desplegable de ubicaciones perdía opciones.
+    let data: any[]
+    try {
+      data = await fetchAllRows((from, to) =>
+        supabase
+          .from("saldoinvdetalle")
+          .select("location")
+          .eq("idempresa", empresaId)
+          .order("location", { ascending: true })
+          .order("idproducto")
+          .order("lote")
+          .range(from, to),
+      )
+    } catch (error) {
       console.error("[v0] Error fetching locations from saldoinvdetalle:", error)
       return []
     }
 
-    const uniqueLocations = [...new Set(data?.map((item) => item.location).filter((loc) => loc) || [])]
+    const uniqueLocations = [...new Set(data.map((item) => item.location).filter((loc) => loc))]
     console.log("[v0] Unique locations from saldoinvdetalle:", uniqueLocations)
     return uniqueLocations
   } catch (error) {

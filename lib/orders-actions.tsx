@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase-client"
+import { fetchAllRows } from "@/lib/fetch-all-rows"
 import { getColombiaDateTime, getColombiaDate, getColombiaTime, dateInputToColombiaDate } from "@/lib/date-utils"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import { getCurrentUser, getUserProfile } from "@/lib/auth-actions"
@@ -529,25 +530,29 @@ export async function getOrderFiltersData() {
     // Get all owners accessible to the user from perfil_acceso_owners
     const accessibleOwners = await getUserAccessibleOwners()
 
-    let query = supabase
-      .from("pedidoscabecera")
-      .select("pedido, orden_de_compra, estado, destino, cliente, vendedor")
-      .eq("aprobado", "si")
-      .order("pedido", { ascending: false })
-
-    // Filter by accessible empresas
-    query = query.in("id_empresa", accessibleEmpresas)
-
-    // Filter by accessible owners in empresafactura field (if user has owner permissions)
-    if (accessibleOwners.length > 0) {
-      query = query.in("empresafactura", accessibleOwners)
+    // PAGINADO: pedidoscabecera tiene más de 11.000 filas y Supabase corta en
+    // 1.000 sin avisar -- los filtros (pedidos, órdenes de compra, destinos,
+    // vendedores) perdían valores. Orden único (pedido, idpedido).
+    const construir = () => {
+      let q = supabase
+        .from("pedidoscabecera")
+        .select("pedido, orden_de_compra, estado, destino, cliente, vendedor")
+        .eq("aprobado", "si")
+        .order("pedido", { ascending: false })
+        .order("idpedido", { ascending: false })
+      // Filter by accessible empresas
+      q = q.in("id_empresa", accessibleEmpresas)
+      // Filter by accessible owners in empresafactura field (if user has owner permissions)
+      if (accessibleOwners.length > 0) q = q.in("empresafactura", accessibleOwners)
+      return q
     }
 
-    const { data, error } = await query
-
-    if (error) {
+    let data: any[]
+    try {
+      data = await fetchAllRows((from, to) => construir().range(from, to))
+    } catch (error: any) {
       console.error("[v0] Error fetching order filters data:", error)
-      return { success: false, message: error.message }
+      return { success: false, message: error?.message || "Error al cargar filtros" }
     }
 
     console.log("[v0] Raw order filters data:", data)
@@ -2157,16 +2162,21 @@ export async function getSanitaryRegistryHistory(selectedEmpresaId?: number | nu
 export async function getEstadosFilter() {
   const supabase = await createClient()
   try {
-    const { data, error } = await supabase.from("pedidoscabecera").select("estado").order("estado", { ascending: true })
-
-    if (error) {
+    // PAGINADO: pedidoscabecera tiene más de 11.000 filas y Supabase corta en
+    // 1.000 sin avisar -- el filtro de estados podía perder valores.
+    let data: any[]
+    try {
+      data = await fetchAllRows((from, to) =>
+        supabase.from("pedidoscabecera").select("estado").order("estado", { ascending: true }).order("idpedido").range(from, to),
+      )
+    } catch (error: any) {
       console.error("Error fetching estados:", error)
-      return { success: false, message: error.message }
+      return { success: false, message: error?.message || "Error al cargar estados" }
     }
 
     // Get unique estados and filter out null/empty values
     const uniqueEstados = [
-      ...new Set(data?.map((row) => row.estado).filter((estado) => estado && estado.trim() !== "")),
+      ...new Set(data.map((row) => row.estado).filter((estado) => estado && estado.trim() !== "")),
     ].sort()
 
     return { success: true, data: uniqueEstados }

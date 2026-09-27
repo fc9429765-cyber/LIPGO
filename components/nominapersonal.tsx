@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase-client"
+import { fetchAllRows } from "@/lib/fetch-all-rows"
 import { getArchivoPlano } from "@/lib/archivo-plano-actions"
 import { useToast } from "@/components/ui/use-toast"
 import { Download, RefreshCw } from "lucide-react"
@@ -276,13 +277,22 @@ export default function Nominapersonal() {
     setLoading(true)
     try {
       const supabase = await createClient()
-      const { data, error } = await supabase
-        .from("toneladasauxiliarespago")
-        .select("*")
-        .eq("idempresa", selectedEmpresaId)
-        .order("fechacargue", { ascending: false })
-
-      if (error) {
+      // PAGINADO: la vista tiene más de 1.000 filas por empresa (al 2026-09-27:
+      // ID1 3.179, ID2 1.774, ID3 1.422, ID4 1.145) y Supabase corta en 1.000
+      // sin avisar -- esta tabla mostraba solo los días más recientes. Orden
+      // único (fecha, persona) para que las páginas no se solapen.
+      let data: any[]
+      try {
+        data = await fetchAllRows((from, to) =>
+          supabase
+            .from("toneladasauxiliarespago")
+            .select("*")
+            .eq("idempresa", selectedEmpresaId)
+            .order("fechacargue", { ascending: false })
+            .order("persona")
+            .range(from, to),
+        )
+      } catch (error) {
         console.error("Error loading totales:", error)
         toast({ title: "Error", description: "Error al cargar datos", variant: "destructive" })
         return

@@ -2102,7 +2102,11 @@ async function _computeIndicadoresValores(
 
     // --- Satisfacción (sig_satisfaccion): promedio 1-5 → % ---
     const avgSat = async (tipo: string): Promise<{ v: number; n: number }> => {
-      const { data } = await supabase.from("sig_satisfaccion").select("calificacion").eq("activo", true).eq("tipo", tipo).in("proyecto_id", clientes)
+      // Paginado: ya hay más de 1.000 calificaciones y Supabase corta ahí en
+      // silencio (el promedio salía sobre las primeras 1.000).
+      const data = await pagAll((from, to) =>
+        supabase.from("sig_satisfaccion").select("calificacion").eq("activo", true).eq("tipo", tipo).in("proyecto_id", clientes).order("id").range(from, to),
+      )
       const vals = (data ?? []).map((r: any) => Number(r.calificacion) || 0).filter((x: number) => x > 0)
       const avg = vals.length ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : 0
       return { v: Math.round((avg / 5) * 1000) / 10, n: vals.length }
@@ -2149,9 +2153,14 @@ async function _computeIndicadoresValores(
     // superar los 1000 registros históricos, ver lipgo-supabase-1000-rows).
     const ordenesSlaCodigos = Array.from(new Set((slaRows ?? []).map((r: any) => String(r.ordendecargue))))
     const esSubproductoPorOc = new Set<string>()
-    for (let i = 0; i < ordenesSlaCodigos.length; i += 500) {
-      const chunk = ordenesSlaCodigos.slice(i, i + 500)
-      const { data: detChunk } = await supabase.from("detalleoc").select("numeroorden, producto").in("numeroorden", chunk)
+    // Lotes de 200 órdenes Y paginado: con 500 órdenes por lote el detalle
+    // superaba las 1.000 líneas y Supabase cortaba ahí en silencio, así que
+    // parte de los subproductos no se detectaban y su SLA se medía mal.
+    for (let i = 0; i < ordenesSlaCodigos.length; i += 200) {
+      const chunk = ordenesSlaCodigos.slice(i, i + 200)
+      const detChunk = await pagAll((from, to) =>
+        supabase.from("detalleoc").select("numeroorden, producto").in("numeroorden", chunk).order("id").range(from, to),
+      )
       for (const d of detChunk ?? []) if (esNombreSubproducto(d.producto)) esSubproductoPorOc.add(String(d.numeroorden))
     }
     let slaOk = 0, slaTot = 0
@@ -4848,9 +4857,13 @@ export async function getPanelOperacionLIP(
       new Set(rows.filter((r) => r.iniciocargue && r.fincargue).map((r) => String(r.ordendecargue))),
     )
     const esSubproductoPorOcPanel = new Set<string>()
-    for (let i = 0; i < ordenesSlaCodigosPanel.length; i += 500) {
-      const chunk = ordenesSlaCodigosPanel.slice(i, i + 500)
-      const { data: detChunk } = await supabase.from("detalleoc").select("numeroorden, producto").in("numeroorden", chunk)
+    // Lotes de 200 órdenes Y paginado (misma razón que en getIndicadoresValores:
+    // con 500 el detalle superaba las 1.000 líneas y se truncaba en silencio).
+    for (let i = 0; i < ordenesSlaCodigosPanel.length; i += 200) {
+      const chunk = ordenesSlaCodigosPanel.slice(i, i + 200)
+      const detChunk = await pagAll((from, to) =>
+        supabase.from("detalleoc").select("numeroorden, producto").in("numeroorden", chunk).order("id").range(from, to),
+      )
       for (const d of detChunk ?? []) if (esNombreSubproducto(d.producto)) esSubproductoPorOcPanel.add(String(d.numeroorden))
     }
     const slaTipoMap: Record<string, { sumaReal: number; n: number; ok: number; sla: number }> = {}
