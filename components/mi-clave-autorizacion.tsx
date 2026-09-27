@@ -26,14 +26,16 @@ import { AlertTriangle, CheckCircle2, Eye, EyeOff, KeyRound, Loader2, Mail, Shie
 import { useToast } from "@/hooks/use-toast"
 import {
   cambiarMiClave,
+  confirmarCorreoRecuperacion,
   crearMiClave,
   getMiEstadoClave,
   recuperarClaveConCodigo,
   solicitarCodigoRecuperacion,
+  solicitarVerificacionCorreo,
 } from "@/lib/autorizaciones-actions"
 import { CLAVE_MIN_LARGO, validarFormatoClave, type EstadoMiClave } from "@/lib/autorizaciones"
 
-type Pestana = "clave" | "recuperar" | "autorizaciones"
+type Pestana = "clave" | "correo" | "recuperar" | "autorizaciones"
 
 function fmtFecha(iso: string | null | undefined): string {
   if (!iso) return ""
@@ -147,6 +149,13 @@ export function MiClaveAutorizacionDialog({
   const [confirmarRec, setConfirmarRec] = useState("")
   const [restableciendo, setRestableciendo] = useState(false)
 
+  // Correo de recuperación (buzón real, distinto del correo de acceso)
+  const [correoNuevo, setCorreoNuevo] = useState("")
+  const [enviandoCorreo, setEnviandoCorreo] = useState(false)
+  const [correoPendiente, setCorreoPendiente] = useState<string | null>(null)
+  const [codigoCorreo, setCodigoCorreo] = useState("")
+  const [confirmandoCorreo, setConfirmandoCorreo] = useState(false)
+
   const cargar = useCallback(async () => {
     setCargando(true)
     try {
@@ -166,8 +175,36 @@ export function MiClaveAutorizacionDialog({
     setCodigo("")
     setNuevaRec("")
     setConfirmarRec("")
+    setCorreoNuevo("")
+    setCorreoPendiente(null)
+    setCodigoCorreo("")
     cargar()
   }, [open, pestanaInicial, cargar])
+
+  const enviarVerificacionCorreo = async () => {
+    setEnviandoCorreo(true)
+    const r = await solicitarVerificacionCorreo(correoNuevo)
+    setEnviandoCorreo(false)
+    if (r.success) {
+      setCorreoPendiente(r.destino ?? correoNuevo)
+      setCodigoCorreo("")
+      toast({ title: "Código enviado", description: r.message })
+    } else toast({ title: "No se pudo enviar", description: r.message, variant: "destructive" })
+  }
+
+  const confirmarCorreo = async () => {
+    if (codigoCorreo.length !== 6) return
+    setConfirmandoCorreo(true)
+    const r = await confirmarCorreoRecuperacion(codigoCorreo)
+    setConfirmandoCorreo(false)
+    if (r.success) {
+      toast({ title: "Correo confirmado", description: r.message })
+      setCorreoPendiente(null)
+      setCorreoNuevo("")
+      setCodigoCorreo("")
+      await cargar()
+    } else toast({ title: "No se pudo confirmar", description: r.message, variant: "destructive" })
+  }
 
   const errorFormato = nueva ? validarFormatoClave(nueva) : null
   const puedeGuardar = Boolean(nueva && confirmar && !errorFormato && nueva === confirmar && (estado?.tieneClave ? actual : true))
@@ -249,11 +286,28 @@ export function MiClaveAutorizacionDialog({
                 <EstadoBadge estado={estado} />
                 {estado.actualizadaEn && <span className="text-xs text-muted-foreground">Actualizada: {fmtFecha(estado.actualizadaEn)}</span>}
               </div>
-              {estado.correoEnmascarado && (
+              {estado.correoRecuperacion ? (
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Mail className="h-3.5 w-3.5" /> Correo de recuperación: {estado.correoEnmascarado}
+                  <Mail className="h-3.5 w-3.5" /> Correo de recuperación: {estado.correoRecuperacion}
+                  {estado.correoRecuperacionVerificado ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  ) : (
+                    <span className="text-amber-700">(sin confirmar)</span>
+                  )}
                 </p>
-              )}
+              ) : estado.correoLoginRecibe === false ? (
+                <p className="flex items-start gap-1.5 text-xs text-amber-800">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    Tu usuario de acceso ({estado.correoEnmascarado}) no es un buzón real. Registra un correo de recuperación en la
+                    pestaña <b>Correo</b> para poder recuperar tu clave.
+                  </span>
+                </p>
+              ) : estado.correoEnmascarado ? (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Mail className="h-3.5 w-3.5" /> Correo de recuperación: {estado.correoEnmascarado} (el de acceso)
+                </p>
+              ) : null}
               {transicionVigente && (
                 <p className="text-xs text-muted-foreground">
                   Hasta el <b>{estado.transicionHasta}</b> también siguen valiendo las claves compartidas de antes. Después, solo
@@ -267,11 +321,89 @@ export function MiClaveAutorizacionDialog({
         </div>
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as Pestana)}>
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="clave">Mi clave</TabsTrigger>
+            <TabsTrigger value="correo" className="gap-1">
+              Correo
+              {estado && !estado.correoRecuperacion && estado.correoLoginRecibe === false && <AlertTriangle className="h-3 w-3 text-amber-600" />}
+            </TabsTrigger>
             <TabsTrigger value="recuperar">Recuperar</TabsTrigger>
-            <TabsTrigger value="autorizaciones">Autorizaciones{estado ? ` (${estado.autorizaciones.length})` : ""}</TabsTrigger>
+            <TabsTrigger value="autorizaciones">Permisos{estado ? ` (${estado.autorizaciones.length})` : ""}</TabsTrigger>
           </TabsList>
+
+          {/* ===== Correo de recuperación ===== */}
+          <TabsContent value="correo" className="mt-4 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              El correo de recuperación es un <b>buzón real</b> (tu Gmail, Outlook o corporativo) donde te llegan los códigos para
+              recuperar tu clave. Es distinto del usuario con el que entras a LIPgo, que puede no recibir correo.
+            </p>
+            {estado?.correoRecuperacion && (
+              <div className="flex items-center gap-2 rounded-md border p-2.5 text-xs">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                <span>
+                  Actual: <b>{estado.correoRecuperacion}</b>{" "}
+                  {estado.correoRecuperacionVerificado ? (
+                    <span className="text-emerald-700">confirmado</span>
+                  ) : (
+                    <span className="text-amber-700">sin confirmar (lo registró Gestión de Usuarios; puedes confirmarlo o cambiarlo abajo)</span>
+                  )}
+                </span>
+              </div>
+            )}
+            {!estado?.correoDisponible ? (
+              <p className="flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> El envío de correos no está configurado; pide a Gestión de Usuarios que
+                registre tu correo de recuperación.
+              </p>
+            ) : !correoPendiente ? (
+              <div className="space-y-2">
+                <div className="space-y-1">
+                  <Label htmlFor="correo-rec" className="text-xs uppercase text-muted-foreground">
+                    {estado?.correoRecuperacion ? "Nuevo correo de recuperación" : "Tu correo de recuperación"}
+                  </Label>
+                  <Input
+                    id="correo-rec"
+                    type="email"
+                    value={correoNuevo}
+                    onChange={(e) => setCorreoNuevo(e.target.value)}
+                    placeholder="nombre@gmail.com"
+                    autoComplete="email"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && correoNuevo.includes("@")) enviarVerificacionCorreo()
+                    }}
+                  />
+                </div>
+                <Button onClick={enviarVerificacionCorreo} disabled={!correoNuevo.includes("@") || enviandoCorreo} className="w-full" variant="secondary">
+                  {enviandoCorreo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                  Enviarme un código a ese correo
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Enviado a <b>{correoPendiente}</b>. Escribe el código de 6 dígitos para confirmar que ese correo es tuyo.{" "}
+                  <button type="button" className="text-primary underline-offset-2 hover:underline" onClick={enviarVerificacionCorreo} disabled={enviandoCorreo}>
+                    Reenviar
+                  </button>{" "}
+                  ·{" "}
+                  <button type="button" className="text-primary underline-offset-2 hover:underline" onClick={() => setCorreoPendiente(null)}>
+                    Cambiar correo
+                  </button>
+                </p>
+                <InputOTP maxLength={6} value={codigoCorreo} onChange={setCodigoCorreo}>
+                  <InputOTPGroup>
+                    {[0, 1, 2, 3, 4, 5].map((i) => (
+                      <InputOTPSlot key={i} index={i} />
+                    ))}
+                  </InputOTPGroup>
+                </InputOTP>
+                <Button onClick={confirmarCorreo} disabled={codigoCorreo.length !== 6 || confirmandoCorreo} className="w-full">
+                  {confirmandoCorreo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                  Confirmar correo
+                </Button>
+              </div>
+            )}
+          </TabsContent>
 
           {/* ===== Mi clave ===== */}
           <TabsContent value="clave" className="mt-4 space-y-3">
@@ -323,10 +455,20 @@ export function MiClaveAutorizacionDialog({
                   defines la tuya.
                 </span>
               </div>
+            ) : !estado.correoRecuperacion && estado.correoLoginRecibe === false ? (
+              <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  Tu usuario de acceso ({estado.correoEnmascarado}) no es un buzón real, así que no hay dónde enviarte el código.
+                  Registra primero un correo de recuperación en la pestaña <b>Correo</b>. Si ya no recuerdas tu clave y no puedes
+                  entrar, pide a Gestión de Usuarios una clave provisional.
+                </span>
+              </div>
             ) : !destino ? (
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">
-                  Te enviaremos un código de 6 dígitos a <b>{estado.correoEnmascarado ?? "tu correo"}</b>. Vence en 15 minutos.
+                  Te enviaremos un código de 6 dígitos a <b>{estado.correoRecuperacion ?? estado.correoEnmascarado ?? "tu correo"}</b>. Vence en
+                  15 minutos.
                 </p>
                 <Button onClick={enviarCodigo} disabled={enviando} className="w-full" variant="secondary">
                   {enviando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}

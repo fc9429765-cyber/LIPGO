@@ -1,4 +1,5 @@
 import "server-only"
+import { promises as dns } from "node:dns"
 
 /**
  * Envío de correo transaccional de LIPgo (hoy: código de recuperación de la
@@ -30,6 +31,59 @@ export function remitenteCorreo(): string {
 /** true si se está usando el remitente de prueba de Resend (solo llega al dueño de la cuenta). */
 export function remitenteEsDePrueba(): boolean {
   return /resend\.dev/i.test(remitenteCorreo())
+}
+
+// ¿El dominio de un correo puede RECIBIR mensajes? (tiene registros MX). Las
+// cuentas de LIPgo entran con direcciones @lipgo.app que no son buzones: enviar
+// ahí un código de recuperación es tirarlo. Caché de 1 h por dominio. Ante un
+// error de DNS se responde null (desconocido) y no se bloquea al usuario.
+const cacheMx = new Map<string, { exp: number; recibe: boolean }>()
+
+// Consulta MX por DNS-sobre-HTTPS (Google y Cloudflare), independiente del
+// resolutor del sistema (en algunos equipos/entornos serverless el de Node no
+// responde). Devuelve true/false, o null si ninguno contestó.
+async function mxPorDoH(dominio: string): Promise<boolean | null> {
+  const fuentes = [
+    `https://dns.google/resolve?name=${encodeURIComponent(dominio)}&type=MX`,
+    `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(dominio)}&type=MX`,
+  ]
+  for (const url of fuentes) {
+    try {
+      const r = await fetch(url, { headers: { accept: "application/dns-json" }, signal: AbortSignal.timeout(4000) })
+      if (!r.ok) continue
+      const j: any = await r.json()
+      // Status 0 = NOERROR, 3 = NXDOMAIN. Answer con type 15 = MX.
+      if (j?.Status === 3) return false
+      if (j?.Status !== 0) continue
+      const mx = (j.Answer ?? []).filter((a: any) => a.type === 15 && String(a.data ?? "").trim() && !/\s\.$/.test(String(a.data)))
+      return mx.length > 0
+    } catch {
+      /* siguiente fuente */
+    }
+  }
+  return null
+}
+
+export async function dominioRecibeCorreo(email: string | null | undefined): Promise<boolean | null> {
+  const dominio = String(email ?? "").split("@")[1]?.trim().toLowerCase()
+  if (!dominio) return false
+  const hit = cacheMx.get(dominio)
+  if (hit && hit.exp > Date.now()) return hit.recibe
+  let recibe: boolean | null = null
+  try {
+    const mx = await dns.resolveMx(dominio)
+    recibe = Array.isArray(mx) && mx.some((m) => m.exchange && m.exchange !== ".")
+  } catch (e: any) {
+    // ENODATA / ENOTFOUND = el dominio existe pero no tiene MX (o no existe): no recibe.
+    if (e?.code === "ENODATA" || e?.code === "ENOTFOUND") recibe = false
+    else recibe = await mxPorDoH(dominio)
+  }
+  if (recibe !== null) cacheMx.set(dominio, { exp: Date.now() + 3600_000, recibe })
+  return recibe
+}
+
+export function formatoCorreoValido(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(email ?? "").trim())
 }
 
 export interface ResultadoEnvioCorreo {

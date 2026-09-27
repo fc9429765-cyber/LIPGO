@@ -64,7 +64,13 @@ export interface EstadoMiClave {
   provisional: boolean
   bloqueadaHasta: string | null
   actualizadaEn: string | null
+  /** Correo con el que el usuario ENTRA a LIPgo (enmascarado). Puede no ser un buzón real. */
   correoEnmascarado: string | null
+  /** false si el dominio del correo de acceso no recibe mensajes (p. ej. @lipgo.app); null = no se pudo saber. */
+  correoLoginRecibe: boolean | null
+  /** Correo REAL de recuperación registrado por el usuario o la gerencia (enmascarado). */
+  correoRecuperacion: string | null
+  correoRecuperacionVerificado: boolean
   /** true si el servidor puede enviar correos (RESEND_API_KEY configurada). */
   correoDisponible: boolean
   transicionHasta: string | null
@@ -101,7 +107,13 @@ export interface UsuarioAutorizacion {
   id: string
   usuario: string
   empresa_id: number | null
+  /** Correo de ACCESO (puede no ser un buzón real). */
   email: string | null
+  /** false si el dominio del correo de acceso no recibe mensajes. */
+  emailRecibe: boolean | null
+  /** Correo real de recuperación (completo, solo lo ve la administración). */
+  correoRecuperacion: string | null
+  correoRecuperacionVerificado: boolean
   tieneClave: boolean
   provisional: boolean
   bloqueadaHasta: string | null

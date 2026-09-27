@@ -27,7 +27,7 @@ import {
   hashCodigoRecuperacion,
   generarClaveProvisional,
 } from "@/lib/autorizaciones-crypto"
-import { correoConfigurado, enviarCorreo, remitenteCorreo, remitenteEsDePrueba } from "@/lib/email"
+import { correoConfigurado, enviarCorreo, remitenteCorreo, remitenteEsDePrueba, dominioRecibeCorreo, formatoCorreoValido } from "@/lib/email"
 import {
   CONFIG_TRANSICION,
   MAX_INTENTOS_CLAVE,
@@ -91,6 +91,32 @@ async function rechazoFinanciero(sb: any, usuarioId: string, procesos: string[])
   return `${usuario} no tiene módulos de Gestión Financiera en Gestión de Usuarios y esto incluye ${financieros.length === 1 ? "un proceso financiero" : `${financieros.length} procesos financieros`} (${financieros.join(", ")}). ${MSG_SOLO_LIP} Otórgale primero el acceso financiero allí (solo LIPgo puede) o usa un perfil sin procesos financieros.`
 }
 
+/**
+ * A qué correo se envían los códigos de un usuario: su correo de RECUPERACIÓN
+ * (autorizacion_correos, SQL 204) si lo registró; si no, su correo de acceso,
+ * siempre que el dominio reciba mensajes (las cuentas @lipgo.app NO son buzones).
+ */
+async function destinoRecuperacion(
+  sb: any,
+  user: { id: string; email?: string | null },
+): Promise<{ ok: true; correo: string; fuente: "recuperacion" | "acceso" } | { ok: false; error: string }> {
+  const { data: rec } = await sb.from("autorizacion_correos").select("correo").eq("usuario_id", user.id).maybeSingle()
+  const correoRec = String(rec?.correo || "").trim()
+  if (correoRec.includes("@")) return { ok: true, correo: correoRec, fuente: "recuperacion" }
+  const login = String(user.email || "").trim()
+  if (!login.includes("@")) {
+    return { ok: false, error: "Tu usuario no tiene correo. Registra un correo de recuperación en la pestaña «Correo» de esta ventana, o pide a Gestión de Usuarios una clave provisional." }
+  }
+  const recibe = await dominioRecibeCorreo(login)
+  if (recibe === false) {
+    return {
+      ok: false,
+      error: `Tu correo de acceso (${enmascararCorreo(login)}) no es un buzón real: nada enviado ahí llega. Registra un correo de recuperación real (tu Gmail o tu correo corporativo) en la pestaña «Correo» de esta ventana.`,
+    }
+  }
+  return { ok: true, correo: login, fuente: "acceso" }
+}
+
 function alcanceTexto(ids: (number | null)[], empresas: Map<number, string>): string {
   if (ids.some((i) => i == null)) return "Todos los proyectos"
   const nombres = Array.from(new Set(ids.map((i) => empresas.get(Number(i)) || `Proyecto ${i}`)))
@@ -115,6 +141,8 @@ export async function getMiEstadoClave(): Promise<EstadoMiClave | null> {
       sb.from("empresas").select("id, nombre"),
       getTransicionHasta(sb),
     ])
+    const { data: correoRec } = await sb.from("autorizacion_correos").select("correo, verificado").eq("usuario_id", user.id).maybeSingle()
+    const correoLoginRecibe = await dominioRecibeCorreo(user.email)
     const empresas = new Map<number, string>((emps ?? []).map((e: any) => [Number(e.id), String(e.nombre)]))
     const catalogo = new Map<string, any>((procesos ?? []).map((p: any) => [p.codigo, p]))
 
@@ -173,6 +201,9 @@ export async function getMiEstadoClave(): Promise<EstadoMiClave | null> {
       bloqueadaHasta: clave?.bloqueado_hasta && new Date(clave.bloqueado_hasta).getTime() > Date.now() ? clave.bloqueado_hasta : null,
       actualizadaEn: clave?.actualizado_en ?? null,
       correoEnmascarado: enmascararCorreo(user.email),
+      correoLoginRecibe,
+      correoRecuperacion: enmascararCorreo(correoRec?.correo),
+      correoRecuperacionVerificado: Boolean(correoRec?.verificado),
       correoDisponible: correoConfigurado(),
       transicionHasta,
       autorizaciones,
@@ -266,12 +297,13 @@ export async function solicitarCodigoRecuperacion(): Promise<Resp<{ destino: str
         message: "El envío de correos aún no está configurado en LIPgo. Pide a Gestión de Usuarios una clave provisional (Autorizaciones por clave › Clave provisional) y luego define la tuya.",
       }
     }
-    const email = String(user.email || "").trim()
-    if (!email.includes("@")) return { success: false, message: "Tu usuario no tiene un correo válido registrado. Pide a Gestión de Usuarios una clave provisional." }
-
     const sb: any = await getSupabaseAdmin()
+    const dest = await destinoRecuperacion(sb, user)
+    if (!dest.ok) return { success: false, message: dest.error }
+    const email = dest.correo
+
     const hace30 = new Date(Date.now() - 30 * 60_000).toISOString()
-    const { count } = await sb.from("autorizacion_recuperacion").select("id", { count: "exact", head: true }).eq("usuario_id", user.id).gte("created_at", hace30)
+    const { count } = await sb.from("autorizacion_recuperacion").select("id", { count: "exact", head: true }).eq("usuario_id", user.id).eq("canal", "correo").gte("created_at", hace30)
     if (Number(count || 0) >= MAX_CODIGOS_POR_30_MIN) {
       return { success: false, message: "Ya se enviaron varios códigos en los últimos 30 minutos. Revisa tu correo (también spam) o espera un momento." }
     }
@@ -326,6 +358,7 @@ export async function recuperarClaveConCodigo(codigo: string, nueva: string, con
       .from("autorizacion_recuperacion")
       .select("*")
       .eq("usuario_id", user.id)
+      .eq("canal", "correo")
       .is("usado_en", null)
       .gt("expira_en", new Date().toISOString())
       .order("created_at", { ascending: false })
@@ -364,6 +397,102 @@ export async function recuperarClaveConCodigo(codigo: string, nueva: string, con
   }
 }
 
+// ---------------------------------------------------------------------------
+// Correo de RECUPERACIÓN (SQL 204): un buzón real, distinto del correo de acceso.
+// El usuario lo registra y lo confirma con un código enviado a ESE correo.
+// ---------------------------------------------------------------------------
+
+export async function solicitarVerificacionCorreo(correo: string): Promise<Resp<{ destino: string }>> {
+  try {
+    const user = await getCurrentUser()
+    if (!user) return { success: false, message: "No hay sesión activa." }
+    const c = String(correo || "").trim().toLowerCase()
+    if (!formatoCorreoValido(c)) return { success: false, message: "Escribe un correo válido (por ejemplo nombre@gmail.com)." }
+    if ((await dominioRecibeCorreo(c)) === false) {
+      return { success: false, message: `El dominio de ${c} no recibe correo. Usa un buzón real: tu Gmail, Outlook o tu correo corporativo.` }
+    }
+    if (!correoConfigurado()) return { success: false, message: "El envío de correos no está configurado en este despliegue." }
+
+    const sb: any = await getSupabaseAdmin()
+    const hace30 = new Date(Date.now() - 30 * 60_000).toISOString()
+    const { count } = await sb.from("autorizacion_recuperacion").select("id", { count: "exact", head: true }).eq("usuario_id", user.id).eq("canal", "verificar_correo").gte("created_at", hace30)
+    if (Number(count || 0) >= MAX_CODIGOS_POR_30_MIN) {
+      return { success: false, message: "Ya se enviaron varios códigos en los últimos 30 minutos. Revisa ese correo (también spam) o espera un momento." }
+    }
+    const codigo = generarCodigoRecuperacion()
+    const expira = new Date(Date.now() + CODIGO_VIGENCIA_MIN * 60_000).toISOString()
+    const { data: fila, error } = await sb
+      .from("autorizacion_recuperacion")
+      .insert({ usuario_id: user.id, codigo_hash: hashCodigoRecuperacion(codigo, user.id), canal: "verificar_correo", destino: c, expira_en: expira })
+      .select("id")
+      .single()
+    if (error) return { success: false, message: error.message }
+    const usuario = (await nombreDeUsuario(sb, user.id)) || c
+    const envio = await enviarCorreo({
+      to: c,
+      subject: `LIPgo · confirma tu correo de recuperación: ${codigo}`,
+      text: `Hola ${usuario},\n\nCódigo para confirmar este correo como tu correo de recuperación en LIPgo: ${codigo}\n\nVence en ${CODIGO_VIGENCIA_MIN} minutos. Si no lo solicitaste, ignora este mensaje.\n\nLIPgo`,
+      html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">
+  <h2 style="margin:0 0 12px;color:#111827">Confirma tu correo de recuperación</h2>
+  <p style="color:#374151">Hola <b>${usuario}</b>, escribe este código en LIPgo para confirmar que este correo es tuyo. Aquí llegarán los códigos para recuperar tu clave de autorización.</p>
+  <p style="font-size:32px;letter-spacing:8px;font-weight:700;text-align:center;margin:20px 0;color:#111827">${codigo}</p>
+  <p style="color:#6b7280;font-size:13px">Vence en ${CODIGO_VIGENCIA_MIN} minutos. Si no lo solicitaste, ignora este mensaje.</p>
+</div>`,
+    })
+    if (!envio.ok) {
+      await sb.from("autorizacion_recuperacion").delete().eq("id", fila.id)
+      return { success: false, message: envio.error || "No se pudo enviar el correo." }
+    }
+    await logInterno({ usuario_id: user.id, usuario, proceso: "clave_personal", resultado: "verificacion_correo_enviada", detalle: { destino: enmascararCorreo(c) } })
+    const destino = enmascararCorreo(c) || c
+    return { success: true, destino, message: `Te enviamos un código a ${destino}. Escríbelo aquí para confirmar el correo.` }
+  } catch (e: any) {
+    return { success: false, message: e?.message || "No se pudo enviar el código de verificación." }
+  }
+}
+
+export async function confirmarCorreoRecuperacion(codigo: string): Promise<Resp<{ correo: string }>> {
+  try {
+    const user = await getCurrentUser()
+    if (!user) return { success: false, message: "No hay sesión activa." }
+    const cod = String(codigo || "").replace(/\D/g, "")
+    if (cod.length !== 6) return { success: false, message: "El código tiene 6 dígitos." }
+    const sb: any = await getSupabaseAdmin()
+    const { data: fila } = await sb
+      .from("autorizacion_recuperacion")
+      .select("*")
+      .eq("usuario_id", user.id)
+      .eq("canal", "verificar_correo")
+      .is("usado_en", null)
+      .gt("expira_en", new Date().toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (!fila) return { success: false, message: "No hay un código vigente. Solicita uno nuevo." }
+    if (Number(fila.intentos) >= MAX_INTENTOS_CODIGO) {
+      await sb.from("autorizacion_recuperacion").update({ usado_en: new Date().toISOString() }).eq("id", fila.id)
+      return { success: false, message: "Ese código se invalidó por demasiados intentos. Solicita uno nuevo." }
+    }
+    if (fila.codigo_hash !== hashCodigoRecuperacion(cod, user.id)) {
+      await sb.from("autorizacion_recuperacion").update({ intentos: Number(fila.intentos) + 1 }).eq("id", fila.id)
+      const quedan = MAX_INTENTOS_CODIGO - Number(fila.intentos) - 1
+      return { success: false, message: `Código incorrecto. Te quedan ${quedan} intento${quedan === 1 ? "" : "s"}.` }
+    }
+    const usuario = await nombreDeUsuario(sb, user.id)
+    const ahora = new Date().toISOString()
+    await sb.from("autorizacion_recuperacion").update({ usado_en: ahora }).eq("id", fila.id)
+    const { error } = await sb.from("autorizacion_correos").upsert(
+      { usuario_id: user.id, correo: String(fila.destino), verificado: true, origen: "usuario", actualizado_en: ahora, actualizado_por: usuario },
+      { onConflict: "usuario_id" },
+    )
+    if (error) return { success: false, message: error.message }
+    await logInterno({ usuario_id: user.id, usuario, proceso: "clave_personal", resultado: "correo_recuperacion_confirmado", detalle: { destino: enmascararCorreo(fila.destino) } })
+    return { success: true, correo: enmascararCorreo(fila.destino) || "", message: "Correo de recuperación confirmado. Ahí llegarán tus códigos." }
+  } catch (e: any) {
+    return { success: false, message: e?.message || "No se pudo confirmar el correo." }
+  }
+}
+
 // ===========================================================================
 // ADMINISTRACIÓN
 // ===========================================================================
@@ -399,6 +528,7 @@ export async function adminGetResumen(): Promise<Resp<{ data: ResumenAutorizacio
       { data: emps },
       transicionHasta,
       emails,
+      { data: correosRec },
     ] = await Promise.all([
       sb.from("autorizacion_procesos").select("*").order("orden"),
       sb.from("autorizacion_perfiles").select("*").order("nombre"),
@@ -410,7 +540,17 @@ export async function adminGetResumen(): Promise<Resp<{ data: ResumenAutorizacio
       sb.from("empresas").select("id, nombre").order("id"),
       getTransicionHasta(sb),
       emailsPorUsuario(sb),
+      sb.from("autorizacion_correos").select("usuario_id, correo, verificado"),
     ])
+    const correoRecPorUsuario = new Map<string, any>((correosRec ?? []).map((c: any) => [String(c.usuario_id), c]))
+    // ¿El dominio del correo de acceso recibe mensajes? (caché por dominio dentro de dominioRecibeCorreo)
+    const recibePorDominio = new Map<string, boolean | null>()
+    const recibe = async (email: string | null) => {
+      const dom = String(email ?? "").split("@")[1]?.toLowerCase()
+      if (!dom) return null
+      if (!recibePorDominio.has(dom)) recibePorDominio.set(dom, await dominioRecibeCorreo(email))
+      return recibePorDominio.get(dom) ?? null
+    }
     const perfilNombre = new Map<number, string>((perfiles ?? []).map((p: any) => [Number(p.id), String(p.nombre)]))
     const usuariosPorPerfil = new Map<number, number>()
     for (const a of asig ?? []) usuariosPorPerfil.set(Number(a.perfil_id), (usuariosPorPerfil.get(Number(a.perfil_id)) || 0) + 1)
@@ -424,13 +564,19 @@ export async function adminGetResumen(): Promise<Resp<{ data: ResumenAutorizacio
       usuarios: usuariosPorPerfil.get(Number(p.id)) || 0,
     }))
     const clavePorUsuario = new Map<string, any>((claves ?? []).map((c: any) => [String(c.usuario_id), c]))
-    const usuarios: UsuarioAutorizacion[] = (profiles ?? []).map((u: any) => {
+    const usuarios: UsuarioAutorizacion[] = []
+    for (const u of profiles ?? []) {
       const c = clavePorUsuario.get(String(u.id))
-      return {
+      const email = emails[String(u.id)] ?? null
+      const rec = correoRecPorUsuario.get(String(u.id))
+      usuarios.push({
         id: String(u.id),
         usuario: String(u.usuario ?? ""),
         empresa_id: u.empresa_id == null ? null : Number(u.empresa_id),
-        email: emails[String(u.id)] ?? null,
+        email,
+        emailRecibe: await recibe(email),
+        correoRecuperacion: rec?.correo ?? null,
+        correoRecuperacionVerificado: Boolean(rec?.verificado),
         tieneClave: Boolean(c),
         provisional: Boolean(c?.provisional),
         bloqueadaHasta: c?.bloqueado_hasta && new Date(c.bloqueado_hasta).getTime() > Date.now() ? c.bloqueado_hasta : null,
@@ -441,8 +587,8 @@ export async function adminGetResumen(): Promise<Resp<{ data: ResumenAutorizacio
         excepciones: (exc ?? [])
           .filter((e: any) => String(e.usuario_id) === String(u.id))
           .map((e: any) => ({ id: Number(e.id), proceso: String(e.proceso), idempresa: e.idempresa == null ? null : Number(e.idempresa), permitir: e.permitir !== false })),
-      }
-    })
+      })
+    }
     return {
       success: true,
       data: {
@@ -635,6 +781,34 @@ export async function adminDesbloquearClave(usuarioId: string): Promise<Resp> {
   }
 }
 
+/** Registra (o quita, con null) el correo REAL de recuperación de un usuario. Queda "sin verificar" hasta que el usuario lo confirme, pero ya sirve para enviarle códigos. */
+export async function adminSetCorreoRecuperacion(usuarioId: string, correo: string | null): Promise<Resp> {
+  try {
+    if (!(await assertAdmin())) return { success: false, message: "No autorizado" }
+    if (!usuarioId) return { success: false, message: "Usuario no especificado." }
+    const sb: any = await getSupabaseAdmin()
+    const admin = await getCurrentUsuarioForInsert()
+    const c = String(correo || "").trim().toLowerCase()
+    if (!c) {
+      const { error } = await sb.from("autorizacion_correos").delete().eq("usuario_id", usuarioId)
+      if (error) return { success: false, message: error.message }
+      await logInterno({ usuario_id: usuarioId, usuario: await nombreDeUsuario(sb, usuarioId), proceso: "clave_personal", resultado: "correo_recuperacion_quitado", autorizado_por: admin })
+      return { success: true, message: "Correo de recuperación eliminado." }
+    }
+    if (!formatoCorreoValido(c)) return { success: false, message: "Escribe un correo válido." }
+    if ((await dominioRecibeCorreo(c)) === false) return { success: false, message: `El dominio de ${c} no recibe correo (no tiene buzones). Usa un correo real.` }
+    const { error } = await sb.from("autorizacion_correos").upsert(
+      { usuario_id: usuarioId, correo: c, verificado: false, origen: "admin", actualizado_en: new Date().toISOString(), actualizado_por: admin },
+      { onConflict: "usuario_id" },
+    )
+    if (error) return { success: false, message: error.message }
+    await logInterno({ usuario_id: usuarioId, usuario: await nombreDeUsuario(sb, usuarioId), proceso: "clave_personal", resultado: "correo_recuperacion_asignado", autorizado_por: admin, detalle: { destino: enmascararCorreo(c) } })
+    return { success: true, message: `Correo de recuperación guardado: ${c}.` }
+  } catch (e: any) {
+    return { success: false, message: e?.message || "No se pudo guardar el correo." }
+  }
+}
+
 /** Elimina la clave del usuario (p. ej. retiro). Sus perfiles se conservan; al volver debe crear una nueva. */
 export async function adminEliminarClave(usuarioId: string): Promise<Resp> {
   try {
@@ -660,8 +834,11 @@ export async function adminProbarCorreo(): Promise<Resp<{ detalle: string; remit
   try {
     if (!(await assertAdmin())) return { success: false, message: "No autorizado" }
     const user = await getCurrentUser()
-    const destino = String(user?.email || "").trim()
-    if (!destino.includes("@")) return { success: false, message: "Tu usuario no tiene un correo válido para recibir la prueba." }
+    if (!user) return { success: false, message: "No hay sesión activa." }
+    const sbLectura: any = await getSupabaseAdminAsSystem()
+    const dest = await destinoRecuperacion(sbLectura, user)
+    if (!dest.ok) return { success: false, message: dest.error.replace("de esta ventana", "de «Mi clave de autorización» (menú del avatar)") }
+    const destino = dest.correo
     const remitente = remitenteCorreo()
     if (!correoConfigurado()) {
       return { success: false, remitente, destino, message: "RESEND_API_KEY no está definida en el entorno de este despliegue. En Vercel: Settings › Environment Variables › agregar RESEND_API_KEY (y EMAIL_FROM) y volver a desplegar." }

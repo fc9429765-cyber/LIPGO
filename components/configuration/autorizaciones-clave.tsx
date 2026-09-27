@@ -72,6 +72,7 @@ import {
   adminProbarCorreo,
   adminQuitarExcepcion,
   adminQuitarPerfil,
+  adminSetCorreoRecuperacion,
   adminSetTransicion,
 } from "@/lib/autorizaciones-actions"
 import {
@@ -114,6 +115,10 @@ const RESULTADO_INTERNO_LABEL: Record<string, string> = {
   codigo_no_enviado: "Código NO enviado (falló el correo)",
   prueba_enviada: "Correo de prueba enviado",
   prueba_fallida: "Correo de prueba falló",
+  verificacion_correo_enviada: "Código de verificación de correo enviado",
+  correo_recuperacion_confirmado: "Correo de recuperación confirmado",
+  correo_recuperacion_asignado: "Correo de recuperación asignado (admin)",
+  correo_recuperacion_quitado: "Correo de recuperación quitado (admin)",
   provisional_asignada: "Clave provisional asignada",
   desbloqueada: "Clave desbloqueada",
   eliminada_por_admin: "Clave eliminada por admin",
@@ -163,6 +168,8 @@ export default function AutorizacionesClave() {
   )
   const usuariosConClave = usuariosVisibles.filter((u) => u.tieneClave && !u.provisional).length
   const usuariosConPerfil = usuariosVisibles.filter((u) => u.perfiles.length > 0 || u.excepciones.some((e) => e.permitir)).length
+  // Sin dónde recibir un código: el correo de acceso no es buzón y no registraron correo de recuperación.
+  const usuariosSinCorreo = usuariosVisibles.filter((u) => !u.correoRecuperacion && u.emailRecibe === false).length
   const nombreProyecto =
     selectedEmpresaId == null
       ? "Todos los proyectos"
@@ -215,7 +222,19 @@ export default function AutorizacionesClave() {
         </div>
       ) : !data ? null : (
         <>
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <Card className={usuariosSinCorreo > 0 ? "border-amber-300" : ""}>
+              <CardContent className="pt-5">
+                <p className="text-xs uppercase text-muted-foreground">Sin correo real para recuperar</p>
+                <p className="text-2xl font-bold">
+                  {usuariosSinCorreo} <span className="text-sm font-normal text-muted-foreground">/ {usuariosVisibles.length}</span>
+                </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Los usuarios @lipgo.app no son buzones: cada persona registra su correo real en “Mi clave de autorización” › Correo, o tú
+                  se lo asignas aquí (menú ⋯).
+                </p>
+              </CardContent>
+            </Card>
             <Card>
               <CardContent className="pt-5">
                 <p className="text-xs uppercase text-muted-foreground">Usuarios con clave personal</p>
@@ -413,6 +432,25 @@ function UsuariosTab({
   const [confirmar, setConfirmar] = useState<{ usuario: UsuarioAutorizacion; accion: "provisional" | "eliminar" } | null>(null)
   const [provisional, setProvisional] = useState<{ usuario: string; clave: string } | null>(null)
   const [ocupado, setOcupado] = useState(false)
+  const [correoDlg, setCorreoDlg] = useState<UsuarioAutorizacion | null>(null)
+  const [correoValor, setCorreoValor] = useState("")
+  const [guardandoCorreo, setGuardandoCorreo] = useState(false)
+
+  const abrirCorreo = (u: UsuarioAutorizacion) => {
+    setCorreoDlg(u)
+    setCorreoValor(u.correoRecuperacion ?? "")
+  }
+  const guardarCorreo = async (valor: string | null) => {
+    if (!correoDlg) return
+    setGuardandoCorreo(true)
+    const r = await adminSetCorreoRecuperacion(correoDlg.id, valor)
+    setGuardandoCorreo(false)
+    if (r.success) {
+      toast({ title: "Correo de recuperación", description: r.message })
+      setCorreoDlg(null)
+      await recargar()
+    } else toast({ title: "Error", description: r.message, variant: "destructive" })
+  }
 
   const nombreEmpresa = useCallback((id: number | null | undefined) => (id == null ? "Todos los proyectos" : data.empresas.find((e) => e.id === id)?.nombre || `Proyecto ${id}`), [data.empresas])
   const nombreProceso = useCallback((codigo: string) => data.procesos.find((p) => p.codigo === codigo)?.nombre || codigo, [data.procesos])
@@ -513,7 +551,30 @@ function UsuariosTab({
                 <TableRow key={u.id} className="align-top">
                   <TableCell>
                     <p className="font-medium">{u.usuario}</p>
-                    <p className="text-[11px] text-muted-foreground">{u.email ?? "sin correo"}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {u.email ?? "sin correo"}
+                      {u.emailRecibe === false && (
+                        <span className="ml-1 text-amber-700" title="Este dominio no tiene buzones: no recibe correo">
+                          · no recibe correo
+                        </span>
+                      )}
+                    </p>
+                    {u.correoRecuperacion ? (
+                      <p className="flex items-center gap-1 text-[11px]">
+                        <Mail className="h-3 w-3 text-muted-foreground" /> {u.correoRecuperacion}
+                        {u.correoRecuperacionVerificado ? (
+                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                        ) : (
+                          <span className="text-amber-700">(sin confirmar)</span>
+                        )}
+                      </p>
+                    ) : (
+                      u.emailRecibe === false && (
+                        <button type="button" className="text-[11px] text-amber-800 underline-offset-2 hover:underline" onClick={() => abrirCorreo(u)}>
+                          Sin correo de recuperación: registrar
+                        </button>
+                      )
+                    )}
                   </TableCell>
                   <TableCell className="text-xs">{u.empresa_id == null ? "—" : nombreEmpresa(u.empresa_id)}</TableCell>
                   <TableCell>
@@ -570,6 +631,9 @@ function UsuariosTab({
                           <Plus className="mr-2 h-4 w-4" /> Agregar excepción
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => abrirCorreo(u)}>
+                          <Mail className="mr-2 h-4 w-4" /> Correo de recuperación…
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setConfirmar({ usuario: u, accion: "provisional" })}>
                           <KeyRound className="mr-2 h-4 w-4" /> Clave provisional
                         </DropdownMenuItem>
@@ -623,6 +687,42 @@ function UsuariosTab({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!correoDlg} onOpenChange={(o) => !o && setCorreoDlg(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Correo de recuperación · {correoDlg?.usuario}</DialogTitle>
+            <DialogDescription>
+              Buzón real donde le llegarán los códigos para recuperar su clave. Su usuario de acceso ({correoDlg?.email ?? "sin correo"})
+              {correoDlg?.emailRecibe === false ? " no recibe correo." : " sí recibe correo; este solo lo reemplaza."} Quedará “sin confirmar”
+              hasta que la persona lo confirme desde “Mi clave de autorización”, pero ya sirve para enviarle códigos.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1">
+            <Label htmlFor="correo-rec-admin" className="text-xs uppercase text-muted-foreground">
+              Correo
+            </Label>
+            <Input id="correo-rec-admin" type="email" value={correoValor} onChange={(e) => setCorreoValor(e.target.value)} placeholder="nombre@gmail.com" autoComplete="off" />
+          </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <div>
+              {correoDlg?.correoRecuperacion && (
+                <Button variant="ghost" className="text-destructive hover:text-destructive" onClick={() => guardarCorreo(null)} disabled={guardandoCorreo}>
+                  Quitar
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setCorreoDlg(null)} disabled={guardandoCorreo}>
+                Cancelar
+              </Button>
+              <Button onClick={() => guardarCorreo(correoValor)} disabled={guardandoCorreo || !correoValor.includes("@")}>
+                {guardandoCorreo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Guardar
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!provisional} onOpenChange={(o) => !o && setProvisional(null)}>
         <DialogContent className="sm:max-w-sm">
