@@ -669,7 +669,13 @@ export async function adminSetTransicion(fecha: string | null): Promise<Resp<{ t
   }
 }
 
-export async function adminGetLog(opts?: { limit?: number; usuarioId?: string | null; resultado?: string | null }): Promise<Resp<{ data: LogAutorizacion[] }>> {
+export async function adminGetLog(opts?: {
+  limit?: number
+  usuarioId?: string | null
+  resultado?: string | null
+  /** Proyecto del selector global: trae sus registros MÁS los sin proyecto (financiero, claves, administración). */
+  idempresa?: number | null
+}): Promise<Resp<{ data: LogAutorizacion[] }>> {
   try {
     if (!(await assertAdmin())) return { success: false, message: "No autorizado" }
     const sb: any = await getSupabaseAdminAsSystem()
@@ -681,6 +687,7 @@ export async function adminGetLog(opts?: { limit?: number; usuarioId?: string | 
       .limit(Math.min(Math.max(Number(opts?.limit) || 300, 1), 1000))
     if (opts?.usuarioId) q = q.eq("usuario_id", opts.usuarioId)
     if (opts?.resultado) q = q.eq("resultado", opts.resultado)
+    if (opts?.idempresa != null && Number(opts.idempresa) > 0) q = q.or(`idempresa.is.null,idempresa.eq.${Number(opts.idempresa)}`)
     const { data, error } = await q
     if (error) return { success: false, message: error.message }
     return { success: true, data: (data ?? []) as LogAutorizacion[] }

@@ -55,8 +55,10 @@ import {
   RefreshCw,
   Search,
   CalendarClock,
+  Building2,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/components/auth-provider"
 import {
   adminAsignarPerfil,
   adminClaveProvisional,
@@ -121,6 +123,9 @@ const RESULTADO_INTERNO_LABEL: Record<string, string> = {
 
 export default function AutorizacionesClave() {
   const { toast } = useToast()
+  // El selector GLOBAL de proyecto (ID) gobierna la pantalla, como en el resto
+  // de LIPgo: usuarios del proyecto, alcance por defecto y bitácora.
+  const { selectedEmpresaId } = useAuth()
   const [data, setData] = useState<ResumenAutorizaciones | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -136,8 +141,16 @@ export default function AutorizacionesClave() {
     cargar()
   }, [cargar])
 
-  const usuariosConClave = data?.usuarios.filter((u) => u.tieneClave && !u.provisional).length ?? 0
-  const usuariosConPerfil = data?.usuarios.filter((u) => u.perfiles.length > 0 || u.excepciones.some((e) => e.permitir)).length ?? 0
+  const usuariosVisibles = useMemo(
+    () => (data?.usuarios ?? []).filter((u) => selectedEmpresaId == null || u.empresa_id === selectedEmpresaId),
+    [data, selectedEmpresaId],
+  )
+  const usuariosConClave = usuariosVisibles.filter((u) => u.tieneClave && !u.provisional).length
+  const usuariosConPerfil = usuariosVisibles.filter((u) => u.perfiles.length > 0 || u.excepciones.some((e) => e.permitir)).length
+  const nombreProyecto =
+    selectedEmpresaId == null
+      ? "Todos los proyectos"
+      : data?.empresas.find((e) => e.id === selectedEmpresaId)?.nombre ?? `Proyecto ${selectedEmpresaId}`
 
   return (
     <div className="space-y-6">
@@ -161,6 +174,9 @@ export default function AutorizacionesClave() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="gap-1" title="Proyecto del selector global">
+            <Building2 className="h-3 w-3" /> {nombreProyecto}
+          </Badge>
           {data && (
             <Badge variant="outline" className="gap-1">
               <Mail className="h-3 w-3" /> Correo {data.correoConfigurado ? "configurado" : "no configurado"}
@@ -183,7 +199,7 @@ export default function AutorizacionesClave() {
               <CardContent className="pt-5">
                 <p className="text-xs uppercase text-muted-foreground">Usuarios con clave personal</p>
                 <p className="text-2xl font-bold">
-                  {usuariosConClave} <span className="text-sm font-normal text-muted-foreground">/ {data.usuarios.length}</span>
+                  {usuariosConClave} <span className="text-sm font-normal text-muted-foreground">/ {usuariosVisibles.length}</span>
                 </p>
               </CardContent>
             </Card>
@@ -191,7 +207,7 @@ export default function AutorizacionesClave() {
               <CardContent className="pt-5">
                 <p className="text-xs uppercase text-muted-foreground">Usuarios con algún permiso</p>
                 <p className="text-2xl font-bold">
-                  {usuariosConPerfil} <span className="text-sm font-normal text-muted-foreground">/ {data.usuarios.length}</span>
+                  {usuariosConPerfil} <span className="text-sm font-normal text-muted-foreground">/ {usuariosVisibles.length}</span>
                 </p>
               </CardContent>
             </Card>
@@ -222,13 +238,13 @@ export default function AutorizacionesClave() {
               </TabsTrigger>
             </TabsList>
             <TabsContent value="usuarios" className="mt-4">
-              <UsuariosTab data={data} recargar={cargar} />
+              <UsuariosTab data={data} recargar={cargar} empresaId={selectedEmpresaId} nombreProyecto={nombreProyecto} />
             </TabsContent>
             <TabsContent value="perfiles" className="mt-4">
               <PerfilesTab data={data} recargar={cargar} />
             </TabsContent>
             <TabsContent value="bitacora" className="mt-4">
-              <BitacoraTab data={data} />
+              <BitacoraTab data={data} empresaId={selectedEmpresaId} nombreProyecto={nombreProyecto} />
             </TabsContent>
           </Tabs>
         </>
@@ -336,10 +352,19 @@ function ClaveBadge({ u }: { u: UsuarioAutorizacion }) {
   )
 }
 
-function UsuariosTab({ data, recargar }: { data: ResumenAutorizaciones; recargar: () => Promise<void> }) {
+function UsuariosTab({
+  data,
+  recargar,
+  empresaId,
+  nombreProyecto,
+}: {
+  data: ResumenAutorizaciones
+  recargar: () => Promise<void>
+  empresaId: number | null
+  nombreProyecto: string
+}) {
   const { toast } = useToast()
   const [busqueda, setBusqueda] = useState("")
-  const [empresaFiltro, setEmpresaFiltro] = useState(TODOS)
   const [soloConPermisos, setSoloConPermisos] = useState(false)
   const [asignar, setAsignar] = useState<{ usuario: UsuarioAutorizacion; tipo: "perfil" | "excepcion" } | null>(null)
   const [confirmar, setConfirmar] = useState<{ usuario: UsuarioAutorizacion; accion: "provisional" | "eliminar" } | null>(null)
@@ -352,12 +377,13 @@ function UsuariosTab({ data, recargar }: { data: ResumenAutorizaciones; recargar
   const usuarios = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
     return data.usuarios.filter((u) => {
-      if (empresaFiltro !== TODOS && String(u.empresa_id) !== empresaFiltro) return false
+      // Filtro GLOBAL de proyecto (selector superior), igual que Accesos de Usuario.
+      if (empresaId != null && u.empresa_id !== empresaId) return false
       if (soloConPermisos && u.perfiles.length === 0 && u.excepciones.length === 0) return false
       if (q && !`${u.usuario} ${u.email ?? ""}`.toLowerCase().includes(q)) return false
       return true
     })
-  }, [data.usuarios, busqueda, empresaFiltro, soloConPermisos])
+  }, [data.usuarios, busqueda, empresaId, soloConPermisos])
 
   const quitarPerfil = async (id: number) => {
     setOcupado(true)
@@ -405,24 +431,16 @@ function UsuariosTab({ data, recargar }: { data: ResumenAutorizaciones; recargar
           Asigna a cada usuario el perfil de su puesto con el alcance de su proyecto. “Todos los proyectos” solo para la gerencia
           general de LIPgo. Las excepciones conceden o niegan UN proceso puntual y ganan sobre el perfil.
         </CardDescription>
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Building2 className="h-3.5 w-3.5" />
+          Mostrando los usuarios de <b className="text-foreground">{nombreProyecto}</b> (selector global de la barra superior). Cambia el
+          proyecto allí para ver otros usuarios.
+        </p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <div className="relative min-w-[200px] flex-1">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input placeholder="Buscar usuario o correo…" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="h-9 pl-8" />
           </div>
-          <Select value={empresaFiltro} onValueChange={setEmpresaFiltro}>
-            <SelectTrigger className="h-9 w-[200px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={TODOS}>Todos los proyectos</SelectItem>
-              {data.empresas.map((e) => (
-                <SelectItem key={e.id} value={String(e.id)}>
-                  {e.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Switch checked={soloConPermisos} onCheckedChange={setSoloConPermisos} /> Solo con permisos
           </label>
@@ -444,7 +462,7 @@ function UsuariosTab({ data, recargar }: { data: ResumenAutorizaciones; recargar
             {usuarios.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                  No hay usuarios con ese filtro.
+                  No hay usuarios de {nombreProyecto} con ese filtro.
                 </TableCell>
               </TableRow>
             ) : (
@@ -532,7 +550,9 @@ function UsuariosTab({ data, recargar }: { data: ResumenAutorizaciones; recargar
         </Table>
       </CardContent>
 
-      {asignar && <DialogAsignar data={data} usuario={asignar.usuario} tipo={asignar.tipo} onClose={() => setAsignar(null)} onDone={recargar} />}
+      {asignar && (
+        <DialogAsignar data={data} usuario={asignar.usuario} tipo={asignar.tipo} empresaGlobal={empresaId} onClose={() => setAsignar(null)} onDone={recargar} />
+      )}
 
       <AlertDialog open={!!confirmar} onOpenChange={(o) => !o && setConfirmar(null)}>
         <AlertDialogContent>
@@ -592,19 +612,24 @@ function DialogAsignar({
   data,
   usuario,
   tipo,
+  empresaGlobal,
   onClose,
   onDone,
 }: {
   data: ResumenAutorizaciones
   usuario: UsuarioAutorizacion
   tipo: "perfil" | "excepcion"
+  empresaGlobal: number | null
   onClose: () => void
   onDone: () => Promise<void>
 }) {
   const { toast } = useToast()
   const [perfilId, setPerfilId] = useState<string>("")
   const [proceso, setProceso] = useState<string>("")
-  const [alcance, setAlcance] = useState<string>(usuario.empresa_id == null ? TODOS : String(usuario.empresa_id))
+  // Alcance por defecto: el proyecto del selector global; si no hay, el del usuario.
+  const [alcance, setAlcance] = useState<string>(
+    empresaGlobal != null ? String(empresaGlobal) : usuario.empresa_id == null ? TODOS : String(usuario.empresa_id),
+  )
   const [permitir, setPermitir] = useState<"si" | "no">("si")
   const [guardando, setGuardando] = useState(false)
 
@@ -929,7 +954,7 @@ function PerfilCard({
 // Bitácora
 // ---------------------------------------------------------------------------
 
-function BitacoraTab({ data }: { data: ResumenAutorizaciones }) {
+function BitacoraTab({ data, empresaId, nombreProyecto }: { data: ResumenAutorizaciones; empresaId: number | null; nombreProyecto: string }) {
   const { toast } = useToast()
   const [rows, setRows] = useState<LogAutorizacion[]>([])
   const [loading, setLoading] = useState(true)
@@ -937,11 +962,13 @@ function BitacoraTab({ data }: { data: ResumenAutorizaciones }) {
 
   const cargar = useCallback(async () => {
     setLoading(true)
-    const r = await adminGetLog({ limit: 400, resultado: resultado === "todos" ? null : resultado })
+    // Filtro global de proyecto: registros de ese proyecto + los sin proyecto
+    // (procesos financieros y eventos de clave/administración).
+    const r = await adminGetLog({ limit: 400, resultado: resultado === "todos" ? null : resultado, idempresa: empresaId })
     if (r.success && r.data) setRows(r.data)
     else toast({ title: "Error", description: r.message, variant: "destructive" })
     setLoading(false)
-  }, [resultado, toast])
+  }, [resultado, empresaId, toast])
 
   useEffect(() => {
     cargar()
@@ -963,7 +990,16 @@ function BitacoraTab({ data }: { data: ResumenAutorizaciones }) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <CardTitle className="text-base">Bitácora de autorizaciones</CardTitle>
-            <CardDescription>Cada intento de autorizar queda aquí: quién, qué proceso, en qué proyecto y el resultado.</CardDescription>
+            <CardDescription>
+              Cada intento de autorizar queda aquí: quién, qué proceso, en qué proyecto y el resultado.{" "}
+              {empresaId != null ? (
+                <>
+                  Mostrando <b>{nombreProyecto}</b> (selector global) más los registros sin proyecto (financiero, claves, administración).
+                </>
+              ) : (
+                <>Mostrando todos los proyectos.</>
+              )}
+            </CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <Select value={resultado} onValueChange={setResultado}>
