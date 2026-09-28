@@ -215,6 +215,30 @@ export async function getMiEstadoClave(): Promise<EstadoMiClave | null> {
   }
 }
 
+/**
+ * Aviso liviano para la barra superior: el usuario tiene procesos autorizados
+ * (perfil o excepción) pero aún no creó su clave personal, o tiene una
+ * provisional. Tres consultas mínimas; nada de esto requiere permisos de módulo.
+ */
+export async function getAvisoMiClave(): Promise<{ motivo: "sin_clave" | "provisional" | null }> {
+  try {
+    const user = await getCurrentUser()
+    if (!user) return { motivo: null }
+    const sb: any = await getSupabaseAdminAsSystem()
+    const [{ data: clave }, { count: nPerf }, { count: nExc }] = await Promise.all([
+      sb.from("autorizacion_claves").select("provisional").eq("usuario_id", user.id).maybeSingle(),
+      sb.from("autorizacion_usuario_perfiles").select("id", { count: "exact", head: true }).eq("usuario_id", user.id),
+      sb.from("autorizacion_usuario_procesos").select("id", { count: "exact", head: true }).eq("usuario_id", user.id).eq("permitir", true),
+    ])
+    if (Number(nPerf || 0) + Number(nExc || 0) === 0) return { motivo: null }
+    if (!clave) return { motivo: "sin_clave" }
+    if (clave.provisional) return { motivo: "provisional" }
+    return { motivo: null }
+  } catch {
+    return { motivo: null }
+  }
+}
+
 export async function crearMiClave(nueva: string, confirmar: string): Promise<Resp> {
   try {
     const user = await getCurrentUser()

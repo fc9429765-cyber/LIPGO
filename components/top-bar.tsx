@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
  import { Bell, User, LogOut, MessageCircle, Building2, ChevronDown, Clock, Users, Calendar, AlertTriangle, Truck, Timer, DollarSign, Package, ClipboardList, ClipboardCheck, Wrench, ShieldAlert, KeyRound } from "lucide-react"
 import { ColombiaClock } from "./colombia-clock"
 import { useAuth } from "@/components/auth-provider"
 import { MiClaveAutorizacionDialog } from "@/components/mi-clave-autorizacion"
+import { getAvisoMiClave } from "@/lib/autorizaciones-actions"
 import { useRouter } from "next/navigation"
 import { useUnreadMessages } from "@/hooks/useUnreadMessages"
 import { usePendingTurnos } from "@/hooks/usePendingTurnos"
@@ -54,6 +55,21 @@ export function TopBar() {
   const unreadCount = useUnreadMessages(profile?.id)
   // "Mi clave de autorización" (SQL 203): autoservicio de la clave personal.
   const [claveDialogOpen, setClaveDialogOpen] = useState(false)
+  // Punto ámbar en el avatar cuando el usuario tiene procesos autorizados pero
+  // aún no creó su clave (o tiene una provisional). Se recalcula al cerrar el diálogo.
+  const [avisoClave, setAvisoClave] = useState<"sin_clave" | "provisional" | null>(null)
+  useEffect(() => {
+    if (!profile?.id || claveDialogOpen) return
+    let vivo = true
+    getAvisoMiClave()
+      .then((r) => {
+        if (vivo) setAvisoClave(r.motivo)
+      })
+      .catch(() => {})
+    return () => {
+      vivo = false
+    }
+  }, [profile?.id, claveDialogOpen])
   const { pendingSolicitudes, count: pendingTurnosCount } = usePendingTurnos(selectedEmpresaId)
   const { alerts: preoperacionalAlerts, count: preoperacionalAlertCount, hasPermission: hasPrechequeoPermission } = usePreoperacionalAlerts(selectedEmpresaId, profile?.id)
   const { alerts: rendimientoAlerts, count: rendimientoAlertCount, hasPermission: hasDashboardOperacionPermission } = useRendimientoAlerts(selectedEmpresaId, profile?.id)
@@ -890,11 +906,14 @@ export function TopBar() {
             )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Avatar className="h-7 w-7 sm:h-9 sm:w-9 cursor-pointer border-2 border-border hover:border-primary transition-colors">
-                  <AvatarFallback className="bg-muted">
-                    <User className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                  </AvatarFallback>
-                </Avatar>
+                <span className="relative inline-flex" title={avisoClave ? "Crea tu clave de autorización" : "Menú de usuario"}>
+                  <Avatar className={`h-7 w-7 sm:h-9 sm:w-9 cursor-pointer border-2 transition-colors ${avisoClave ? "border-amber-500 hover:border-amber-600" : "border-border hover:border-primary"}`}>
+                    <AvatarFallback className="bg-muted">
+                      <User className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+                    </AvatarFallback>
+                  </Avatar>
+                  {avisoClave && <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-background bg-amber-500" aria-hidden />}
+                </span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-72">
                 <DropdownMenuLabel className="text-base">Información de Sesión</DropdownMenuLabel>
@@ -920,9 +939,13 @@ export function TopBar() {
                   </div>
                 )}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setClaveDialogOpen(true)} className="cursor-pointer">
+                <DropdownMenuItem onClick={() => setClaveDialogOpen(true)} className={`cursor-pointer ${avisoClave ? "bg-amber-50 font-medium text-amber-900 focus:bg-amber-100" : ""}`}>
                   <KeyRound className="mr-2 h-4 w-4" />
-                  Mi clave de autorización
+                  {avisoClave === "sin_clave"
+                    ? "Crea tu clave de autorización"
+                    : avisoClave === "provisional"
+                      ? "Define tu clave de autorización (tienes una provisional)"
+                      : "Mi clave de autorización"}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut} className="text-destructive cursor-pointer">
