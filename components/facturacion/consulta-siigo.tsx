@@ -16,7 +16,9 @@ import {
   ChevronRight,
   Download,
   FileText,
+  Database,
   Loader2,
+  RefreshCw,
   Search,
   X,
 } from "lucide-react"
@@ -28,6 +30,12 @@ import {
   type DetalleFactura,
   type FacturaListada,
 } from "@/lib/siigo-actions"
+import {
+  buscarGuardadas,
+  getEstadoSync,
+  sincronizarFacturas,
+  type EstadoSync,
+} from "@/lib/siigo-sync-actions"
 
 const PAGE_SIZE = 50
 
@@ -73,18 +81,62 @@ export default function ConsultaSiigo() {
   const [identificacion, setIdentificacion] = useState("")
   const [numero, setNumero] = useState("")
 
+  // De dónde se leen las facturas. Lo guardado responde al instante y permite
+  // filtrar por saldo; Siigo en vivo trae lo que aún no se ha sincronizado.
+  const [fuente, setFuente] = useState<"guardadas" | "siigo">("guardadas")
+  const [soloConSaldo, setSoloConSaldo] = useState(false)
+  const [sync, setSync] = useState<EstadoSync | null>(null)
+  const [faltaMigracion, setFaltaMigracion] = useState(false)
+  const [sincronizando, setSincronizando] = useState(false)
+
   const [detalle, setDetalle] = useState<DetalleFactura | null>(null)
   const [abriendo, setAbriendo] = useState<string | null>(null)
   const [bajando, setBajando] = useState<string | null>(null)
 
+  const cargarSync = useCallback(async () => {
+    const r = await getEstadoSync()
+    if (r.faltaMigracion) setFaltaMigracion(true)
+    if (r.success && r.data) setSync(r.data)
+  }, [])
+
   useEffect(() => {
     getEstadoSiigo().then(setEstado)
-  }, [])
+    cargarSync()
+  }, [cargarSync])
 
   const buscar = useCallback(
     async (p = 1) => {
       setCargando(true)
       setError(null)
+
+      if (fuente === "guardadas") {
+        // Lo guardado: responde al instante y permite filtrar por saldo, que
+        // la API de Siigo no ofrece.
+        const r = await buscarGuardadas({
+          desde: desde || undefined,
+          hasta: hasta || undefined,
+          identificacion: identificacion.trim() || undefined,
+          numero: numero.trim() || undefined,
+          soloConSaldo,
+        })
+        setCargando(false)
+        if (!r.success) {
+          setError(r.message ?? "No se pudo consultar.")
+          setFacturas([])
+          return
+        }
+        setFacturas(
+          (r.data ?? []).map((f) => ({
+            ...f,
+            cliente: f.cliente ?? "",
+            creada: null,
+          })) as FacturaListada[],
+        )
+        setTotal(r.total ?? 0)
+        setPagina(1)
+        return
+      }
+
       const r = await buscarFacturas({
         fechaDesde: desde || undefined,
         fechaHasta: hasta || undefined,
@@ -103,14 +155,60 @@ export default function ConsultaSiigo() {
       setTotal(r.total ?? 0)
       setPagina(r.pagina ?? p)
     },
-    [desde, hasta, identificacion, numero],
+    [desde, hasta, identificacion, numero, fuente, soloConSaldo],
   )
 
-  // La primera carga espera a saber si la integración responde: sin eso, un
-  // error de credenciales se vería como "no hay facturas".
+  /*
+   * La primera carga.
+   *
+   * Lo guardado se lee siempre --no depende de que Siigo responda-- y esa es
+   * justamente su ventaja: si la API está caída o las credenciales caducaron,
+   * la facturación ya sincronizada se sigue consultando.
+   *
+   * La consulta en vivo sí espera a saber que la integración responde: sin
+   * eso, un error de credenciales se vería como "no hay facturas".
+   */
   useEffect(() => {
-    if (estado?.conecta) buscar(1)
-  }, [estado?.conecta, buscar])
+    if (fuente === "guardadas" || estado?.conecta) buscar(1)
+  }, [fuente, estado?.conecta, buscar])
+
+  async function sincronizar(desdeCero = false) {
+    if (desdeCero) {
+      const ok = window.confirm(
+        "Vas a volver a traer TODO el histórico desde el principio.\n\n" +
+          "No se pierde nada —lo que ya está se actualiza, no se duplica— pero puede " +
+          "tardar varias pasadas. ¿Continuar?",
+      )
+      if (!ok) return
+    }
+
+    setSincronizando(true)
+    let total = 0
+    let pasadas = 0
+
+    // El histórico no cabe en una sola llamada: se encadenan pasadas hasta que
+    // no quede nada pendiente. El tope de 30 evita un bucle si algo va mal.
+    for (;;) {
+      const r = await sincronizarFacturas({ desdeCero: desdeCero && pasadas === 0 })
+      pasadas++
+      if (!r.success) {
+        setSincronizando(false)
+        toast({ title: "No se pudo sincronizar", description: r.message, variant: "destructive" })
+        cargarSync()
+        return
+      }
+      total += r.traidas
+      if (!r.quedaPendiente || pasadas >= 30) break
+    }
+
+    setSincronizando(false)
+    toast({
+      title: "Sincronizado",
+      description: total > 0 ? `${total.toLocaleString("es-CO")} factura(s).` : "Ya estaba al día.",
+    })
+    cargarSync()
+    if (fuente === "guardadas") buscar(1)
+  }
 
   async function verDetalle(f: FacturaListada) {
     setAbriendo(f.id)
@@ -174,6 +272,90 @@ export default function ConsultaSiigo() {
         </div>
       )}
 
+      {faltaMigracion ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+          <p className="flex items-center gap-1.5 text-sm font-medium text-amber-900">
+            <AlertTriangle className="h-4 w-4" />
+            Falta crear las tablas de sincronización
+          </p>
+          <p className="mt-1 text-[11px] text-amber-900">
+            Corre{" "}
+            <code className="font-mono">scripts/206_siigo_facturas_sincronizadas.sql</code>. Mientras
+            tanto se puede consultar en vivo contra Siigo.
+          </p>
+        </div>
+      ) : (
+        <section className="rounded-xl border border-border bg-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 text-sm font-semibold">
+                <Database className="h-4 w-4" />
+                Facturas guardadas en LIPgo
+              </h3>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                {sync && sync.guardadas > 0 ? (
+                  <>
+                    <strong>{sync.guardadas.toLocaleString("es-CO")}</strong> facturas
+                    {sync.desde && sync.hasta && (
+                      <>
+                        {" "}
+                        · de {fmtFecha(sync.desde)} a {fmtFecha(sync.hasta)}
+                      </>
+                    )}
+                    {sync.ultimaCorrida && (
+                      <>
+                        {" "}
+                        · última sincronización{" "}
+                        {new Date(sync.ultimaCorrida).toLocaleString("es-CO", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </>
+                    )}
+                  </>
+                ) : (
+                  "Todavía no se ha traído ninguna factura."
+                )}
+              </p>
+            </div>
+            <div className="flex gap-1.5">
+              <Button
+                onClick={() => sincronizar(false)}
+                disabled={sincronizando || estado?.conecta === false}
+                className="h-9 gap-1.5"
+              >
+                {sincronizando ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                {sync && sync.guardadas > 0 ? "Traer lo nuevo" : "Traer el histórico"}
+              </Button>
+              {sync && sync.guardadas > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={() => sincronizar(true)}
+                  disabled={sincronizando}
+                  className="h-9 text-xs"
+                  title="Vuelve a barrer todo el histórico. No duplica: actualiza lo que ya está."
+                >
+                  Rehacer todo
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* La segunda sincronización trae solo lo nuevo; conviene decirlo
+              para que nadie tema que se dupliquen. */}
+          <p className="mt-2 border-t border-border pt-2 text-[11px] text-muted-foreground">
+            Cada sincronización trae solo lo <strong>nuevo o modificado</strong> desde la última
+            vez. Una factura que ya está no se duplica: se actualiza.
+          </p>
+        </section>
+      )}
+
       {/* --- Filtros --- */}
       <section className="rounded-xl border border-border bg-card p-4">
         <div className="flex flex-wrap items-end gap-3">
@@ -217,6 +399,48 @@ export default function ConsultaSiigo() {
             {cargando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
             Buscar
           </Button>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-4 border-t border-border pt-3">
+          {/* Lo guardado responde al instante y sigue funcionando aunque Siigo
+              esté caído; lo de Siigo trae lo que aún no se ha sincronizado. */}
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-muted-foreground">Buscar en:</span>
+            <button
+              type="button"
+              onClick={() => setFuente("guardadas")}
+              className={`rounded-full px-2.5 py-1 ${
+                fuente === "guardadas"
+                  ? "bg-primary text-primary-foreground"
+                  : "border border-border text-muted-foreground"
+              }`}
+            >
+              Guardadas
+            </button>
+            <button
+              type="button"
+              onClick={() => setFuente("siigo")}
+              className={`rounded-full px-2.5 py-1 ${
+                fuente === "siigo"
+                  ? "bg-primary text-primary-foreground"
+                  : "border border-border text-muted-foreground"
+              }`}
+            >
+              Siigo en vivo
+            </button>
+          </div>
+
+          {/* Solo sobre lo guardado: la API de Siigo no filtra por saldo. */}
+          {fuente === "guardadas" && (
+            <label className="flex cursor-pointer items-center gap-1.5 text-xs">
+              <input
+                type="checkbox"
+                checked={soloConSaldo}
+                onChange={(e) => setSoloConSaldo(e.target.checked)}
+              />
+              Solo con saldo pendiente
+            </label>
+          )}
         </div>
       </section>
 
