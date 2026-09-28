@@ -566,6 +566,12 @@ export async function adminGetResumen(): Promise<Resp<{ data: ResumenAutorizacio
       emailsPorUsuario(sb),
       sb.from("autorizacion_correos").select("usuario_id, correo, verificado"),
     ])
+    // MISMO criterio que Gestión de Usuarios: solo cuentas con fila en
+    // permisos_usuarios. Las que no la tienen (cuentas viejas "quitadas") no se
+    // muestran allá y tampoco aquí, para no resucitarlas en pantalla.
+    const { data: conPermisos } = await sb.from("permisos_usuarios").select("usuario_id")
+    const visibles = new Set((conPermisos ?? []).map((r: any) => String(r.usuario_id)))
+    const profilesVisibles = (profiles ?? []).filter((u: any) => visibles.has(String(u.id)))
     const correoRecPorUsuario = new Map<string, any>((correosRec ?? []).map((c: any) => [String(c.usuario_id), c]))
     // ¿El dominio del correo de acceso recibe mensajes? (caché por dominio dentro de dominioRecibeCorreo)
     const recibePorDominio = new Map<string, boolean | null>()
@@ -589,7 +595,7 @@ export async function adminGetResumen(): Promise<Resp<{ data: ResumenAutorizacio
     }))
     const clavePorUsuario = new Map<string, any>((claves ?? []).map((c: any) => [String(c.usuario_id), c]))
     const usuarios: UsuarioAutorizacion[] = []
-    for (const u of profiles ?? []) {
+    for (const u of profilesVisibles) {
       const c = clavePorUsuario.get(String(u.id))
       const email = emails[String(u.id)] ?? null
       const rec = correoRecPorUsuario.get(String(u.id))
