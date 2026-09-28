@@ -45,13 +45,20 @@ select count(*) filter (where siigo_facturas) as con_permiso,
        count(*)                               as usuarios
 from public.permisos_usuarios;
 
--- 2c) Quién tiene hoy acceso a la facturación de LIPgo, como referencia de a
---     quién podría tener sentido otorgárselo.
-select p.usuario_id, pr.nombre, pr.email
+-- 2c) Qué columnas tiene `profiles`, para no adivinar en la siguiente consulta.
+--     (La columna del nombre es `usuario`, no `nombre`.)
+select column_name
+from information_schema.columns
+where table_schema = 'public' and table_name = 'profiles'
+order by ordinal_position;
+
+-- 2d) Quién tiene hoy acceso a la facturación de LIPgo, como referencia de a
+--     quién podría tener sentido otorgarle el permiso nuevo.
+select p.usuario_id, pr.usuario
 from public.permisos_usuarios p
 join public.profiles pr on pr.id = p.usuario_id
 where p.gestionfacturas = true
-order by pr.nombre;
+order by pr.usuario;
 
 
 -- ----------------------------------------------------------------------------
