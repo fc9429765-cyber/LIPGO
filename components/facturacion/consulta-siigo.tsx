@@ -272,6 +272,16 @@ export default function ConsultaSiigo() {
         </div>
       )}
 
+      {/* Recordatorio visible de que falta la clave. Un módulo que muestra la
+          contabilidad no debería quedarse sin ella por olvido, y un comentario
+          en el código no lo ve quien usa la pantalla. */}
+      <div className="rounded-lg border border-dashed border-amber-400 bg-amber-50/60 px-3 py-2">
+        <p className="text-[11px] text-amber-900">
+          <strong>Modo pruebas:</strong> este módulo está sin la clave financiera que sí piden los
+          demás de facturación. Conviene reponerla antes de darle acceso a más gente.
+        </p>
+      </div>
+
       {faltaMigracion ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
           <p className="flex items-center gap-1.5 text-sm font-medium text-amber-900">
