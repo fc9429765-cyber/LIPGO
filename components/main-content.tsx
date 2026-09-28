@@ -1090,23 +1090,13 @@ export function MainContent({
           </PermissionGuard>
           ) : selectedModule === "Consulta Facturas SIIGO" ? (
             <PermissionGuard moduleName="Consulta Facturas SIIGO">
-              {/*
-               * SIN CLAVE FINANCIERA, PROVISIONALMENTE (28/09/2026).
-               *
-               * Se quitó para poder probar la integración con Siigo sin teclear
-               * la clave en cada recarga. Los demás módulos de facturación SÍ la
-               * llevan, y este debería llevarla: muestra la contabilidad real de
-               * la empresa --todas las ventas, a todos los clientes, con sus
-               * saldos-- no solo lo que genera LIPgo.
-               *
-               * Para reponerla basta con envolver <ConsultaSiigo /> en
-               * <ClaveFinancieraGuard>, como está justo abajo en Cuadro de
-               * Control Facturación.
-               *
-               * Mientras tanto, lo único que lo protege es el permiso
-               * `siigo_facturas`, que nadie tiene por omisión.
-               */}
-              <ConsultaSiigo />
+              {/* Lleva la clave financiera como los demás módulos de
+                  facturación: esto muestra la contabilidad real de la empresa
+                  --todas las ventas, a todos los clientes, con sus saldos-- no
+                  solo lo que genera LIPgo. */}
+              <ClaveFinancieraGuard>
+                <ConsultaSiigo />
+              </ClaveFinancieraGuard>
             </PermissionGuard>
           ) : selectedModule === "Cuadro de Control Facturación" ? (
             <PermissionGuard moduleName="Cuadro de Control Facturación">
