@@ -1,4 +1,4 @@
-import { Gift, Truck, Forklift, Scale, ClipboardCheck, Package, FileText, CheckCircle, Box, PackagePlus, BarChart3, Package2, ArrowRightLeft, History, Search, LayoutDashboard, Activity, FileCheck, Receipt, Clock, Users, Eye, Settings, Type as type, LucideIcon, CreditCard, UserCheck, Store, Tag, Layers, MapPin, Warehouse, Gauge, QrCode, Sparkles, BadgeCheck, BookOpen, Lock, ClipboardList, CalendarDays, NotebookPen, GraduationCap, Wallet, Banknote, Calculator, CalendarClock, FolderOpen, FolderArchive, UserCog, HeartHandshake, ShieldCheck, Stethoscope, AlertTriangle, Star, Send, Landmark, UserPlus, LayoutGrid, FileSpreadsheet, FileEdit, KeyRound } from "lucide-react"
+import { FileSearch, Gift, Truck, Forklift, Scale, ClipboardCheck, Package, FileText, CheckCircle, Box, PackagePlus, BarChart3, Package2, ArrowRightLeft, History, Search, LayoutDashboard, Activity, FileCheck, Receipt, Clock, Users, Eye, Settings, Type as type, LucideIcon, CreditCard, UserCheck, Store, Tag, Layers, MapPin, Warehouse, Gauge, QrCode, Sparkles, BadgeCheck, BookOpen, Lock, ClipboardList, CalendarDays, NotebookPen, GraduationCap, Wallet, Banknote, Calculator, CalendarClock, FolderOpen, FolderArchive, UserCog, HeartHandshake, ShieldCheck, Stethoscope, AlertTriangle, Star, Send, Landmark, UserPlus, LayoutGrid, FileSpreadsheet, FileEdit, KeyRound } from "lucide-react"
 
 export interface Module {
   name: string
@@ -262,6 +262,10 @@ export const groups: Group[] = [
           { name: "Facturación Proyectos", icon: CreditCard },
           // Cruce órdenes procesadas vs facturado por owner + prefactura. Permiso propio.
           { name: "Cuadro de Control Facturación", icon: ClipboardCheck },
+          // Consulta de solo lectura contra la API de Siigo: facturas, su
+          // detalle y el PDF. Permiso propio: da acceso a TODA la facturacion
+          // de la empresa, no solo a la que genera LIPgo.
+          { name: "Consulta Facturas SIIGO", icon: FileSearch },
           // Consulta por proyecto: esperado (acuerdo) vs a quién se factura de
           // verdad. Solo lectura. Mismo permiso que Cuadro de Control.
           { name: "Resumen de Facturación por Proyecto", icon: ClipboardList },

@@ -254,6 +254,9 @@ export interface UserPermissions {
   // Satisfacción y PQRSF: permiso propio para que el COORDINADOR (Gestión LIP)
   // lo gestione sin abrir todo el SIG. Vive en SIG y en Gestión LIP.
   satisfaccion_pqrsf: boolean
+  // Consulta de facturas en Siigo. Permiso propio: da acceso a toda la
+  // facturacion de la empresa, no solo a lo que genera LIPgo.
+  siigo_facturas: boolean
   // Calificación del Conductor (kiosko en caliente al fin de cargue): objetivo
   // del coordinador; alimenta la satisfacción del conductor en el BSC.
   calificacion_conductor: boolean
@@ -470,6 +473,7 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   "Mapa de Procesos": "sig_matriz",
   "Mapa de Interacción del Proceso": "sig_matriz",
   "Satisfacción y PQRSF": "satisfaccion_pqrsf",
+  "Consulta Facturas SIIGO": "siigo_facturas",
   "Calificación del Conductor": "calificacion_conductor",
   // Inventario operativo (LIPgo = soporte del SIG): gobernados por el permiso
   // operativo `auditoria_inventario`, no por sig_matriz. Viven en Almacenamiento

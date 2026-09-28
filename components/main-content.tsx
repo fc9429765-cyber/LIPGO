@@ -11,6 +11,7 @@ import { ModuleCards } from "@/components/module-cards"
 import { ModulesView } from "@/components/modules-view"
 import { ModulePlaceholder } from "@/components/module-placeholder"
 import { configModules } from "@/lib/config-definitions"
+import ConsultaSiigo from "@/components/facturacion/consulta-siigo"
 // Producción: maestro de montacargas, QR y bitácora de mantenimiento.
 import { ModuloGuiaBar } from "@/components/modulo-guia-bar" // Guia embebida en la pantalla de cada modulo
 import { ArrowLeft } from "lucide-react"
@@ -1087,6 +1088,15 @@ export function MainContent({
               <FacturacionProyectos />
             </ClaveFinancieraGuard>
           </PermissionGuard>
+          ) : selectedModule === "Consulta Facturas SIIGO" ? (
+            <PermissionGuard moduleName="Consulta Facturas SIIGO">
+              {/* Lleva la clave financiera como los demás módulos de
+                  facturación: esto muestra la contabilidad real de la empresa,
+                  no solo lo que genera LIPgo. */}
+              <ClaveFinancieraGuard>
+                <ConsultaSiigo />
+              </ClaveFinancieraGuard>
+            </PermissionGuard>
           ) : selectedModule === "Cuadro de Control Facturación" ? (
             <PermissionGuard moduleName="Cuadro de Control Facturación">
               <ClaveFinancieraGuard>
