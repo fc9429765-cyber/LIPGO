@@ -250,14 +250,12 @@ export async function autorizar(input: {
     personal = data ?? null
   }
 
-  if (personal?.bloqueado_hasta && new Date(personal.bloqueado_hasta).getTime() > Date.now()) {
-    const hasta = new Date(personal.bloqueado_hasta)
-    const hora = hasta.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", timeZone: "America/Bogota" })
-    await registrarLog({ ...base, resultado: "bloqueado" })
-    return { ok: false, error: `Tu clave está bloqueada por intentos fallidos hasta las ${hora}. Si la olvidaste, recupérala desde el menú de usuario › Mi clave de autorización.` }
-  }
+  // Bloqueo temporal por intentos fallidos: aplica a la clave PERSONAL. Durante la
+  // transición la clave compartida sigue valiendo aunque la personal esté
+  // bloqueada (no se deja a nadie sin poder operar por equivocarse escribiendo).
+  const bloqueada = Boolean(personal?.bloqueado_hasta && new Date(personal.bloqueado_hasta).getTime() > Date.now())
 
-  if (personal && verificarClaveHash(clave, personal.clave_hash)) {
+  if (personal && !bloqueada && verificarClaveHash(clave, personal.clave_hash)) {
     if (Number(personal.intentos_fallidos) > 0 || personal.bloqueado_hasta) {
       await sb.from("autorizacion_claves").update({ intentos_fallidos: 0, bloqueado_hasta: null }).eq("usuario_id", usuarioId)
     }
@@ -288,7 +286,13 @@ export async function autorizar(input: {
     }
   }
 
-  // 3) Falló. Contar intentos si el usuario tiene clave personal.
+  // 3) Falló. Si la personal está bloqueada, informarlo (sin sumar intentos).
+  if (bloqueada) {
+    const hora = new Date(personal.bloqueado_hasta).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", timeZone: "America/Bogota" })
+    await registrarLog({ ...base, resultado: "bloqueado" })
+    return { ok: false, error: `Tu clave personal está bloqueada por intentos fallidos hasta las ${hora}. Si la olvidaste, recupérala desde el menú de usuario › Mi clave de autorización.` }
+  }
+  // Contar intentos si el usuario tiene clave personal.
   if (personal) {
     const intentos = Number(personal.intentos_fallidos || 0) + 1
     const bloquear = intentos >= MAX_INTENTOS_CLAVE
