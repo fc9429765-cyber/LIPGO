@@ -208,40 +208,63 @@ export function OperacionDelDia() {
         </div>
       )}
 
-      {/* CABECERA — la quincena en curso */}
+      {/* CABECERA — HOY: vehículos, toneladas y cobertura del día (la quincena
+          queda como referencia al pie; el panel es del día, no del pago). */}
       <section
         className="rounded-xl p-5 text-white"
         style={{ background: "linear-gradient(120deg, #0f3b3b, #0a5757 60%, #0d6b6b)" }}
       >
         <div className="flex flex-wrap items-center gap-5">
-          <Anillo pct={d.cobertura.pct} />
+          <Anillo
+            pct={
+              d.hoy.total.programados > 0
+                ? Math.round((d.hoy.total.presentes / d.hoy.total.programados) * 100)
+                : 0
+            }
+          />
 
           <div className="min-w-[220px] flex-1">
-            <p className="text-[10px] uppercase tracking-wide text-white/60">Quincena en curso</p>
-            <h2 className="text-2xl font-semibold">{d.quincena.etiqueta}</h2>
+            <p className="text-[10px] uppercase tracking-wide text-white/60">Hoy · {d.fecha}</p>
+            <h2 className="text-2xl font-semibold tabular-nums">
+              {d.operacionHoy.disponible ? (
+                <>
+                  {NUM.format(d.operacionHoy.ordenesHoy)} vehículo{d.operacionHoy.ordenesHoy === 1 ? "" : "s"} ·{" "}
+                  {T1.format(d.operacionHoy.toneladas)} t
+                </>
+              ) : (
+                "Operación del día"
+              )}
+            </h2>
             <p className="mt-1 text-sm text-white/80">
-              {d.cobertura.cubiertos === 0 && d.cobertura.programados === 0
-                ? "Todavía no hay turnos programados en esta quincena."
-                : `${NUM.format(d.cobertura.cubiertos)} de ${NUM.format(d.cobertura.programados)} turnos cubiertos`}
+              {d.operacionHoy.disponible
+                ? `${NUM.format(d.operacionHoy.finalizadas)} finalizados · ${NUM.format(d.operacionHoy.sinCerrar)} sin cerrar${
+                    d.operacionHoy.metaTonDia > 0 ? ` · meta ${T1.format(d.operacionHoy.metaTonDia)} t` : ""
+                  }`
+                : "No se pudo leer la operación de hoy."}
             </p>
             <p className="mt-0.5 text-xs text-white/55">
-              {d.cobertura.diasConDatos} {d.cobertura.diasConDatos === 1 ? "día" : "días"} con
-              programación · corte {d.quincena.hasta.slice(8)} de {d.quincena.etiqueta.split(" de ")[1]}
+              {d.hoy.total.programados > 0
+                ? `${d.hoy.total.presentes} de ${d.hoy.total.programados} personas en operación`
+                : "Sin turnos programados para hoy"}
+              {" · "}quincena {d.quincena.etiqueta}: {NUM.format(d.cobertura.cubiertos)} de {NUM.format(d.cobertura.programados)} turnos cubiertos
             </p>
           </div>
 
           <div className="flex flex-wrap gap-6">
             <div className="border-l border-white/20 pl-5">
-              <p className="text-[10px] uppercase tracking-wide text-white/60">Personal activo</p>
-              <p className="text-2xl font-semibold tabular-nums">{NUM.format(d.personalActivo)}</p>
-              <p className="text-[11px] text-white/55">operativos</p>
+              <p className="text-[10px] uppercase tracking-wide text-white/60">En patio</p>
+              <p
+                className="text-2xl font-semibold tabular-nums"
+                style={{ color: d.operacionHoy.enPatio > 3 ? "#fbbf24" : undefined }}
+              >
+                {NUM.format(d.operacionHoy.enPatio)}
+              </p>
+              <p className="text-[11px] text-white/55">{d.operacionHoy.enPatio ? "esperan ingreso" : "nadie en espera"}</p>
             </div>
             <div className="border-l border-white/20 pl-5">
-              <p className="text-[10px] uppercase tracking-wide text-white/60">Turnos programados</p>
-              <p className="text-2xl font-semibold tabular-nums">
-                {NUM.format(d.turnosProgramadosQuincena)}
-              </p>
-              <p className="text-[11px] text-white/55">en la quincena</p>
+              <p className="text-[10px] uppercase tracking-wide text-white/60">Personal activo</p>
+              <p className="text-2xl font-semibold tabular-nums">{NUM.format(d.personalActivo)}</p>
+              <p className="text-[11px] text-white/55">operativos en la planta</p>
             </div>
             <div className="border-l border-white/20 pl-5">
               <p className="text-[10px] uppercase tracking-wide text-white/60">Novedades abiertas</p>
