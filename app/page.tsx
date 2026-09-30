@@ -1,12 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Sidebar } from "@/components/sidebar"
 import { MainContent } from "@/components/main-content"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { SplashScreen } from "@/components/splash-screen"
 import { LipbotDock } from "@/components/lipbot-dock"
 import { groups, type GroupKey } from "@/lib/dashboard-data"
+import { HUB_POR_KEY, esHubKey, resolverAlias } from "@/lib/navegacion"
+import { escribirUrl, leerEstadoDeUrl } from "@/lib/navegacion-url"
 import { useAuth } from "@/components/auth-provider"
 import { getAtencionDelDiaCompartida } from "@/lib/atencion-del-dia-cache"
 import type { AtencionItem } from "@/components/lip-ai-assistant"
@@ -38,7 +40,11 @@ export default function DashboardPage() {
   // Fija el GRUPO que contiene el módulo además del módulo, porque main-content
   // solo renderiza un módulo si hay un grupo seleccionado. Si no lo encuentra en
   // ningún grupo, cae a un grupo válido para salir del home.
-  const navigateToModule = (moduleName: string) => {
+  const navigateToModule = (destino: string) => {
+    // Nombres viejos (alias) y claves de hub (→ su primera pestaña) se resuelven
+    // aquí, en el punto de entrada: el estado siempre guarda el módulo HOJA.
+    let moduleName = resolverAlias(destino)
+    if (esHubKey(moduleName)) moduleName = HUB_POR_KEY.get(moduleName)?.tabs[0]?.module ?? moduleName
     let gk: GroupKey | null = null
     for (const g of groups) {
       const enDirecto = g.modules?.some((m) => m.name === moduleName)
@@ -71,6 +77,54 @@ export default function DashboardPage() {
     setSelectedGroup(key as GroupKey)
     setSelectedModule(null)
   }
+
+  // ---- Navegación ⇄ URL (`/?g=&m=&t=`): refrescar mantiene el lugar, el botón
+  // atrás funciona y los enlaces se pueden compartir (lib/navegacion-url.ts).
+  const estadoRef = useRef({ group: selectedGroup, module: selectedModule })
+  estadoRef.current = { group: selectedGroup, module: selectedModule }
+  const urlInicializadaRef = useRef(false)
+  const omitirEscrituraRef = useRef(false)
+
+  // 1) Lectura inicial, una vez que hay usuario (antes redirige a /login).
+  useEffect(() => {
+    if (!user || urlInicializadaRef.current) return
+    urlInicializadaRef.current = true
+    const e = leerEstadoDeUrl(window.location.search)
+    if (e.module) {
+      omitirEscrituraRef.current = true
+      navigateToModule(e.module)
+    } else if (e.group) {
+      omitirEscrituraRef.current = true
+      openGroup(e.group)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
+
+  // 2) Escritura: `replace` mientras no haya habido navegación real; `push` después.
+  const huboNavegacionRef = useRef(false)
+  useEffect(() => {
+    if (!user || !urlInicializadaRef.current) return
+    if (omitirEscrituraRef.current) {
+      omitirEscrituraRef.current = false
+      return
+    }
+    escribirUrl({ group: selectedGroup, module: selectedModule }, huboNavegacionRef.current ? "push" : "replace")
+    huboNavegacionRef.current = true
+  }, [user, selectedGroup, selectedModule])
+
+  // 3) Botón atrás/adelante del navegador.
+  useEffect(() => {
+    const onPop = () => {
+      const e = leerEstadoDeUrl(window.location.search)
+      const actual = estadoRef.current
+      if (e.group === actual.group && e.module === actual.module) return
+      omitirEscrituraRef.current = true
+      setSelectedGroup(e.group)
+      setSelectedModule(e.module)
+    }
+    window.addEventListener("popstate", onPop)
+    return () => window.removeEventListener("popstate", onPop)
+  }, [])
   // Controla si la pantalla de bienvenida debe mostrarse antes del
   // dashboard. Solo se activa una vez por sesion: el login-form deja un
   // flag en `sessionStorage` que aqui leemos y limpiamos. Asi evitamos
