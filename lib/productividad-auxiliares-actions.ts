@@ -28,121 +28,19 @@ const num = (v: any) => Number(v || 0)
 const r3 = (v: number) => Math.round(v * 1000) / 1000
 const r1 = (v: number) => Math.round(v * 10) / 10
 
-export type TipoOp = "cargue" | "descargue" | "distribucion" | "tolva" | "otro"
-
-export function clasificarOperacion(tipooperacion: string): TipoOp {
-  const t = String(tipooperacion || "").toLowerCase()
-  if (t.includes("tolva")) return "tolva"
-  if (t.includes("descargue")) return "descargue"
-  if (t.includes("distribuci")) return "distribucion"
-  if (t.includes("cargue")) return "cargue"
-  return "otro"
-}
-
-export interface OrdenReal {
-  fecha: string
-  orden: string
-  tipooperacion: string
-  tipo: TipoOp
-  planta: number
-  placa: string | null
-  peso: number
-  nReal: number
-  tonReal: number
-  /** true si la orden de vehículo no tenía auxiliares_real y se usó la lista de pago. */
-  estimada: boolean
-  crew: string[]
-}
-
-export interface PorTipo {
-  cargue: number
-  descargue: number
-  distribucion: number
-  tolva: number
-  otro: number
-}
-
-export interface AuxiliarProductividad {
-  persona: string
-  activo: boolean
-  planta: number | null
-  /** Días con al menos una operación (vehículo o tolva). */
-  dias: number
-  /** Vehículos atendidos = órdenes de vehículo (cargue/descargue/distribución) en las que estuvo en el equipo real. */
-  vehiculos: number
-  vehiculosPorTipo: PorTipo
-  placasDistintas: number
-  /** Operaciones de tolva en las que estuvo en la cuadrilla. */
-  operacionesTolva: number
-  ordenesEstimadas: number
-  /** Toneladas reales en VEHÍCULOS (sin tolva). */
-  tonReal: number
-  tonPorTipo: PorTipo
-  /** Toneladas de TOLVA (aparte, nunca sumadas a tonReal). */
-  tonTolva: number
-  tonBrutaParticipada: number
-  tonPorDia: number
-  tonPorVehiculo: number
-  pctDelTotal: number
-  /** Toneladas que le pagó nómina por vehículos (reparto de la lista de pago). */
-  tonPagada: number
-  diferenciaRealPagada: number
-  tonPorFecha: Record<string, number>
-  tonPorMes: Record<string, number>
-  ordenesDetalle: OrdenReal[]
-}
-
-export interface DiaProductividad {
-  fecha: string
-  vehiculos: number
-  vehiculosPorTipo: PorTipo
-  auxiliares: number
-  /** Toneladas en vehículos (sin tolva). */
-  toneladas: number
-  tonPorTipo: PorTipo
-  tonPorAuxiliar: number
-  operacionesTolva: number
-  tonTolva: number
-  auxiliaresTolva: number
-  ordenesEstimadas: number
-}
-
-export interface VehiculoProductividad {
-  placa: string
-  visitas: number
-  visitasPorTipo: PorTipo
-  toneladas: number
-  tonPorVisita: number
-  primeraVisita: string
-  ultimaVisita: string
-  auxiliaresFrecuentes: { persona: string; veces: number }[]
-}
-
-export interface ProductividadData {
-  desde: string
-  hasta: string
-  plantas: number[]
-  /** Órdenes de VEHÍCULO (cargue/descargue/distribución/otro). */
-  totalOrdenes: number
-  ordenesConReal: number
-  coberturaReal: number
-  /** Toneladas en vehículos (sin tolva). */
-  totalToneladas: number
-  tonPorTipo: PorTipo
-  vehiculosPorTipo: PorTipo
-  auxiliaresPorTipo: PorTipo
-  /** Tolva, aparte. */
-  operacionesTolva: number
-  tonTolva: number
-  auxiliaresTolva: number
-  totalAuxiliares: number
-  promedioTonAuxiliarDia: number
-  auxiliares: AuxiliarProductividad[]
-  dias: DiaProductividad[]
-  vehiculos: VehiculoProductividad[]
-  meses: string[]
-  fechas: string[]
-}
+// Tipos y `clasificarOperacion` viven en lib/productividad-auxiliares-tipos.ts:
+// un archivo "use server" solo puede exportar funciones async (el build de
+// Vercel falló por exportar una función síncrona desde aquí).
+import {
+  clasificarOperacion,
+  type TipoOp,
+  type OrdenReal,
+  type PorTipo,
+  type AuxiliarProductividad,
+  type DiaProductividad,
+  type VehiculoProductividad,
+  type ProductividadData,
+} from "@/lib/productividad-auxiliares-tipos"
 
 const porTipoVacio = (): PorTipo => ({ cargue: 0, descargue: 0, distribucion: 0, tolva: 0, otro: 0 })
 const redondearPorTipo = (p: PorTipo): PorTipo => ({ cargue: r3(p.cargue), descargue: r3(p.descargue), distribucion: r3(p.distribucion), tolva: r3(p.tolva), otro: r3(p.otro) })

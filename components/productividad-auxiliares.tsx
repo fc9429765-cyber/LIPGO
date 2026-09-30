@@ -25,12 +25,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Trophy, Loader2, Download, Users, Scale, CalendarDays, Info, Truck, Medal, ArrowDownToLine, ArrowUpFromLine, Route, Factory } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import * as XLSX from "xlsx"
-import {
-  getProductividadAuxiliares,
-  type ProductividadData,
-  type AuxiliarProductividad,
-  type TipoOp,
-} from "@/lib/productividad-auxiliares-actions"
+import { getProductividadAuxiliares } from "@/lib/productividad-auxiliares-actions"
+import type { ProductividadData, AuxiliarProductividad, TipoOp } from "@/lib/productividad-auxiliares-tipos"
 
 const BOGOTA_TZ = "America/Bogota"
 const t2 = (n: number) => (Number(n) || 0).toLocaleString("es-CO", { maximumFractionDigits: 2 })
