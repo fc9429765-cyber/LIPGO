@@ -29,6 +29,8 @@ export interface Hub {
   group: GroupKey
   title: string
   icon: LucideIcon
+  /** Color propio de la pantalla (barra de pestañas, tarjeta, ícono). Si falta, se asigna de la paleta. */
+  color?: string
   /** Todas las pestañas deben pertenecer a UN mismo subgrupo (o a la lista directa) de `group`. */
   tabs: HubTab[]
 }
@@ -49,6 +51,7 @@ export const HUBS: Hub[] = [
     group: "lip",
     title: "Operación del día",
     icon: LayoutDashboard,
+    color: "#0d9488",
     tabs: [
       { module: "Operación del día", label: "Resumen del día" },
       { module: "Panel LIP Operación", label: "Tablero del coordinador" },
@@ -61,6 +64,7 @@ export const HUBS: Hub[] = [
     group: "lip",
     title: "Centro de Coordinación",
     icon: LayoutGrid,
+    color: "#2563eb",
     tabs: [
       { module: "Centro de Coordinación", label: "Muelles y órdenes" },
       { module: "Picking", label: "Picking" },
@@ -74,6 +78,7 @@ export const HUBS: Hub[] = [
     group: "lip",
     title: "Personal del día",
     icon: Users,
+    color: "#db2777",
     tabs: [
       { module: "Programación de turnos", label: "Programación" },
       { module: "Registro de asistencia", label: "Registro de asistencia" },
@@ -87,6 +92,7 @@ export const HUBS: Hub[] = [
     group: "lip",
     title: "Toneladas y productividad",
     icon: Scale,
+    color: "#d97706",
     tabs: [
       { module: "Control de Toneladas", label: "Control de toneladas" },
       { module: "Productividad de Auxiliares", label: "Productividad de auxiliares" },
@@ -97,6 +103,7 @@ export const HUBS: Hub[] = [
     group: "lip",
     title: "Estibas QR",
     icon: QrCode,
+    color: "#7c3aed",
     tabs: [
       { module: "Registro de QR estibas", label: "Registrar" },
       { module: "Lectura de QR estibas", label: "Leer" },
@@ -109,6 +116,7 @@ export const HUBS: Hub[] = [
     group: "despachos",
     title: "Órdenes",
     icon: Truck,
+    color: "#2563eb",
     tabs: [
       { module: "Generar Órdenes de Cargue", label: "Cargue" },
       { module: "Generar Órdenes de Descargue", label: "Descargue" },
@@ -121,6 +129,7 @@ export const HUBS: Hub[] = [
     group: "despachos",
     title: "Portería y vehículos",
     icon: ClipboardCheck,
+    color: "#059669",
     tabs: [
       { module: "Registrar Vehículos", label: "Registrar" },
       { module: "Ver Vehículos", label: "Ver vehículos" },
@@ -133,6 +142,7 @@ export const HUBS: Hub[] = [
     group: "despachos",
     title: "Báscula",
     icon: Scale,
+    color: "#d97706",
     tabs: [
       { module: "Báscula", label: "Pesar" },
       { module: "Historial Báscula", label: "Historial" },
@@ -277,6 +287,43 @@ export const TINT_GRUPO: Record<string, string> = {
   sst: "#d84a3e",
   configuracion: "#6b7683",
   aprendizaje: "#3b7dd8",
+}
+
+// ---------------------------------------------------------------------------
+// Color por ENTRADA (pantalla/módulo), distinto entre vecinas de la misma área
+// (gerencia 2026-09-30: "deben tener color diferente para que sepan que son
+// diferentes"). Se asigna sobre la lista COMPLETA del área (sin filtrar por
+// permisos) para que sea estable entre usuarios y pantallas; los hubs pueden
+// fijar el suyo con `color`.
+// ---------------------------------------------------------------------------
+export const PALETA_ENTRADAS = [
+  "#2563eb", "#0d9488", "#d97706", "#7c3aed", "#dc2626", "#059669", "#db2777",
+  "#0891b2", "#ea580c", "#4f46e5", "#65a30d", "#9333ea", "#b45309", "#0284c7",
+]
+
+const COLOR_POR_ENTRADA: Map<string, string> = (() => {
+  const m = new Map<string, string>()
+  for (const g of groups) {
+    let i = 0
+    const listas = [...(g.modules ? [g.modules] : []), ...(g.subgroups ?? []).map((s) => s.modules)]
+    for (const lista of listas) {
+      for (const e of plegarEnHubs(g.key, lista)) {
+        if (e.tipo === "hub") {
+          m.set(`${g.key}|hub:${e.hub.key}`, e.hub.color ?? PALETA_ENTRADAS[i % PALETA_ENTRADAS.length])
+        } else {
+          m.set(`${g.key}|mod:${e.modulo.name}`, PALETA_ENTRADAS[i % PALETA_ENTRADAS.length])
+        }
+        i++
+      }
+    }
+  }
+  return m
+})()
+
+/** Color de un hub o módulo dentro de su área (cae al color del área si no está). */
+export function colorDeEntrada(groupKey: GroupKey, entrada: { hubKey?: string; modulo?: string }): string {
+  const k = entrada.hubKey ? `${groupKey}|hub:${entrada.hubKey}` : `${groupKey}|mod:${entrada.modulo ?? ""}`
+  return COLOR_POR_ENTRADA.get(k) ?? TINT_GRUPO[groupKey] ?? "#0e9c9c"
 }
 
 /**

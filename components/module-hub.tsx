@@ -19,7 +19,7 @@
 import React, { type CSSProperties } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useModulePermissions } from "@/hooks/use-module-permissions"
-import { TINT_GRUPO, etiquetaDeGrupo, etiquetaDeTab, moduloPorNombre, type Hub } from "@/lib/navegacion"
+import { colorDeEntrada, etiquetaDeGrupo, etiquetaDeTab, moduloPorNombre, type Hub } from "@/lib/navegacion"
 
 interface ModuleHubProps {
   hub: Hub
@@ -45,7 +45,7 @@ export function ModuleHub({ hub, activeModule, onSelectTab, renderLeaf, cabecera
 
   if (loaded && tabs.length === 0) return null
   const Icon = hub.icon
-  const tint = TINT_GRUPO[hub.group] ?? "#0e9c9c"
+  const tint = colorDeEntrada(hub.group, { hubKey: hub.key })
 
   return (
     <Tabs value={activeModule} onValueChange={onSelectTab} className="gap-3" style={{ "--tint": tint } as CSSProperties}>

@@ -12,7 +12,7 @@ import { VehiculosNoProcesadosCard } from "@/components/vehiculos-no-procesados-
 import { useAuth } from "@/components/auth-provider"
 import { getIndicadoresValores } from "@/lib/sig-actions"
 import { AREA_KPIS } from "@/lib/kpis-area"
-import { plegarEnHubs, type EntradaMenu } from "@/lib/navegacion"
+import { colorDeEntrada, plegarEnHubs, type EntradaMenu } from "@/lib/navegacion"
 
 interface ModulesViewProps {
   groupKey: GroupKey
@@ -98,12 +98,14 @@ function HubCard({
   )
 }
 
-function renderEntradas(entradas: EntradaMenu[], onSelect: (name: string) => void, tint: string) {
+// Cada tarjeta lleva su propio color (distinto de sus vecinas) para que se
+// distingan de un vistazo; el color del área queda para la cabecera.
+function renderEntradas(entradas: EntradaMenu[], onSelect: (name: string) => void, groupKey: GroupKey) {
   return entradas.map((e) =>
     e.tipo === "hub" ? (
-      <HubCard key={`hub:${e.hub.key}`} entrada={e} onSelect={onSelect} tint={tint} />
+      <HubCard key={`hub:${e.hub.key}`} entrada={e} onSelect={onSelect} tint={colorDeEntrada(groupKey, { hubKey: e.hub.key })} />
     ) : (
-      <ModuleCard key={e.modulo.name} module={e.modulo} onSelect={onSelect} tint={tint} />
+      <ModuleCard key={e.modulo.name} module={e.modulo} onSelect={onSelect} tint={colorDeEntrada(groupKey, { modulo: e.modulo.name })} />
     ),
   )
 }
@@ -243,7 +245,7 @@ export function ModulesView({ groupKey, onBack, onSelectModule }: ModulesViewPro
       {/* Módulos directos (y hubs) */}
       {entradasDirectas.length > 0 && (
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
-          {renderEntradas(entradasDirectas, onSelectModule, tint)}
+          {renderEntradas(entradasDirectas, onSelectModule, groupKey)}
         </div>
       )}
 
@@ -252,7 +254,7 @@ export function ModulesView({ groupKey, onBack, onSelectModule }: ModulesViewPro
         <div key={sg.title} className="space-y-2.5">
           <h2 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">{sg.title}</h2>
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
-            {renderEntradas(sg.entradas, onSelectModule, tint)}
+            {renderEntradas(sg.entradas, onSelectModule, groupKey)}
           </div>
         </div>
       ))}

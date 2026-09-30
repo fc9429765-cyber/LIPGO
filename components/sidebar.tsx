@@ -22,7 +22,7 @@ import {
 import Image from "next/image"
 import type { GroupKey, Module, Subgroup } from "@/lib/dashboard-data"
 import { groups } from "@/lib/dashboard-data"
-import { hubDe, plegarEnHubs, type EntradaMenu } from "@/lib/navegacion"
+import { colorDeEntrada, hubDe, plegarEnHubs, type EntradaMenu } from "@/lib/navegacion"
 import { useState, useEffect, useMemo, type CSSProperties } from "react"
 
 interface SidebarProps {
@@ -456,7 +456,7 @@ export function Sidebar({
           className={clases(isHubActive)}
           title={entrada.tabs.map((t) => t.label ?? t.name).join(" · ")}
         >
-          <HubIcon className="h-3.5 w-3.5 flex-shrink-0" />
+          <HubIcon className="h-3.5 w-3.5 flex-shrink-0" style={{ color: colorDeEntrada(groupKey, { hubKey: entrada.hub.key }) }} />
           <span className="text-left whitespace-nowrap overflow-hidden text-ellipsis">{entrada.hub.title}</span>
           <span className="ml-auto flex-shrink-0 rounded-full bg-white/10 px-1.5 text-[9.5px] tabular-nums text-muted-foreground/80">
             {entrada.tabs.length}
@@ -476,7 +476,7 @@ export function Sidebar({
         }}
         className={clases(isModuleActive)}
       >
-        <ModuleIcon className="h-3.5 w-3.5 flex-shrink-0" />
+        <ModuleIcon className="h-3.5 w-3.5 flex-shrink-0" style={{ color: colorDeEntrada(groupKey, { modulo: module.name }) }} />
         <span className="text-left whitespace-nowrap overflow-hidden text-ellipsis">{module.label ?? module.name}</span>
       </button>
     )
