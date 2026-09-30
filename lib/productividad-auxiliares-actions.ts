@@ -6,16 +6,18 @@
  * Quién carga de verdad en cada ID: usa `cabeceraoc.auxiliares_real` (el
  * personal que el coordinador asignó al vehículo en el Centro de Coordinación),
  * NO la lista de pago `auxiliares`, que en pago Global incluye a todos los del
- * día. Con eso se ve quién mueve más toneladas, cuántas órdenes atiende, su
- * promedio por día y cuánto difiere lo que cargó de lo que se le pagó.
+ * día. Con eso se ve quién mueve más toneladas y vehículos en CARGUE y en
+ * DESCARGUE, su promedio por día y cuánto difiere lo que cargó de lo que se le
+ * pagó. También la vista por vehículo (placa): visitas, toneladas y quién lo
+ * atiende.
  *
  * Universo y peso: los MISMOS de nómina y de Control de Toneladas (órdenes
  * cerradas por fechacargue, sin "proyeccion", sin Distribución en Avimol,
  * pesoBaseCalculo). Solo lectura.
  *
  * Órdenes sin `auxiliares_real` (anteriores a agosto 2026, cuando se empezó a
- * guardar): se usa la lista de pago como aproximación y se marcan "estimadas";
- * la cobertura se informa arriba del informe.
+ * guardar con el Centro de Coordinación): se usa la lista de pago como
+ * aproximación y se marcan "estimadas"; la cobertura se informa arriba.
  */
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
@@ -25,10 +27,21 @@ const num = (v: any) => Number(v || 0)
 const r3 = (v: number) => Math.round(v * 1000) / 1000
 const r1 = (v: number) => Math.round(v * 10) / 10
 
+export type TipoOp = "cargue" | "descargue" | "distribucion" | "otro"
+
+export function clasificarOperacion(tipooperacion: string): TipoOp {
+  const t = String(tipooperacion || "").toLowerCase()
+  if (t.includes("descargue")) return "descargue"
+  if (t.includes("distribuci")) return "distribucion"
+  if (t.includes("cargue")) return "cargue"
+  return "otro"
+}
+
 export interface OrdenReal {
   fecha: string
   orden: string
   tipooperacion: string
+  tipo: TipoOp
   planta: number
   placa: string | null
   peso: number
@@ -39,19 +52,28 @@ export interface OrdenReal {
   crew: string[]
 }
 
+export interface PorTipo {
+  cargue: number
+  descargue: number
+  distribucion: number
+  otro: number
+}
+
 export interface AuxiliarProductividad {
   persona: string
   activo: boolean
   planta: number | null
   dias: number
-  ordenes: number
+  /** Vehículos atendidos = órdenes en las que estuvo en el equipo real. */
+  vehiculos: number
+  vehiculosPorTipo: PorTipo
+  placasDistintas: number
   ordenesEstimadas: number
   tonReal: number
-  tonRealCargue: number
-  tonRealDescargue: number
+  tonPorTipo: PorTipo
   tonBrutaParticipada: number
   tonPorDia: number
-  tonPorOrden: number
+  tonPorVehiculo: number
   pctDelTotal: number
   /** Toneladas que le pagó nómina (reparto de la lista de pago) en el mismo periodo. */
   tonPagada: number
@@ -63,11 +85,25 @@ export interface AuxiliarProductividad {
 
 export interface DiaProductividad {
   fecha: string
-  ordenes: number
+  vehiculos: number
+  vehiculosPorTipo: PorTipo
   auxiliares: number
   toneladas: number
+  tonPorTipo: PorTipo
   tonPorAuxiliar: number
   ordenesEstimadas: number
+}
+
+export interface VehiculoProductividad {
+  placa: string
+  visitas: number
+  visitasPorTipo: PorTipo
+  toneladas: number
+  tonPorVisita: number
+  primeraVisita: string
+  ultimaVisita: string
+  /** Auxiliares que más veces lo atendieron (nombre y veces), máx. 5. */
+  auxiliaresFrecuentes: { persona: string; veces: number }[]
 }
 
 export interface ProductividadData {
@@ -78,13 +114,19 @@ export interface ProductividadData {
   ordenesConReal: number
   coberturaReal: number
   totalToneladas: number
+  tonPorTipo: PorTipo
+  vehiculosPorTipo: PorTipo
   totalAuxiliares: number
   promedioTonAuxiliarDia: number
   auxiliares: AuxiliarProductividad[]
   dias: DiaProductividad[]
+  vehiculos: VehiculoProductividad[]
   meses: string[]
   fechas: string[]
 }
+
+const porTipoVacio = (): PorTipo => ({ cargue: 0, descargue: 0, distribucion: 0, otro: 0 })
+const redondearPorTipo = (p: PorTipo): PorTipo => ({ cargue: r3(p.cargue), descargue: r3(p.descargue), distribucion: r3(p.distribucion), otro: r3(p.otro) })
 
 export async function getProductividadAuxiliares(
   idempresa: number | null,
@@ -142,82 +184,107 @@ export async function getProductividadAuxiliares(
       persona: string
       plantas: Set<number>
       dias: Set<string>
-      ordenes: number
+      vehiculos: number
+      vehiculosPorTipo: PorTipo
+      placas: Set<string>
       ordenesEstimadas: number
       tonReal: number
-      tonRealCargue: number
-      tonRealDescargue: number
+      tonPorTipo: PorTipo
       tonBruta: number
       tonPagada: number
       tonPorFecha: Map<string, number>
       tonPorMes: Map<string, number>
       detalle: OrdenReal[]
     }
+    type AccDia = { vehiculos: number; vehiculosPorTipo: PorTipo; aux: Set<string>; ton: number; tonPorTipo: PorTipo; estimadas: number }
+    type AccVeh = { placa: string; visitas: number; visitasPorTipo: PorTipo; ton: number; primera: string; ultima: string; aux: Map<string, number> }
+    const nuevoAcc = (persona: string): Acc => ({ persona, plantas: new Set(), dias: new Set(), vehiculos: 0, vehiculosPorTipo: porTipoVacio(), placas: new Set(), ordenesEstimadas: 0, tonReal: 0, tonPorTipo: porTipoVacio(), tonBruta: 0, tonPagada: 0, tonPorFecha: new Map(), tonPorMes: new Map(), detalle: [] })
+
     const porPersona = new Map<string, Acc>()
-    const porDia = new Map<string, { ordenes: number; aux: Set<string>; ton: number; estimadas: number }>()
+    const porDia = new Map<string, AccDia>()
+    const porVehiculo = new Map<string, AccVeh>()
     const mesesSet = new Set<string>()
     const fechasSet = new Set<string>()
+    const tonPorTipo = porTipoVacio()
+    const vehiculosPorTipo = porTipoVacio()
     let totalOrdenes = 0
     let ordenesConReal = 0
     let totalToneladas = 0
 
     for (const o of ordenes) {
       const planta = Number(o.idempresa)
-      const tipo = String(o.tipooperacion || "").trim()
-      if (excluirAvimolDistribucion(planta, tipo)) continue
-      const { peso } = pesoBaseCalculo(planta, tipo, num(o.pesovascula), num(o.pesoorden))
+      const tipoTxt = String(o.tipooperacion || "").trim()
+      if (excluirAvimolDistribucion(planta, tipoTxt)) continue
+      const { peso } = pesoBaseCalculo(planta, tipoTxt, num(o.pesovascula), num(o.pesoorden))
       if (peso <= 0) continue
       const pago = partir(o.auxiliares)
       const tieneReal = Boolean(String(o.auxiliares_real || "").trim())
       const crew = tieneReal ? partir(o.auxiliares_real) : pago
       if (crew.length === 0) continue
+      const tipo = clasificarOperacion(tipoTxt)
       const fecha = String(o.fechacargue).slice(0, 10)
       const mes = fecha.slice(0, 7)
+      const placa = o.placa ? String(o.placa).trim().toUpperCase() : null
       totalOrdenes++
       if (tieneReal) ordenesConReal++
       totalToneladas += peso
+      tonPorTipo[tipo] += peso
+      vehiculosPorTipo[tipo]++
       mesesSet.add(mes)
       fechasSet.add(fecha)
       const tonReal = peso / crew.length
       const tonPago = pago.length ? peso / pago.length : 0
-      const placa = o.placa ? String(o.placa).trim() : null
 
-      const d = porDia.get(fecha) ?? { ordenes: 0, aux: new Set<string>(), ton: 0, estimadas: 0 }
-      d.ordenes++
+      const d = porDia.get(fecha) ?? { vehiculos: 0, vehiculosPorTipo: porTipoVacio(), aux: new Set<string>(), ton: 0, tonPorTipo: porTipoVacio(), estimadas: 0 }
+      d.vehiculos++
+      d.vehiculosPorTipo[tipo]++
       d.ton += peso
+      d.tonPorTipo[tipo] += peso
       if (!tieneReal) d.estimadas++
       for (const p of crew) d.aux.add(p.toUpperCase())
       porDia.set(fecha, d)
+
+      if (placa) {
+        const v = porVehiculo.get(placa) ?? { placa, visitas: 0, visitasPorTipo: porTipoVacio(), ton: 0, primera: fecha, ultima: fecha, aux: new Map<string, number>() }
+        v.visitas++
+        v.visitasPorTipo[tipo]++
+        v.ton += peso
+        if (fecha < v.primera) v.primera = fecha
+        if (fecha > v.ultima) v.ultima = fecha
+        for (const p of crew) v.aux.set(p, (v.aux.get(p) || 0) + 1)
+        porVehiculo.set(placa, v)
+      }
 
       const pagoUpper = new Set(pago.map((p) => p.toUpperCase()))
       for (const p of crew) {
         const key = p.toUpperCase()
         let c = porPersona.get(key)
         if (!c) {
-          c = { persona: p, plantas: new Set(), dias: new Set(), ordenes: 0, ordenesEstimadas: 0, tonReal: 0, tonRealCargue: 0, tonRealDescargue: 0, tonBruta: 0, tonPagada: 0, tonPorFecha: new Map(), tonPorMes: new Map(), detalle: [] }
+          c = nuevoAcc(p)
           porPersona.set(key, c)
         }
         c.plantas.add(planta)
         c.dias.add(fecha)
-        c.ordenes++
+        c.vehiculos++
+        c.vehiculosPorTipo[tipo]++
+        if (placa) c.placas.add(placa)
         if (!tieneReal) c.ordenesEstimadas++
         c.tonReal += tonReal
-        if (/descargue/i.test(tipo)) c.tonRealDescargue += tonReal
-        else c.tonRealCargue += tonReal
+        c.tonPorTipo[tipo] += tonReal
         c.tonBruta += peso
         if (pagoUpper.has(key)) c.tonPagada += tonPago
         c.tonPorFecha.set(fecha, (c.tonPorFecha.get(fecha) || 0) + tonReal)
         c.tonPorMes.set(mes, (c.tonPorMes.get(mes) || 0) + tonReal)
-        c.detalle.push({ fecha, orden: String(o.ordendecargue || ""), tipooperacion: tipo, planta, placa, peso: r3(peso), nReal: crew.length, tonReal: r3(tonReal), estimada: !tieneReal, crew })
+        c.detalle.push({ fecha, orden: String(o.ordendecargue || ""), tipooperacion: tipoTxt, tipo, planta, placa, peso: r3(peso), nReal: crew.length, tonReal: r3(tonReal), estimada: !tieneReal, crew })
       }
-      // Personas que estaban en la lista de pago pero NO cargaron: su tonPagada
-      // también cuenta, para que la diferencia real−pagada sea completa.
+      // Personas en la lista de pago que NO cargaron: su tonPagada también cuenta
+      // para que la diferencia real−pagada sea completa.
       for (const p of pago) {
         const key = p.toUpperCase()
         if (crew.some((cName) => cName.toUpperCase() === key)) continue
         let c = porPersona.get(key)
         if (!c) {
-          c = { persona: p, plantas: new Set(), dias: new Set(), ordenes: 0, ordenesEstimadas: 0, tonReal: 0, tonRealCargue: 0, tonRealDescargue: 0, tonBruta: 0, tonPagada: 0, tonPorFecha: new Map(), tonPorMes: new Map(), detalle: [] }
+          c = nuevoAcc(p)
           porPersona.set(key, c)
         }
         c.plantas.add(planta)
@@ -233,14 +300,15 @@ export async function getProductividadAuxiliares(
         activo: activoPorNombre.has(c.persona.toUpperCase()) ? activoPorNombre.get(c.persona.toUpperCase())! : true,
         planta: c.plantas.size === 1 ? [...c.plantas][0] : null,
         dias,
-        ordenes: c.ordenes,
+        vehiculos: c.vehiculos,
+        vehiculosPorTipo: c.vehiculosPorTipo,
+        placasDistintas: c.placas.size,
         ordenesEstimadas: c.ordenesEstimadas,
         tonReal: r3(c.tonReal),
-        tonRealCargue: r3(c.tonRealCargue),
-        tonRealDescargue: r3(c.tonRealDescargue),
+        tonPorTipo: redondearPorTipo(c.tonPorTipo),
         tonBrutaParticipada: r3(c.tonBruta),
         tonPorDia: dias ? r3(c.tonReal / dias) : 0,
-        tonPorOrden: c.ordenes ? r3(c.tonReal / c.ordenes) : 0,
+        tonPorVehiculo: c.vehiculos ? r3(c.tonReal / c.vehiculos) : 0,
         pctDelTotal: totalToneladas ? r1((c.tonReal / totalToneladas) * 100) : 0,
         tonPagada: r3(c.tonPagada),
         diferenciaRealPagada: r3(c.tonReal - c.tonPagada),
@@ -253,9 +321,34 @@ export async function getProductividadAuxiliares(
     auxiliares.sort((a, b) => b.tonReal - a.tonReal || a.persona.localeCompare(b.persona))
 
     const dias: DiaProductividad[] = [...porDia.entries()]
-      .map(([fecha, d]) => ({ fecha, ordenes: d.ordenes, auxiliares: d.aux.size, toneladas: r3(d.ton), tonPorAuxiliar: d.aux.size ? r3(d.ton / d.aux.size) : 0, ordenesEstimadas: d.estimadas }))
+      .map(([fecha, d]) => ({
+        fecha,
+        vehiculos: d.vehiculos,
+        vehiculosPorTipo: d.vehiculosPorTipo,
+        auxiliares: d.aux.size,
+        toneladas: r3(d.ton),
+        tonPorTipo: redondearPorTipo(d.tonPorTipo),
+        tonPorAuxiliar: d.aux.size ? r3(d.ton / d.aux.size) : 0,
+        ordenesEstimadas: d.estimadas,
+      }))
       .sort((a, b) => a.fecha.localeCompare(b.fecha))
     const sumaAuxDia = dias.reduce((s, d) => s + d.auxiliares, 0)
+
+    const vehiculos: VehiculoProductividad[] = [...porVehiculo.values()]
+      .map((v) => ({
+        placa: v.placa,
+        visitas: v.visitas,
+        visitasPorTipo: v.visitasPorTipo,
+        toneladas: r3(v.ton),
+        tonPorVisita: v.visitas ? r3(v.ton / v.visitas) : 0,
+        primeraVisita: v.primera,
+        ultimaVisita: v.ultima,
+        auxiliaresFrecuentes: [...v.aux.entries()]
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+          .slice(0, 5)
+          .map(([persona, veces]) => ({ persona, veces })),
+      }))
+      .sort((a, b) => b.visitas - a.visitas || b.toneladas - a.toneladas || a.placa.localeCompare(b.placa))
 
     return {
       success: true,
@@ -267,10 +360,13 @@ export async function getProductividadAuxiliares(
         ordenesConReal,
         coberturaReal: totalOrdenes ? r1((ordenesConReal / totalOrdenes) * 100) : 0,
         totalToneladas: r3(totalToneladas),
-        totalAuxiliares: auxiliares.filter((a) => a.ordenes > 0).length,
+        tonPorTipo: redondearPorTipo(tonPorTipo),
+        vehiculosPorTipo,
+        totalAuxiliares: auxiliares.filter((a) => a.vehiculos > 0).length,
         promedioTonAuxiliarDia: sumaAuxDia ? r3(totalToneladas / sumaAuxDia) : 0,
         auxiliares,
         dias,
+        vehiculos,
         meses: [...mesesSet].sort(),
         fechas: [...fechasSet].sort(),
       },

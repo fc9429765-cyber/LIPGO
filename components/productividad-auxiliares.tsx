@@ -2,8 +2,9 @@
 
 // Operación LIP › Productividad de Auxiliares (informe de GERENCIA).
 // Quién carga de verdad en cada ID según `cabeceraoc.auxiliares_real` (lo que
-// asignó el coordinador al vehículo), por día y por mes: ranking, toneladas
-// reales vs. pagadas (pago Global), detalle por persona y exportación a Excel.
+// asignó el coordinador al vehículo), por día y por mes: podios de CARGUE y
+// DESCARGUE, barras por tipo de operación, ranking con vehículos, vista por
+// vehículo (placa), detalle por persona y exportación a Excel.
 // El proyecto lo define el SELECTOR GLOBAL; sin proyecto = todo LIP (1–4).
 
 import { useEffect, useMemo, useState } from "react"
@@ -18,16 +19,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Trophy, Loader2, Download, Users, Scale, CalendarDays, Info, Truck } from "lucide-react"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from "recharts"
+import { Trophy, Loader2, Download, Users, Scale, CalendarDays, Info, Truck, Medal, ArrowDownToLine, ArrowUpFromLine, Route } from "lucide-react"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import * as XLSX from "xlsx"
-import { getProductividadAuxiliares, type ProductividadData, type AuxiliarProductividad } from "@/lib/productividad-auxiliares-actions"
+import {
+  getProductividadAuxiliares,
+  type ProductividadData,
+  type AuxiliarProductividad,
+  type PorTipo,
+  type TipoOp,
+} from "@/lib/productividad-auxiliares-actions"
 
 const BOGOTA_TZ = "America/Bogota"
 const t2 = (n: number) => (Number(n) || 0).toLocaleString("es-CO", { maximumFractionDigits: 2 })
 const t1 = (n: number) => (Number(n) || 0).toLocaleString("es-CO", { maximumFractionDigits: 1 })
 const PLANTAS: Record<number, string> = { 1: "Indupan", 2: "Avimol", 3: "Cedi Funza", 4: "Cedi Medellín" }
 const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+const TIPO_LABEL: Record<TipoOp, string> = { cargue: "Cargue", descargue: "Descargue", distribucion: "Distribución", otro: "Otros" }
+const TIPO_COLOR: Record<TipoOp, string> = { cargue: "hsl(var(--primary))", descargue: "#0e9f6e", distribucion: "#f59e0b", otro: "#94a3b8" }
 
 function hoyBogota() {
   const iso = new Intl.DateTimeFormat("en-CA", { timeZone: BOGOTA_TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
@@ -112,24 +121,36 @@ export default function ProductividadAuxiliares() {
   }
 
   const cargadores = useMemo(
-    () => (data?.auxiliares ?? []).filter((a) => a.ordenes > 0 && (incluirApoyos || !esApoyo(a.persona))),
+    () => (data?.auxiliares ?? []).filter((a) => a.vehiculos > 0 && (incluirApoyos || !esApoyo(a.persona))),
     [data, incluirApoyos],
   )
-  const soloPagados = useMemo(() => (data?.auxiliares ?? []).filter((a) => a.ordenes === 0 && a.tonPagada > 0), [data])
-  const top = useMemo(() => cargadores.slice(0, 15).map((a) => ({ nombre: nombreCorto(a.persona), completo: a.persona, ton: a.tonReal })), [cargadores])
+  const soloPagados = useMemo(() => (data?.auxiliares ?? []).filter((a) => a.vehiculos === 0 && a.tonPagada > 0), [data])
+  const topCargue = useMemo(() => [...cargadores].filter((a) => a.tonPorTipo.cargue > 0).sort((a, b) => b.tonPorTipo.cargue - a.tonPorTipo.cargue).slice(0, 8), [cargadores])
+  const topDescargue = useMemo(() => [...cargadores].filter((a) => a.tonPorTipo.descargue > 0).sort((a, b) => b.tonPorTipo.descargue - a.tonPorTipo.descargue).slice(0, 8), [cargadores])
+  const topDistribucion = useMemo(() => [...cargadores].filter((a) => a.tonPorTipo.distribucion > 0).sort((a, b) => b.tonPorTipo.distribucion - a.tonPorTipo.distribucion).slice(0, 8), [cargadores])
+  const tiposPresentes = useMemo(() => {
+    const t: TipoOp[] = []
+    if (data) for (const k of ["cargue", "descargue", "distribucion", "otro"] as TipoOp[]) if (data.tonPorTipo[k] > 0) t.push(k)
+    return t
+  }, [data])
+  const apilado = useMemo(
+    () => cargadores.slice(0, 15).map((a) => ({ nombre: nombreCorto(a.persona), completo: a.persona, ...a.tonPorTipo })),
+    [cargadores],
+  )
   const persona = useMemo(() => (data?.auxiliares ?? []).find((a) => a.persona === personaSel) ?? null, [data, personaSel])
   const variosMeses = (data?.meses.length ?? 0) > 1
   const tituloPlanta = selectedEmpresaId ? selectedEmpresaNombre || PLANTAS[selectedEmpresaId] || `ID${selectedEmpresaId}` : "Todo LIP"
+  const lider = cargadores[0]
 
   const exportar = () => {
     if (!data) return
     const wb = XLSX.utils.book_new()
     const ranking = [
-      ["#", "Auxiliar", "Planta", "Activo", "Días", "Órdenes", "T reales", "T/día", "T/orden", "% del total", "T pagadas", "Real − pagada", "Órdenes estimadas"],
-      ...cargadores.map((a, i) => [i + 1, a.persona, a.planta ? PLANTAS[a.planta] ?? a.planta : "varias", a.activo ? "sí" : "no", a.dias, a.ordenes, a.tonReal, a.tonPorDia, a.tonPorOrden, a.pctDelTotal, a.tonPagada, a.diferenciaRealPagada, a.ordenesEstimadas]),
+      ["#", "Auxiliar", "Planta", "Activo", "Días", "Vehículos", "Veh. cargue", "Veh. descargue", "Veh. distribución", "Placas distintas", "T reales", "T cargue", "T descargue", "T distribución", "T/día", "T/vehículo", "% del total", "T pagadas", "Real − pagada", "Órdenes estimadas"],
+      ...cargadores.map((a, i) => [i + 1, a.persona, a.planta ? PLANTAS[a.planta] ?? a.planta : "varias", a.activo ? "sí" : "no", a.dias, a.vehiculos, a.vehiculosPorTipo.cargue, a.vehiculosPorTipo.descargue, a.vehiculosPorTipo.distribucion, a.placasDistintas, a.tonReal, a.tonPorTipo.cargue, a.tonPorTipo.descargue, a.tonPorTipo.distribucion, a.tonPorDia, a.tonPorVehiculo, a.pctDelTotal, a.tonPagada, a.diferenciaRealPagada, a.ordenesEstimadas]),
     ]
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ranking), "Ranking")
-    const dias = [["Fecha", "Órdenes", "Auxiliares reales", "Toneladas", "T por auxiliar", "Órdenes estimadas"], ...data.dias.map((d) => [d.fecha, d.ordenes, d.auxiliares, d.toneladas, d.tonPorAuxiliar, d.ordenesEstimadas])]
+    const dias = [["Fecha", "Vehículos", "Cargue", "Descargue", "Distribución", "Auxiliares reales", "Toneladas", "T cargue", "T descargue", "T por auxiliar", "Órdenes estimadas"], ...data.dias.map((d) => [d.fecha, d.vehiculos, d.vehiculosPorTipo.cargue, d.vehiculosPorTipo.descargue, d.vehiculosPorTipo.distribucion, d.auxiliares, d.toneladas, d.tonPorTipo.cargue, d.tonPorTipo.descargue, d.tonPorAuxiliar, d.ordenesEstimadas])]
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dias), "Por día")
     const matrizDia = [["Auxiliar", ...data.fechas, "Total"], ...cargadores.map((a) => [a.persona, ...data.fechas.map((f) => a.tonPorFecha[f] ?? 0), a.tonReal])]
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(matrizDia), "Auxiliar x día")
@@ -137,6 +158,8 @@ export default function ProductividadAuxiliares() {
       const matrizMes = [["Auxiliar", ...data.meses.map(mesCorto), "Total"], ...cargadores.map((a) => [a.persona, ...data.meses.map((m) => a.tonPorMes[m] ?? 0), a.tonReal])]
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(matrizMes), "Auxiliar x mes")
     }
+    const veh = [["Placa", "Visitas", "Cargue", "Descargue", "Distribución", "Toneladas", "T por visita", "Primera visita", "Última visita", "Auxiliares frecuentes"], ...data.vehiculos.map((v) => [v.placa, v.visitas, v.visitasPorTipo.cargue, v.visitasPorTipo.descargue, v.visitasPorTipo.distribucion, v.toneladas, v.tonPorVisita, v.primeraVisita, v.ultimaVisita, v.auxiliaresFrecuentes.map((x) => `${x.persona} (${x.veces})`).join("; ")])]
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(veh), "Vehículos")
     const detalle = [["Auxiliar", "Fecha", "Orden", "Operación", "Planta", "Placa", "Peso orden", "Auxiliares reales", "T real", "Estimada", "Equipo real"]]
     for (const a of cargadores) for (const o of a.ordenesDetalle) detalle.push([a.persona, o.fecha, o.orden, o.tipooperacion, PLANTAS[o.planta] ?? String(o.planta), o.placa ?? "", o.peso, o.nReal, o.tonReal, o.estimada ? "sí" : "", o.crew.join(", ")] as any)
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalle), "Detalle órdenes")
@@ -151,9 +174,8 @@ export default function ProductividadAuxiliares() {
             <Trophy className="h-6 w-6" /> Productividad de Auxiliares
           </h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Quién carga de verdad en <b className="text-foreground">{tituloPlanta}</b>: toneladas de cada orden repartidas entre el
-            personal que el coordinador asignó al vehículo (auxiliares reales), no entre la lista de pago. Sirve para ver quién
-            mueve más, su promedio por día y cuánto difiere lo que cargó de lo que se le pagó en pago Global.
+            Quién carga y descarga de verdad en <b className="text-foreground">{tituloPlanta}</b>: las toneladas de cada vehículo se reparten
+            entre el personal que el coordinador le asignó (equipo real), no entre la lista de pago.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={exportar} disabled={!data || loading} className="gap-1.5">
@@ -189,16 +211,23 @@ export default function ProductividadAuxiliares() {
 
       {data && (
         <>
+          {/* Frase que resume el periodo: el informe habla por sí solo. */}
+          {lider && (
+            <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+              <Trophy className="mr-1.5 inline h-4 w-4 text-amber-500" />
+              En {tituloPlanta}, del {fechaCorta(data.desde)} al {fechaCorta(data.hasta)}, se movieron <b>{t2(data.totalToneladas)} t</b> en{" "}
+              <b>{data.totalOrdenes} vehículos</b> ({data.vehiculosPorTipo.cargue} de cargue, {data.vehiculosPorTipo.descargue} de descargue
+              {data.vehiculosPorTipo.distribucion ? `, ${data.vehiculosPorTipo.distribucion} de distribución` : ""}) con {data.totalAuxiliares} auxiliares.
+              El que más movió fue <b>{lider.persona}</b>: {t2(lider.tonReal)} t en {lider.vehiculos} vehículos y {lider.dias} días ({t2(lider.tonPorDia)} t por
+              día, {t1(lider.pctDelTotal)} % del total).
+            </div>
+          )}
+
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <Kpi icon={<Scale className="h-4 w-4" />} label="Toneladas movidas" valor={`${t2(data.totalToneladas)} t`} nota={`${data.totalOrdenes} órdenes cerradas`} />
-            <Kpi icon={<Users className="h-4 w-4" />} label="Auxiliares que cargaron" valor={String(data.totalAuxiliares)} nota={`${fechaCorta(data.desde)} – ${fechaCorta(data.hasta)}`} />
-            <Kpi icon={<CalendarDays className="h-4 w-4" />} label="Promedio por auxiliar y día" valor={`${t2(data.promedioTonAuxiliarDia)} t`} nota={`${data.dias.length} días con operación`} />
-            <Kpi
-              icon={<Truck className="h-4 w-4" />}
-              label="Toneladas por orden"
-              valor={`${t2(data.totalOrdenes ? data.totalToneladas / data.totalOrdenes : 0)} t`}
-              nota="peso promedio de cada orden"
-            />
+            <Kpi icon={<Scale className="h-4 w-4" />} label="Toneladas movidas" valor={`${t2(data.totalToneladas)} t`} nota={`cargue ${t1(data.tonPorTipo.cargue)} · descargue ${t1(data.tonPorTipo.descargue)}${data.tonPorTipo.distribucion ? ` · distrib. ${t1(data.tonPorTipo.distribucion)}` : ""}`} />
+            <Kpi icon={<Truck className="h-4 w-4" />} label="Vehículos atendidos" valor={String(data.totalOrdenes)} nota={`${data.vehiculosPorTipo.cargue} cargue · ${data.vehiculosPorTipo.descargue} descargue · ${data.vehiculos.length} placas distintas`} />
+            <Kpi icon={<Users className="h-4 w-4" />} label="Auxiliares que cargaron" valor={String(data.totalAuxiliares)} nota={`${data.dias.length} días con operación`} />
+            <Kpi icon={<CalendarDays className="h-4 w-4" />} label="Promedio por auxiliar y día" valor={`${t2(data.promedioTonAuxiliarDia)} t`} nota={`${t2(data.totalOrdenes ? data.totalToneladas / data.totalOrdenes : 0)} t por vehículo`} />
             <Kpi
               icon={<Info className="h-4 w-4" />}
               label="Cobertura de dato real"
@@ -209,44 +238,53 @@ export default function ProductividadAuxiliares() {
           </div>
 
           <Tabs value={tab} onValueChange={setTab}>
-            <TabsList>
+            <TabsList className="flex-wrap">
               <TabsTrigger value="ranking">Ranking</TabsTrigger>
               <TabsTrigger value="dia">Por día</TabsTrigger>
               <TabsTrigger value="mes">Por mes</TabsTrigger>
+              <TabsTrigger value="vehiculos">Vehículos</TabsTrigger>
               <TabsTrigger value="detalle">Detalle por auxiliar</TabsTrigger>
             </TabsList>
 
             {/* ===== Ranking ===== */}
             <TabsContent value="ranking" className="mt-4 space-y-4">
-              {top.length > 0 && (
+              <div className={`grid gap-4 ${topDistribucion.length ? "xl:grid-cols-3" : "xl:grid-cols-2"}`}>
+                <Podio titulo="Top cargue" icono={<ArrowUpFromLine className="h-4 w-4" />} tipo="cargue" lista={topCargue} onElegir={(p) => { setPersonaSel(p); setTab("detalle") }} />
+                <Podio titulo="Top descargue" icono={<ArrowDownToLine className="h-4 w-4" />} tipo="descargue" lista={topDescargue} onElegir={(p) => { setPersonaSel(p); setTab("detalle") }} />
+                {topDistribucion.length > 0 && <Podio titulo="Top distribución" icono={<Route className="h-4 w-4" />} tipo="distribucion" lista={topDistribucion} onElegir={(p) => { setPersonaSel(p); setTab("detalle") }} />}
+              </div>
+
+              {apilado.length > 0 && (
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Quién más carga (toneladas reales, top {top.length})</CardTitle>
+                    <CardTitle className="text-base">Toneladas reales por auxiliar y tipo de operación (top {apilado.length})</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div style={{ height: Math.max(220, top.length * 28) }}>
+                    <div style={{ height: Math.max(240, apilado.length * 30) }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={top} layout="vertical" margin={{ left: 8, right: 48, top: 4, bottom: 4 }}>
+                        <BarChart data={apilado} layout="vertical" margin={{ left: 8, right: 24, top: 4, bottom: 4 }}>
                           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                           <XAxis type="number" tickFormatter={(v) => t1(Number(v))} fontSize={11} />
                           <YAxis type="category" dataKey="nombre" width={150} fontSize={11} />
-                          <Tooltip formatter={(v: any) => [`${t2(Number(v))} t`, "Toneladas reales"]} labelFormatter={(_l, p: any) => p?.[0]?.payload?.completo ?? ""} />
-                          <Bar dataKey="ton" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]}>
-                            <LabelList dataKey="ton" position="right" formatter={(v: any) => t1(Number(v))} fontSize={11} />
-                          </Bar>
+                          <Tooltip formatter={(v: any, name: any) => [`${t2(Number(v))} t`, TIPO_LABEL[name as TipoOp] ?? name]} labelFormatter={(_l, p: any) => p?.[0]?.payload?.completo ?? ""} />
+                          <Legend formatter={(v) => TIPO_LABEL[v as TipoOp] ?? v} />
+                          {tiposPresentes.map((k) => (
+                            <Bar key={k} dataKey={k} stackId="t" fill={TIPO_COLOR[k]} radius={k === tiposPresentes[tiposPresentes.length - 1] ? [0, 4, 4, 0] : undefined} />
+                          ))}
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
                   </CardContent>
                 </Card>
               )}
+
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">Ranking completo</CardTitle>
                   <CardDescription>
-                    T reales = suma de (peso de la orden ÷ auxiliares reales de esa orden). T pagadas = lo que le repartió nómina con la
-                    lista de pago. La diferencia positiva significa que cargó más de lo que se le pagó; negativa, que se le pagó más de lo
-                    que cargó.
+                    Vehículos = órdenes en las que estuvo en el equipo real. T reales = peso de cada vehículo ÷ su equipo real. T pagadas = lo
+                    que le repartió nómina con la lista de pago; la diferencia en verde es lo que cargó de más frente a lo pagado, en rojo lo
+                    que se le pagó de más.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="overflow-x-auto">
@@ -257,10 +295,15 @@ export default function ProductividadAuxiliares() {
                         <TableHead>Auxiliar</TableHead>
                         {!selectedEmpresaId && <TableHead>Planta</TableHead>}
                         <TableHead className="text-right">Días</TableHead>
-                        <TableHead className="text-right">Órdenes</TableHead>
+                        <TableHead className="text-right">Vehículos</TableHead>
+                        <TableHead className="text-right">Cargue</TableHead>
+                        <TableHead className="text-right">Descargue</TableHead>
+                        <TableHead className="text-right">Placas</TableHead>
                         <TableHead className="text-right">T reales</TableHead>
+                        <TableHead className="text-right">T cargue</TableHead>
+                        <TableHead className="text-right">T descargue</TableHead>
                         <TableHead className="text-right">T/día</TableHead>
-                        <TableHead className="text-right">T/orden</TableHead>
+                        <TableHead className="text-right">T/vehículo</TableHead>
                         <TableHead className="text-right">% total</TableHead>
                         <TableHead className="text-right">T pagadas</TableHead>
                         <TableHead className="text-right">Real − pagada</TableHead>
@@ -269,7 +312,7 @@ export default function ProductividadAuxiliares() {
                     <TableBody>
                       {cargadores.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={11} className="py-8 text-center text-muted-foreground">Sin órdenes cerradas con equipo en el periodo.</TableCell>
+                          <TableCell colSpan={16} className="py-8 text-center text-muted-foreground">Sin órdenes cerradas con equipo en el periodo.</TableCell>
                         </TableRow>
                       ) : (
                         cargadores.map((a, i) => (
@@ -293,10 +336,15 @@ export default function ProductividadAuxiliares() {
                             </TableCell>
                             {!selectedEmpresaId && <TableCell className="text-xs">{a.planta ? PLANTAS[a.planta] ?? a.planta : "varias"}</TableCell>}
                             <TableCell className="text-right tabular-nums">{a.dias}</TableCell>
-                            <TableCell className="text-right tabular-nums">{a.ordenes}</TableCell>
+                            <TableCell className="text-right tabular-nums font-medium">{a.vehiculos}</TableCell>
+                            <TableCell className="text-right tabular-nums">{a.vehiculosPorTipo.cargue || ""}</TableCell>
+                            <TableCell className="text-right tabular-nums">{a.vehiculosPorTipo.descargue || ""}</TableCell>
+                            <TableCell className="text-right tabular-nums">{a.placasDistintas}</TableCell>
                             <TableCell className="text-right font-semibold tabular-nums">{t2(a.tonReal)}</TableCell>
+                            <TableCell className="text-right tabular-nums">{a.tonPorTipo.cargue ? t2(a.tonPorTipo.cargue) : ""}</TableCell>
+                            <TableCell className="text-right tabular-nums">{a.tonPorTipo.descargue ? t2(a.tonPorTipo.descargue) : ""}</TableCell>
                             <TableCell className="text-right tabular-nums">{t2(a.tonPorDia)}</TableCell>
-                            <TableCell className="text-right tabular-nums">{t2(a.tonPorOrden)}</TableCell>
+                            <TableCell className="text-right tabular-nums">{t2(a.tonPorVehiculo)}</TableCell>
                             <TableCell className="text-right tabular-nums">{t1(a.pctDelTotal)} %</TableCell>
                             <TableCell className="text-right tabular-nums">{t2(a.tonPagada)}</TableCell>
                             <TableCell className={`text-right tabular-nums ${a.diferenciaRealPagada > 0.5 ? "text-emerald-700" : a.diferenciaRealPagada < -0.5 ? "text-red-700" : ""}`}>
@@ -310,7 +358,7 @@ export default function ProductividadAuxiliares() {
                   </Table>
                   {soloPagados.length > 0 && (
                     <p className="mt-3 text-xs text-muted-foreground">
-                      En la lista de pago sin cargar ninguna orden en el periodo: {soloPagados.map((a) => `${a.persona} (${t2(a.tonPagada)} t pagadas)`).join(" · ")}.
+                      En la lista de pago sin cargar ningún vehículo en el periodo: {soloPagados.map((a) => `${a.persona} (${t2(a.tonPagada)} t pagadas)`).join(" · ")}.
                     </p>
                   )}
                 </CardContent>
@@ -321,17 +369,20 @@ export default function ProductividadAuxiliares() {
             <TabsContent value="dia" className="mt-4 space-y-4">
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Toneladas por día</CardTitle>
+                  <CardTitle className="text-base">Toneladas por día (cargue y descargue)</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div style={{ height: 240 }}>
+                  <div style={{ height: 260 }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={data.dias.map((d) => ({ ...d, dia: d.fecha.slice(8) + "/" + d.fecha.slice(5, 7) }))} margin={{ left: 0, right: 8, top: 8, bottom: 4 }}>
+                      <BarChart data={data.dias.map((d) => ({ dia: d.fecha.slice(8) + "/" + d.fecha.slice(5, 7), ...d.tonPorTipo, vehiculos: d.vehiculos, auxiliares: d.auxiliares }))} margin={{ left: 0, right: 8, top: 8, bottom: 4 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="dia" fontSize={11} />
                         <YAxis fontSize={11} tickFormatter={(v) => t1(Number(v))} />
-                        <Tooltip formatter={(v: any, name: any) => [name === "toneladas" ? `${t2(Number(v))} t` : v, name === "toneladas" ? "Toneladas" : name]} />
-                        <Bar dataKey="toneladas" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                        <Tooltip formatter={(v: any, name: any) => [name in TIPO_LABEL ? `${t2(Number(v))} t` : v, TIPO_LABEL[name as TipoOp] ?? name]} />
+                        <Legend formatter={(v) => TIPO_LABEL[v as TipoOp] ?? v} />
+                        {tiposPresentes.map((k) => (
+                          <Bar key={k} dataKey={k} stackId="d" fill={TIPO_COLOR[k]} />
+                        ))}
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -343,7 +394,9 @@ export default function ProductividadAuxiliares() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Fecha</TableHead>
-                        <TableHead className="text-right">Órdenes</TableHead>
+                        <TableHead className="text-right">Vehículos</TableHead>
+                        <TableHead className="text-right">Cargue</TableHead>
+                        <TableHead className="text-right">Descargue</TableHead>
                         <TableHead className="text-right">Auxiliares reales</TableHead>
                         <TableHead className="text-right">Toneladas</TableHead>
                         <TableHead className="text-right">T por auxiliar</TableHead>
@@ -354,7 +407,9 @@ export default function ProductividadAuxiliares() {
                       {data.dias.map((d) => (
                         <TableRow key={d.fecha}>
                           <TableCell>{fechaCorta(d.fecha)}</TableCell>
-                          <TableCell className="text-right tabular-nums">{d.ordenes}</TableCell>
+                          <TableCell className="text-right tabular-nums font-medium">{d.vehiculos}</TableCell>
+                          <TableCell className="text-right tabular-nums">{d.vehiculosPorTipo.cargue || ""}</TableCell>
+                          <TableCell className="text-right tabular-nums">{d.vehiculosPorTipo.descargue || ""}</TableCell>
                           <TableCell className="text-right tabular-nums">{d.auxiliares}</TableCell>
                           <TableCell className="text-right font-semibold tabular-nums">{t2(d.toneladas)}</TableCell>
                           <TableCell className="text-right tabular-nums">{t2(d.tonPorAuxiliar)}</TableCell>
@@ -412,6 +467,7 @@ export default function ProductividadAuxiliares() {
                           <TableHead key={m} className="text-right">{mesCorto(m)}</TableHead>
                         ))}
                         <TableHead className="text-right">Total</TableHead>
+                        <TableHead className="text-right">Vehículos</TableHead>
                         <TableHead className="text-right">T/día</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -423,9 +479,56 @@ export default function ProductividadAuxiliares() {
                             <TableCell key={m} className="text-right tabular-nums">{a.tonPorMes[m] ? t2(a.tonPorMes[m]) : ""}</TableCell>
                           ))}
                           <TableCell className="text-right font-semibold tabular-nums">{t2(a.tonReal)}</TableCell>
+                          <TableCell className="text-right tabular-nums">{a.vehiculos}</TableCell>
                           <TableCell className="text-right tabular-nums">{t2(a.tonPorDia)}</TableCell>
                         </TableRow>
                       ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* ===== Vehículos ===== */}
+            <TabsContent value="vehiculos" className="mt-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Vehículos atendidos (por placa)</CardTitle>
+                  <CardDescription>Visitas = órdenes cerradas de esa placa en el periodo. “Lo atienden” = los auxiliares que más veces estuvieron en su equipo real.</CardDescription>
+                </CardHeader>
+                <CardContent className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Placa</TableHead>
+                        <TableHead className="text-right">Visitas</TableHead>
+                        <TableHead className="text-right">Cargue</TableHead>
+                        <TableHead className="text-right">Descargue</TableHead>
+                        <TableHead className="text-right">Toneladas</TableHead>
+                        <TableHead className="text-right">T por visita</TableHead>
+                        <TableHead>Última visita</TableHead>
+                        <TableHead>Lo atienden</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data.vehiculos.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">Sin vehículos con placa en el periodo.</TableCell>
+                        </TableRow>
+                      ) : (
+                        data.vehiculos.map((v) => (
+                          <TableRow key={v.placa}>
+                            <TableCell className="font-mono font-medium">{v.placa}</TableCell>
+                            <TableCell className="text-right tabular-nums font-medium">{v.visitas}</TableCell>
+                            <TableCell className="text-right tabular-nums">{v.visitasPorTipo.cargue || ""}</TableCell>
+                            <TableCell className="text-right tabular-nums">{v.visitasPorTipo.descargue || ""}</TableCell>
+                            <TableCell className="text-right tabular-nums">{t2(v.toneladas)}</TableCell>
+                            <TableCell className="text-right tabular-nums">{t2(v.tonPorVisita)}</TableCell>
+                            <TableCell className="text-xs">{fechaCorta(v.ultimaVisita)}</TableCell>
+                            <TableCell className="text-[11px] text-muted-foreground">{v.auxiliaresFrecuentes.map((x) => `${nombreCorto(x.persona)} (${x.veces})`).join(", ")}</TableCell>
+                          </TableRow>
+                        ))
+                      )}
                     </TableBody>
                   </Table>
                 </CardContent>
@@ -452,10 +555,10 @@ export default function ProductividadAuxiliares() {
                   {persona && (
                     <div className="flex flex-wrap gap-2 text-xs">
                       <Badge variant="secondary">{persona.dias} días</Badge>
-                      <Badge variant="secondary">{persona.ordenes} órdenes</Badge>
+                      <Badge variant="secondary">{persona.vehiculos} vehículos ({persona.placasDistintas} placas)</Badge>
                       <Badge variant="secondary">{t2(persona.tonReal)} t reales</Badge>
                       <Badge variant="secondary">{t2(persona.tonPorDia)} t/día</Badge>
-                      <Badge variant="secondary">cargue {t2(persona.tonRealCargue)} t · descargue {t2(persona.tonRealDescargue)} t</Badge>
+                      <Badge variant="secondary">cargue {t2(persona.tonPorTipo.cargue)} t · descargue {t2(persona.tonPorTipo.descargue)} t</Badge>
                       <Badge variant="secondary">{t2(persona.tonPagada)} t pagadas</Badge>
                     </div>
                   )}
@@ -472,10 +575,10 @@ export default function ProductividadAuxiliares() {
                           <TableHead>Operación</TableHead>
                           {!selectedEmpresaId && <TableHead>Planta</TableHead>}
                           <TableHead>Placa</TableHead>
-                          <TableHead className="text-right">Peso orden</TableHead>
-                          <TableHead className="text-right">Aux. reales</TableHead>
+                          <TableHead className="text-right">Peso vehículo</TableHead>
+                          <TableHead className="text-right">Equipo real</TableHead>
                           <TableHead className="text-right">T real</TableHead>
-                          <TableHead>Equipo real</TableHead>
+                          <TableHead>Con quién</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -485,11 +588,11 @@ export default function ProductividadAuxiliares() {
                             <TableCell className="font-mono text-xs">{o.orden}</TableCell>
                             <TableCell className="text-xs">{o.tipooperacion}</TableCell>
                             {!selectedEmpresaId && <TableCell className="text-xs">{PLANTAS[o.planta] ?? o.planta}</TableCell>}
-                            <TableCell className="text-xs">{o.placa ?? ""}</TableCell>
+                            <TableCell className="font-mono text-xs">{o.placa ?? ""}</TableCell>
                             <TableCell className="text-right text-xs tabular-nums">{t2(o.peso)}</TableCell>
                             <TableCell className="text-right text-xs tabular-nums">{o.nReal}{o.estimada ? " *" : ""}</TableCell>
                             <TableCell className="text-right text-xs font-semibold tabular-nums">{t2(o.tonReal)}</TableCell>
-                            <TableCell className="text-[11px] text-muted-foreground">{o.crew.map(nombreCorto).join(", ")}</TableCell>
+                            <TableCell className="text-[11px] text-muted-foreground">{o.crew.filter((c) => c !== persona.persona).map(nombreCorto).join(", ") || "solo"}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -513,6 +616,61 @@ function Kpi({ icon, label, valor, nota, alerta }: { icon: React.ReactNode; labe
         <p className="flex items-center gap-1.5 text-xs uppercase text-muted-foreground">{icon} {label}</p>
         <p className="text-2xl font-bold">{valor}</p>
         {nota && <p className="text-[11px] text-muted-foreground">{nota}</p>}
+      </CardContent>
+    </Card>
+  )
+}
+
+const MEDALLA = ["text-amber-500", "text-slate-400", "text-amber-700"]
+
+function Podio({
+  titulo,
+  icono,
+  tipo,
+  lista,
+  onElegir,
+}: {
+  titulo: string
+  icono: React.ReactNode
+  tipo: TipoOp
+  lista: AuxiliarProductividad[]
+  onElegir: (persona: string) => void
+}) {
+  const total = lista.reduce((s, a) => s + a.tonPorTipo[tipo], 0)
+  const max = lista[0]?.tonPorTipo[tipo] || 1
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          {icono} {titulo}
+        </CardTitle>
+        <CardDescription>{lista.length ? `${lista.length} auxiliares · toneladas reales de ${TIPO_LABEL[tipo].toLowerCase()}` : "Sin operaciones de este tipo en el periodo"}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {lista.map((a, i) => {
+          const t = a.tonPorTipo[tipo]
+          const v = a.vehiculosPorTipo[tipo]
+          return (
+            <button key={a.persona} type="button" onClick={() => onElegir(a.persona)} className="block w-full rounded-md p-1.5 text-left hover:bg-muted/50">
+              <div className="flex items-center gap-2">
+                <span className="w-6 shrink-0 text-center">
+                  {i < 3 ? <Medal className={`inline h-4 w-4 ${MEDALLA[i]}`} /> : <span className="font-mono text-xs text-muted-foreground">{i + 1}</span>}
+                </span>
+                <span className={`flex-1 truncate ${i === 0 ? "font-semibold" : "text-sm"}`} title={a.persona}>{a.persona}</span>
+                <span className={`shrink-0 tabular-nums ${i === 0 ? "text-base font-bold" : "text-sm font-medium"}`}>{t2(t)} t</span>
+              </div>
+              <div className="ml-8 mt-0.5 flex items-center gap-2">
+                <div className="h-1.5 flex-1 overflow-hidden rounded bg-muted">
+                  <div className="h-full rounded" style={{ width: `${Math.max(2, (t / max) * 100)}%`, background: TIPO_COLOR[tipo] }} />
+                </div>
+                <span className="w-[130px] shrink-0 text-right text-[11px] text-muted-foreground">
+                  {v} veh · {a.dias} días · {t2(a.dias ? t / a.dias : 0)} t/día
+                </span>
+              </div>
+            </button>
+          )
+        })}
+        {total > 0 && <p className="pt-1 text-right text-[11px] text-muted-foreground">Estos {lista.length} suman {t2(total)} t</p>}
       </CardContent>
     </Card>
   )
