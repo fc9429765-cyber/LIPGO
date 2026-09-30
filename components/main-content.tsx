@@ -1142,9 +1142,10 @@ export function MainContent({
             <MigaNavegacion groupKey={selectedGroup} moduleName={selectedModule} onInicio={onInicio} onGrupo={(k) => onOpenGroup(k)} />
           ) : null}
           {/* KPIs del módulo, presentes en CUALQUIER submódulo del módulo (self-gated:
-              solo pinta en submódulos de grupos con KPIs; null en home/portada). */}
-          {selectedGroup && selectedModule ? <ModuleKpiHeader selectedModule={selectedModule} /> : null}
-          {selectedGroup && selectedModule ? <ModuloGuiaBar selectedModule={selectedModule} /> : null}
+              solo pinta en submódulos de grupos con KPIs; null en home/portada).
+              Dentro de un hub se pintan DEBAJO de las pestañas (los pasa ModuleHub). */}
+          {selectedGroup && selectedModule && !hubActivo ? <ModuleKpiHeader selectedModule={selectedModule} /> : null}
+          {selectedGroup && selectedModule && !hubActivo ? <ModuloGuiaBar selectedModule={selectedModule} /> : null}
           {editingOrderId ? (
             <OrderEditPage {...({ orderId: editingOrderId, onBack: () => setEditingOrderId(null) } as any)} />
           ) : !selectedGroup ? (
@@ -1244,7 +1245,18 @@ export function MainContent({
               </div>
             </>
           ) : selectedModule && hubActivo ? (
-            <ModuleHub hub={hubActivo} activeModule={selectedModule} onSelectTab={onSelectModule} renderLeaf={renderLeaf} />
+            <ModuleHub
+              hub={hubActivo}
+              activeModule={selectedModule}
+              onSelectTab={onSelectModule}
+              renderLeaf={renderLeaf}
+              cabecera={
+                <>
+                  <ModuleKpiHeader selectedModule={selectedModule} />
+                  <ModuloGuiaBar selectedModule={selectedModule} />
+                </>
+              }
+            />
           ) : selectedModule ? (
             renderLeaf(selectedModule)
           ) : (
