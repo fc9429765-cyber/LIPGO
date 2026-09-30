@@ -40,7 +40,20 @@ import {
   type DiaProductividad,
   type VehiculoProductividad,
   type ProductividadData,
+  type AsistenciaDia,
+  type Frecuencia,
 } from "@/lib/productividad-auxiliares-tipos"
+
+// Cruce por nombre contra registroasistencia: sin acentos, sin dobles espacios, mayúsculas.
+const claveNombre = (n: unknown) =>
+  String(n ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase()
+const esPuestoCargue = (puesto: unknown) => /cargue|descargue/i.test(String(puesto ?? ""))
+const hora = (v: unknown) => (v ? String(v).slice(0, 5) : null)
 
 const porTipoVacio = (): PorTipo => ({ cargue: 0, descargue: 0, distribucion: 0, tolva: 0, otro: 0 })
 const redondearPorTipo = (p: PorTipo): PorTipo => ({ cargue: r3(p.cargue), descargue: r3(p.descargue), distribucion: r3(p.distribucion), tolva: r3(p.tolva), otro: r3(p.otro) })
@@ -91,6 +104,38 @@ export async function getProductividadAuxiliares(
       if (!data || data.length < 1000) break
     }
 
+    // 2b) Programación/asistencia del periodo (paginada): puesto, novedad y
+    //     horarios por (planta|fecha|nombre), para la ficha 360° del auxiliar.
+    const asistenciaPorNombre = new Map<string, AsistenciaDia[]>()
+    for (let off = 0; ; off += 1000) {
+      const { data, error } = await admin
+        .from("registroasistencia")
+        .select("nombre, idempresa, fecha, puesto, asistencia, horaentradaprogramada, horasalidaprogramada, horaingreso, horasalida")
+        .in("idempresa", emps)
+        .gte("fecha", desde)
+        .lte("fecha", hasta)
+        .order("id")
+        .range(off, off + 999)
+      if (error) return { success: false, message: error.message }
+      for (const r of data || []) {
+        const k = claveNombre(r.nombre)
+        if (!k) continue
+        const lista = asistenciaPorNombre.get(k) ?? []
+        lista.push({
+          fecha: String(r.fecha).slice(0, 10),
+          planta: Number(r.idempresa),
+          puesto: r.puesto ? String(r.puesto) : null,
+          novedad: r.asistencia ? String(r.asistencia) : null,
+          entradaProgramada: hora(r.horaentradaprogramada),
+          salidaProgramada: hora(r.horasalidaprogramada),
+          entradaReal: hora(r.horaingreso),
+          salidaReal: hora(r.horasalida),
+        })
+        asistenciaPorNombre.set(k, lista)
+      }
+      if (!data || data.length < 1000) break
+    }
+
     const partir = (s: any) =>
       String(s || "")
         .split(",")
@@ -101,6 +146,8 @@ export async function getProductividadAuxiliares(
       persona: string
       plantas: Set<number>
       dias: Set<string>
+      companeros: Map<string, { veces: number; ton: number }>
+      placasFrec: Map<string, { veces: number; ton: number }>
       vehiculos: number
       vehiculosPorTipo: PorTipo
       placas: Set<string>
@@ -117,7 +164,7 @@ export async function getProductividadAuxiliares(
     }
     type AccDia = { vehiculos: number; vehiculosPorTipo: PorTipo; aux: Set<string>; ton: number; tonPorTipo: PorTipo; opTolva: number; tonTolva: number; auxTolva: Set<string>; estimadas: number }
     type AccVeh = { placa: string; visitas: number; visitasPorTipo: PorTipo; ton: number; primera: string; ultima: string; aux: Map<string, number> }
-    const nuevoAcc = (persona: string): Acc => ({ persona, plantas: new Set(), dias: new Set(), vehiculos: 0, vehiculosPorTipo: porTipoVacio(), placas: new Set(), operacionesTolva: 0, ordenesEstimadas: 0, tonReal: 0, tonPorTipo: porTipoVacio(), tonTolva: 0, tonBruta: 0, tonPagada: 0, tonPorFecha: new Map(), tonPorMes: new Map(), detalle: [] })
+    const nuevoAcc = (persona: string): Acc => ({ persona, plantas: new Set(), dias: new Set(), companeros: new Map(), placasFrec: new Map(), vehiculos: 0, vehiculosPorTipo: porTipoVacio(), placas: new Set(), operacionesTolva: 0, ordenesEstimadas: 0, tonReal: 0, tonPorTipo: porTipoVacio(), tonTolva: 0, tonBruta: 0, tonPagada: 0, tonPorFecha: new Map(), tonPorMes: new Map(), detalle: [] })
 
     const porPersona = new Map<string, Acc>()
     const porDia = new Map<string, AccDia>()
@@ -203,6 +250,14 @@ export async function getProductividadAuxiliares(
         }
         c.plantas.add(planta)
         c.dias.add(fecha)
+        // Con quién comparte equipo (para la ficha 360°).
+        for (const otro of crew) {
+          if (otro.toUpperCase() === key) continue
+          const f = c.companeros.get(otro) ?? { veces: 0, ton: 0 }
+          f.veces++
+          f.ton += tonReal
+          c.companeros.set(otro, f)
+        }
         if (esTolva) {
           c.operacionesTolva++
           c.tonTolva += tonReal
@@ -210,7 +265,13 @@ export async function getProductividadAuxiliares(
         } else {
           c.vehiculos++
           c.vehiculosPorTipo[tipo]++
-          if (placa) c.placas.add(placa)
+          if (placa) {
+            c.placas.add(placa)
+            const f = c.placasFrec.get(placa) ?? { veces: 0, ton: 0 }
+            f.veces++
+            f.ton += tonReal
+            c.placasFrec.set(placa, f)
+          }
           if (estimada) c.ordenesEstimadas++
           c.tonReal += tonReal
           c.tonPorTipo[tipo] += tonReal
@@ -238,14 +299,28 @@ export async function getProductividadAuxiliares(
       }
     }
 
+    const topFrecuencia = (m: Map<string, { veces: number; ton: number }>, n: number): Frecuencia[] =>
+      [...m.entries()]
+        .sort((a, b) => b[1].veces - a[1].veces || b[1].ton - a[1].ton || a[0].localeCompare(b[0]))
+        .slice(0, n)
+        .map(([nombre, f]) => ({ nombre, veces: f.veces, toneladas: r3(f.ton) }))
+
     const auxiliares: AuxiliarProductividad[] = []
     for (const c of porPersona.values()) {
       const dias = c.dias.size
       const diasVehiculo = c.tonPorFecha.size
+      const asistencia = (asistenciaPorNombre.get(claveNombre(c.persona)) ?? []).sort((a, b) => a.fecha.localeCompare(b.fecha))
+      const diasProgCargue = new Set(asistencia.filter((a) => esPuestoCargue(a.puesto)).map((a) => a.fecha))
+      const diasProgramadosSinVehiculo = [...diasProgCargue].filter((f) => !c.tonPorFecha.has(f)).length
       auxiliares.push({
         persona: c.persona,
         activo: activoPorNombre.has(c.persona.toUpperCase()) ? activoPorNombre.get(c.persona.toUpperCase())! : true,
         planta: c.plantas.size === 1 ? [...c.plantas][0] : null,
+        asistencia,
+        diasProgramadosCargue: diasProgCargue.size,
+        diasProgramadosSinVehiculo,
+        companeros: topFrecuencia(c.companeros, 8),
+        placasTop: topFrecuencia(c.placasFrec, 8),
         dias,
         vehiculos: c.vehiculos,
         vehiculosPorTipo: c.vehiculosPorTipo,

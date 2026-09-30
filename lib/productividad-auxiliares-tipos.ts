@@ -39,10 +39,40 @@ export interface PorTipo {
   otro: number
 }
 
+/** Un día del auxiliar según Programación/Asistencia (registroasistencia). */
+export interface AsistenciaDia {
+  fecha: string
+  planta: number
+  /** Puesto programado ese día (Cargue/Descargue, Estibado PT, Distribución Turno…). */
+  puesto: string | null
+  /** Novedad registrada (Descanso, Incapacidad, Retiro, Vacaciones…). */
+  novedad: string | null
+  entradaProgramada: string | null
+  salidaProgramada: string | null
+  entradaReal: string | null
+  salidaReal: string | null
+}
+
+export interface Frecuencia {
+  nombre: string
+  veces: number
+  toneladas: number
+}
+
 export interface AuxiliarProductividad {
   persona: string
   activo: boolean
   planta: number | null
+  /** Programación/asistencia del periodo (solo días con registro). */
+  asistencia: AsistenciaDia[]
+  /** Días programados en un puesto de Cargue/Descargue. */
+  diasProgramadosCargue: number
+  /** Días programados en Cargue/Descargue SIN ningún vehículo ese día. */
+  diasProgramadosSinVehiculo: number
+  /** Compañeros con los que más comparte equipo real (veces y toneladas conjuntas). */
+  companeros: Frecuencia[]
+  /** Placas que más atiende (veces y toneladas). */
+  placasTop: Frecuencia[]
   /** Días con al menos una operación (vehículo o tolva). */
   dias: number
   /** Vehículos atendidos = órdenes de vehículo (cargue/descargue/distribución) en las que estuvo en el equipo real. */

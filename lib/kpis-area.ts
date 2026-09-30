@@ -119,6 +119,9 @@ export const SUBMODULO_KPIS: Record<string, string[]> = {
   // "Tiempo de cargue" del día) — no repetir la tira genérica, para dejar
   // más espacio vertical al tablero de muelles.
   "Centro de Coordinación": [],
+  // Productividad de Auxiliares trae sus propios indicadores (por tipo de
+  // operación y por auxiliar); los del área saturaban la pantalla sin relación.
+  "Productividad de Auxiliares": [],
   "Ver Picking/Packing": ["lip_evidencia"],
   "Registro de QR estibas": ["inv_exactitud"],
   "Lectura de QR estibas": ["inv_exactitud"],
