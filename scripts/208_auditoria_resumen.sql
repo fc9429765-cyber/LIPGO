@@ -2,6 +2,9 @@
 -- 208_auditoria_resumen.sql — Bitácora de Auditoría: resumen "quién hizo qué"
 -- y nombres legibles para las tablas de nómina/compensación.
 -- Aditivo e idempotente. Correr en el SQL Editor de Supabase.
+-- (v2, 2026-09-30: la primera versión en SQL plano con "p is null or col = p"
+--  no usaba el índice de fecha y agotaba el statement_timeout con la bitácora
+--  completa; esta versión arma el WHERE solo con los filtros recibidos.)
 --
 -- 1) Función `auditoria_resumen(...)`: agrupa la bitácora por usuario, módulo,
 --    tabla y acción con los mismos filtros de la pantalla (fecha, ID, usuario,
@@ -34,38 +37,56 @@ returns table (
   primero      timestamptz,
   ultimo       timestamptz
 )
-language sql
+language plpgsql
 stable
 set search_path = public
 as $$
-  select a.actor_id,
-         a.actor_nombre,
-         a.idempresa,
-         coalesce(a.modulo, a.tabla) as modulo,
-         a.tabla,
-         a.operacion,
-         count(*)::bigint            as n,
-         min(a.ts)                   as primero,
-         max(a.ts)                   as ultimo
-    from public.auditoria a
-   where (p_desde is null or a.ts >= p_desde)
-     and (p_hasta is null or a.ts <= p_hasta)
-     and (p_idempresa is null or a.idempresa = p_idempresa)
-     and (p_actor_id is null or a.actor_id = p_actor_id)
-     and (not p_solo_sistema or a.actor_id is null)
-     and (p_modulo is null or a.modulo = p_modulo)
-     and (p_operacion is null or a.operacion = p_operacion)
-     and (p_busqueda is null
-          or a.descripcion  ilike '%' || p_busqueda || '%'
-          or a.registro_id  ilike '%' || p_busqueda || '%'
-          or a.actor_nombre ilike '%' || p_busqueda || '%'
-          or a.tabla        ilike '%' || p_busqueda || '%')
-   group by 1, 2, 3, 4, 5, 6
-   order by 2, 4, 6;
+declare
+  v_where text := 'true';
+begin
+  -- Solo se agregan los predicados recibidos: así el planificador usa los
+  -- índices (idx_auditoria_ts, idx_auditoria_idempresa, idx_auditoria_actor…).
+  if p_desde is not null then
+    v_where := v_where || ' and a.ts >= $1';
+  end if;
+  if p_hasta is not null then
+    v_where := v_where || ' and a.ts <= $2';
+  end if;
+  if p_idempresa is not null then
+    v_where := v_where || ' and a.idempresa = $3';
+  end if;
+  if p_actor_id is not null then
+    v_where := v_where || ' and a.actor_id = $4';
+  end if;
+  if coalesce(p_solo_sistema, false) then
+    v_where := v_where || ' and a.actor_id is null';
+  end if;
+  if p_modulo is not null then
+    v_where := v_where || ' and a.modulo = $5';
+  end if;
+  if p_operacion is not null then
+    v_where := v_where || ' and a.operacion = $6';
+  end if;
+  if nullif(btrim(p_busqueda), '') is not null then
+    v_where := v_where || ' and (a.descripcion ilike $7 or a.registro_id ilike $7'
+                       || ' or a.actor_nombre ilike $7 or a.tabla ilike $7)';
+  end if;
+
+  return query execute
+       'select a.actor_id, a.actor_nombre, a.idempresa,'
+    || '       coalesce(a.modulo, a.tabla), a.tabla, a.operacion,'
+    || '       count(*)::bigint, min(a.ts), max(a.ts)'
+    || '  from public.auditoria a'
+    || ' where ' || v_where
+    || ' group by 1, 2, 3, 4, 5, 6'
+    || ' order by 2, 4, 6'
+  using p_desde, p_hasta, p_idempresa, p_actor_id, p_modulo, p_operacion,
+        '%' || coalesce(btrim(p_busqueda), '') || '%';
+end;
 $$;
 
 comment on function public.auditoria_resumen is
-  'Bitácora de Auditoría: conteo por usuario/módulo/tabla/acción con los filtros de la pantalla.';
+  'Bitácora de Auditoría: conteo por usuario/módulo/tabla/acción con los filtros de la pantalla (WHERE dinámico para usar índices).';
 
 -- Nombres legibles (Grupo · Submódulo) para tablas que hoy salen "prettify".
 insert into public.auditoria_modulos (tabla, modulo) values
@@ -85,5 +106,5 @@ insert into public.auditoria_modulos (tabla, modulo) values
   ('inspecciones_montacargas','SST · Inspección montacargas')
 on conflict (tabla) do update set modulo = excluded.modulo;
 
--- Verificación:
+-- Verificación (debe responder en menos de un segundo):
 --   select * from public.auditoria_resumen(now() - interval '1 day', now(), 2) limit 20;

@@ -83,6 +83,8 @@ export default function BitacoraAuditoria() {
   const [sel, setSel] = useState<AuditoriaRow | null>(null)
   const [resumen, setResumen] = useState<AuditoriaResumenFila[]>([])
   const [resumenParcial, setResumenParcial] = useState(false)
+  const [resumenError, setResumenError] = useState<string | null>(null)
+  const [resumenCargando, setResumenCargando] = useState(false)
   const [resumenAbierto, setResumenAbierto] = useState(true)
   const [exportando, setExportando] = useState(false)
 
@@ -137,10 +139,13 @@ export default function BitacoraAuditoria() {
   // Resumen: se recalcula al cambiar filtros (no al paginar).
   useEffect(() => {
     let vivo = true
+    setResumenCargando(true)
     getAuditoriaResumen(filtro).then((r) => {
       if (!vivo) return
       setResumen(r.filas)
       setResumenParcial(r.parcial)
+      setResumenError(r.error ? (/timeout/i.test(r.error) ? "La consulta tardó demasiado. Acorta el rango de fechas o filtra por usuario o módulo." : r.error) : null)
+      setResumenCargando(false)
     })
     return () => {
       vivo = false
@@ -357,7 +362,11 @@ export default function BitacoraAuditoria() {
         </CardHeader>
         {resumenAbierto && (
           <CardContent>
-            {porUsuario.length === 0 ? (
+            {resumenError ? (
+              <p className="text-sm text-amber-800">{resumenError}</p>
+            ) : resumenCargando && porUsuario.length === 0 ? (
+              <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Calculando…</p>
+            ) : porUsuario.length === 0 ? (
               <p className="text-sm text-muted-foreground">Sin cambios con los filtros actuales.</p>
             ) : (
               <div className="divide-y">
