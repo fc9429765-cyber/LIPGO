@@ -162,6 +162,10 @@ export interface UserPermissions {
   // operativa del coordinador: toneladas por dia y acumuladas por
   // trabajador, para gestionar personal (no es un modulo de pago).
   control_toneladas: boolean
+  // Permiso del módulo "Productividad de Auxiliares" (Operación Lip): informe
+  // de gerencia de quién carga de verdad (cabeceraoc.auxiliares_real) por ID,
+  // día y mes. Solo lectura. Ver scripts/207_add_productividad_auxiliares_permission.sql.
+  productividad_auxiliares: boolean
   // Permiso del modulo "Centro de Coordinación" (Operación Lip). Une en una
   // sola pantalla la gestión que hoy está dispersa en Picking, Packing y el
   // control de muelles/SLA: el coordinador ve los muelles en vivo, asigna
@@ -416,6 +420,7 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   "Programación de turnos": "programacionturnos",
   "Notificaciones al Personal": "notificaciones",
   "Control de Toneladas": "control_toneladas",
+  "Productividad de Auxiliares": "productividad_auxiliares",
   "Centro de Coordinación": "centro_coordinacion",
   Visor: "visor",
   Bodegas: "config_bodegas",

@@ -158,6 +158,7 @@ const IndicadoresSIG = dynamic(() => import("@/components/sst/indicadores-sig").
 const EvaluacionAreas = dynamic(() => import("@/components/sst/evaluacion-areas").then((m) => m.EvaluacionAreas), { loading: ModuleLoading })
 const PanelOperacionLIP = dynamic(() => import("@/components/sst/panel-operacion-lip").then((m) => m.PanelOperacionLIP), { loading: ModuleLoading })
 const ControlToneladas = dynamic(() => import("@/components/control-toneladas"), { loading: ModuleLoading })
+const ProductividadAuxiliares = dynamic(() => import("@/components/productividad-auxiliares"), { loading: ModuleLoading })
 const CentroCoordinacion = dynamic(() => import("@/components/centro-coordinacion"), { loading: ModuleLoading })
 const OperacionDelDia = dynamic(() => import("@/components/operacion/operacion-del-dia").then((m) => m.OperacionDelDia), { loading: ModuleLoading })
 const MapaInteraccionProceso = dynamic(() => import("@/components/sst/mapa-interaccion-proceso").then((m) => m.MapaInteraccionProceso), { loading: ModuleLoading })
@@ -1013,6 +1014,10 @@ export function MainContent({
           ) : selectedModule === "Control de Toneladas" ? (
             <PermissionGuard moduleName="Control de Toneladas">
               <ControlToneladas />
+            </PermissionGuard>
+          ) : selectedModule === "Productividad de Auxiliares" ? (
+            <PermissionGuard moduleName="Productividad de Auxiliares">
+              <ProductividadAuxiliares />
             </PermissionGuard>
           ) : selectedModule === "Operación del día" ? (
             <PermissionGuard moduleName="Operación del día">

@@ -1,4 +1,4 @@
-import { FileSearch, Gift, Truck, Forklift, Scale, ClipboardCheck, Package, FileText, CheckCircle, Box, PackagePlus, BarChart3, Package2, ArrowRightLeft, History, Search, LayoutDashboard, Activity, FileCheck, Receipt, Clock, Users, Eye, Settings, Type as type, LucideIcon, CreditCard, UserCheck, Store, Tag, Layers, MapPin, Warehouse, Gauge, QrCode, Sparkles, BadgeCheck, BookOpen, Lock, ClipboardList, CalendarDays, NotebookPen, GraduationCap, Wallet, Banknote, Calculator, CalendarClock, FolderOpen, FolderArchive, UserCog, HeartHandshake, ShieldCheck, Stethoscope, AlertTriangle, Star, Send, Landmark, UserPlus, LayoutGrid, FileSpreadsheet, FileEdit, KeyRound } from "lucide-react"
+import { FileSearch, Gift, Truck, Forklift, Scale, ClipboardCheck, Package, FileText, CheckCircle, Box, PackagePlus, BarChart3, Package2, ArrowRightLeft, History, Search, LayoutDashboard, Activity, FileCheck, Receipt, Clock, Users, Eye, Settings, Type as type, LucideIcon, CreditCard, UserCheck, Store, Tag, Layers, MapPin, Warehouse, Gauge, QrCode, Sparkles, BadgeCheck, BookOpen, Lock, ClipboardList, CalendarDays, NotebookPen, GraduationCap, Wallet, Banknote, Calculator, CalendarClock, FolderOpen, FolderArchive, UserCog, HeartHandshake, ShieldCheck, Stethoscope, AlertTriangle, Star, Send, Landmark, UserPlus, LayoutGrid, FileSpreadsheet, FileEdit, KeyRound, Trophy } from "lucide-react"
 
 export interface Module {
   name: string
@@ -211,6 +211,10 @@ export const groups: Group[] = [
           // paga nómina): para que el coordinador gestione personal — quién
           // mueve menos, quién es más eficiente, qué vehículos atendió.
           { name: "Control de Toneladas", icon: Scale },
+          // Informe de GERENCIA: quién carga de verdad en cada ID
+          // (cabeceraoc.auxiliares_real, lo que asignó el coordinador), por día
+          // y por mes, ranking y real vs. pagado en pago Global. Solo lectura.
+          { name: "Productividad de Auxiliares", icon: Trophy },
           // "Gestión de Facturas" reubicado aquí desde Gestión Financiera: es
           // función operativa propia del coordinador/líder de LIP. Conserva su
           // nombre y permiso (gestionfacturas).
