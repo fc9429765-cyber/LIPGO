@@ -304,17 +304,31 @@ export const PALETA_ENTRADAS = [
 const COLOR_POR_ENTRADA: Map<string, string> = (() => {
   const m = new Map<string, string>()
   for (const g of groups) {
-    let i = 0
     const listas = [...(g.modules ? [g.modules] : []), ...(g.subgroups ?? []).map((s) => s.modules)]
-    for (const lista of listas) {
-      for (const e of plegarEnHubs(g.key, lista)) {
-        if (e.tipo === "hub") {
-          m.set(`${g.key}|hub:${e.hub.key}`, e.hub.color ?? PALETA_ENTRADAS[i % PALETA_ENTRADAS.length])
-        } else {
-          m.set(`${g.key}|mod:${e.modulo.name}`, PALETA_ENTRADAS[i % PALETA_ENTRADAS.length])
+    const entradas = listas.flatMap((lista) => plegarEnHubs(g.key, lista))
+    // 1) Los hubs con color fijo lo reservan primero, para que ningún módulo
+    //    de la misma área reciba ese mismo color de la paleta.
+    const usados = new Set<string>()
+    for (const e of entradas) if (e.tipo === "hub" && e.hub.color) usados.add(e.hub.color)
+    // 2) El resto toma, en orden, el primer color de la paleta aún libre en el
+    //    área; si el área tiene más entradas que colores, se reinicia.
+    let cursor = 0
+    const siguienteLibre = () => {
+      for (let k = 0; k < PALETA_ENTRADAS.length; k++) {
+        const c = PALETA_ENTRADAS[(cursor + k) % PALETA_ENTRADAS.length]
+        if (!usados.has(c)) {
+          cursor = (cursor + k + 1) % PALETA_ENTRADAS.length
+          usados.add(c)
+          if (usados.size >= PALETA_ENTRADAS.length) usados.clear()
+          return c
         }
-        i++
       }
+      usados.clear()
+      return PALETA_ENTRADAS[cursor++ % PALETA_ENTRADAS.length]
+    }
+    for (const e of entradas) {
+      if (e.tipo === "hub") m.set(`${g.key}|hub:${e.hub.key}`, e.hub.color ?? siguienteLibre())
+      else m.set(`${g.key}|mod:${e.modulo.name}`, siguienteLibre())
     }
   }
   return m
