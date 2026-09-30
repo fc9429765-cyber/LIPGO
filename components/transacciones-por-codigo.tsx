@@ -23,6 +23,9 @@ import {
   buscarMovimientoOriginal,
   ejecutarTransaccionPorCodigo,
   solicitarAjustePendiente,
+  getCodigosQuePuedoAprobar,
+  ejecutarAjusteConMiClave,
+  getStockCuarentena,
 } from "@/lib/transacciones-codigo-actions"
 import {
   FIELDSETS,
@@ -122,6 +125,25 @@ export function TransaccionesPorCodigo() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Códigos con aprobación (601/702/555) que ESTE usuario puede aprobar en el
+  // proyecto con su clave personal: el diálogo le ofrece "Ejecutar ahora" además
+  // de "Enviar a Gerencia" (p. ej. el jefe de bodega de Avimol con el 555).
+  const [puedoAprobar, setPuedoAprobar] = useState<string[]>([])
+  useEffect(() => {
+    if (!selectedEmpresaId) {
+      setPuedoAprobar([])
+      return
+    }
+    let vivo = true
+    getCodigosQuePuedoAprobar(selectedEmpresaId).then((c) => {
+      if (vivo) setPuedoAprobar(c)
+    })
+    return () => {
+      vivo = false
+    }
+  }, [selectedEmpresaId])
+  const puedoEjecutarYo = requiereAprobacion && puedoAprobar.includes(codigo)
+
   const limpiarCampos = () => {
     setLocation(""); setProducto(""); setLote(""); setCantidad(""); setMotivo(""); setClave("")
     setLocationDestino(""); setLoteDestino(""); setProductoDestino(""); setOcargueRef("")
@@ -132,14 +154,23 @@ export function TransaccionesPorCodigo() {
   useEffect(() => {
     limpiarCampos()
     if (!fs || !selectedEmpresaId) return
-    if (fs.origen === "conStock" || fs.origen === "cuarentena") {
-      getLocationsFromSaldoInvDetalle(undefined, selectedEmpresaId).then((u) => {
-        setUbicaciones(u)
-        // Origen CUARENTENA (343 liberar / 555 desechar): la ubicación es
-        // automática -- se fija aquí para que carguen productos y lotes con stock.
-        if (fs.origen === "cuarentena") {
-          const q = u.find((x: string) => /CUARENTENA/i.test(x))
-          if (q) setLocation(q)
+    if (fs.origen === "conStock") {
+      getLocationsFromSaldoInvDetalle(undefined, selectedEmpresaId).then(setUbicaciones)
+    }
+    if (fs.origen === "cuarentena") {
+      // Origen CUARENTENA (343 liberar / 555 desechar): la ubicación es
+      // automática. Se toma DIRECTO de la tabla de ubicaciones del proyecto (no
+      // de la lista de ubicaciones con saldo, que depende de filtros y de que el
+      // saldo ya esté materializado) para que producto y lote carguen siempre.
+      getStockCuarentena(selectedEmpresaId).then((r) => {
+        if (r.ubicacion) {
+          setUbicaciones([r.ubicacion])
+          setLocation(r.ubicacion)
+        } else {
+          toast({ title: "Sin ubicación CUARENTENA", description: r.message || "Este proyecto no tiene ubicación CUARENTENA configurada.", variant: "destructive" })
+        }
+        if (r.success && r.data.length === 0) {
+          toast({ title: "Cuarentena vacía", description: "No hay producto bloqueado en CUARENTENA en este proyecto. Primero bloquea con 344." })
         }
       })
     }
@@ -260,7 +291,7 @@ export function TransaccionesPorCodigo() {
     return true
   }, [fs, codigo, requiereAprobacion, selectedEmpresaId, cantidad, clave, motivo, refSel, producto, lote, location, locationDestino, loteDestino, productoDestino])
 
-  const ejecutar = async () => {
+  const ejecutar = async (conMiClave = false) => {
     if (!fs || !selectedEmpresaId) return
     setEjecutando(true)
     const payload = {
@@ -280,11 +311,22 @@ export function TransaccionesPorCodigo() {
     }
     // 601/702 (salida sin orden de cargue, sin ser avería/reproceso) nunca se
     // aplican de una: quedan pendientes de aprobación de Gerencia (SQL 62).
-    const r = requiereAprobacion ? await solicitarAjustePendiente(payload) : await ejecutarTransaccionPorCodigo(payload)
+    // Con aprobación y permiso propio: "Ejecutar ahora" solicita y aprueba en un
+    // solo paso con la clave del usuario (mismo rastro que el flujo normal).
+    const r = requiereAprobacion
+      ? conMiClave
+        ? await ejecutarAjusteConMiClave(payload, clave)
+        : await solicitarAjustePendiente(payload)
+      : await ejecutarTransaccionPorCodigo(payload)
     setEjecutando(false)
+    if (!r.success && conMiClave) {
+      // Clave incorrecta o sin permiso: dejar el diálogo abierto para corregir.
+      toast({ title: "No se pudo ejecutar", description: r.message, variant: "destructive" })
+      return
+    }
     setConfirmando(false)
     if (r.success) {
-      if (requiereAprobacion) {
+      if (requiereAprobacion && !conMiClave) {
         toast({ title: `Solicitud ${codigo} enviada a Gerencia`, description: r.message })
       } else {
         const conInvtrans = r as { invtransIds?: number[] }
@@ -760,9 +802,36 @@ export function TransaccionesPorCodigo() {
               <p className="mt-1">Cantidad: <b className="tabular-nums">{cantidad}</b></p>
               {motivo && <p className="mt-1">Motivo: {motivo}</p>}
             </div>
-            {requiereAprobacion ? (
+            {requiereAprobacion && puedoEjecutarYo ? (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Tu perfil te permite aprobar el {codigo} en este proyecto. Puedes <b>ejecutarlo ahora con tu clave</b> (queda registrado como
+                  solicitado y aprobado por ti) o enviarlo a la cola de Aprobaciones pendientes para que lo apruebe otra persona.
+                </p>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Tu clave de autorización</Label>
+                  <Input
+                    type="password"
+                    value={clave}
+                    onChange={(e) => setClave(e.target.value)}
+                    className="mt-1"
+                    placeholder="••••"
+                    autoComplete="off"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && clave.trim() && !ejecutando) ejecutar(true)
+                    }}
+                  />
+                  <div className="mt-1">
+                    <AyudaClaveAutorizacion />
+                  </div>
+                </div>
+                <p className="text-xs font-medium" style={{ color: "#C0392B" }}>
+                  Al ejecutar, el movimiento se aplica de inmediato al inventario real y no se puede deshacer desde aquí.
+                </p>
+              </div>
+            ) : requiereAprobacion ? (
               <p className="text-xs font-medium" style={{ color: "#C0392B" }}>
-                Este código saca producto sin una orden de cargue detrás y sin ser avería/reproceso — NO se aplica todavía. Queda pendiente hasta que alguien de Gerencia lo apruebe con su clave; el stock no se mueve hasta entonces.
+                Este código saca producto sin una orden de cargue detrás y sin ser avería/reproceso — NO se aplica todavía. Queda pendiente hasta que alguien con permiso lo apruebe con su clave; el stock no se mueve hasta entonces.
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
@@ -770,11 +839,22 @@ export function TransaccionesPorCodigo() {
               </p>
             )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmando(false)}>Cancelar</Button>
-            <Button onClick={ejecutar} disabled={ejecutando}>
-              {ejecutando ? "Enviando…" : requiereAprobacion ? "Enviar a Gerencia" : "Ejecutar movimiento"}
-            </Button>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirmando(false)} disabled={ejecutando}>Cancelar</Button>
+            {puedoEjecutarYo ? (
+              <>
+                <Button variant="secondary" onClick={() => ejecutar(false)} disabled={ejecutando}>
+                  {ejecutando ? "Enviando…" : "Enviar a aprobación"}
+                </Button>
+                <Button onClick={() => ejecutar(true)} disabled={ejecutando || !clave.trim()}>
+                  {ejecutando ? "Ejecutando…" : "Ejecutar ahora con mi clave"}
+                </Button>
+              </>
+            ) : (
+              <Button onClick={() => ejecutar(false)} disabled={ejecutando}>
+                {ejecutando ? "Enviando…" : requiereAprobacion ? "Enviar a Gerencia" : "Ejecutar movimiento"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -2126,20 +2126,31 @@ export async function getLocationsFromSaldoInvDetalle(
     const supabase = await createClient()
     const empresaId = selectedEmpresaId ?? (await getCurrentEmpresaId())
 
-    const { data, error } = await supabase
-      .from("saldoinvdetalle")
-      .select("location")
-      .eq("idempresa", empresaId)
-      .gt("stock_actual", 0)
-      .order("location", { ascending: true })
-
-    if (error) {
+    // PAGINADO (2026-09-30): sin `.range()` Supabase corta en 1.000 filas y, como
+    // se ordena por ubicación, las últimas alfabéticamente (p. ej. CUARENTENA,
+    // TMP, V…) desaparecían del desplegable en proyectos con mucho stock. Caso
+    // real: en Avimol el 555 nunca activaba el botón porque CUARENTENA no
+    // llegaba. Orden único (location, idproducto, lote) para paginar estable.
+    let data: any[]
+    try {
+      data = await fetchAllRows((from, to) =>
+        supabase
+          .from("saldoinvdetalle")
+          .select("location")
+          .eq("idempresa", empresaId)
+          .gt("stock_actual", 0)
+          .order("location", { ascending: true })
+          .order("idproducto")
+          .order("lote")
+          .range(from, to),
+      )
+    } catch (error) {
       console.error("[v0] Error fetching locations from saldoinvdetalle:", error)
       return []
     }
 
     const uniqueLocations = [
-      ...new Set(data?.map((item) => item.location).filter((loc) => loc) ?? []),
+      ...new Set(data.map((item) => item.location).filter((loc) => loc)),
     ]
 
     // Si no se filtra por almacen, devolvemos todas.
