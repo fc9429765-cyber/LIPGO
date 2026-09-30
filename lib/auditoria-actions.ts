@@ -84,7 +84,15 @@ export async function getAuditoriaResumen(
     })
     if (!rpc.error) {
       const filas = ((rpc.data ?? []) as any[]).map((r) => ({ ...r, n: Number(r.n) })) as AuditoriaResumenFila[]
-      return { filas, parcial: false }
+      // PostgREST corta la respuesta del RPC en 1.000 filas: con filtros
+      // normales hay decenas de grupos, pero sin ningún filtro puede superarlo.
+      return { filas, parcial: filas.length >= 1000 }
+    }
+    // Función ausente (PGRST202) → agregación en servidor. Cualquier otro error
+    // (p. ej. statement timeout) se informa: repetir la lectura completa sería
+    // igual de lento.
+    if (rpc.error.code !== "PGRST202" && !/could not find the function/i.test(rpc.error.message)) {
+      return { filas: [], parcial: false, error: rpc.error.message }
     }
 
     // Fallback sin la función SQL: agregación en servidor por páginas.

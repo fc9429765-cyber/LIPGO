@@ -351,7 +351,7 @@ export default function BitacoraAuditoria() {
               </CardTitle>
               <CardDescription>
                 {totalResumen.toLocaleString("es-CO")} cambio(s) con los filtros actuales, agrupados por usuario y módulo. Click en un módulo para ver solo ese detalle abajo.
-                {resumenParcial && <span className="text-amber-700"> Resumen calculado sobre los primeros 20.000 registros: acorta el rango o corre el SQL 208.</span>}
+                {resumenParcial && <span className="text-amber-700"> Resumen incompleto (demasiados registros o grupos): acorta el rango de fechas o filtra por usuario o módulo.</span>}
               </CardDescription>
             </div>
             <Button variant="ghost" size="sm" onClick={() => setResumenAbierto((v) => !v)} className="gap-1">
