@@ -20,12 +20,15 @@
 // ---------------------------------------------------------------------------
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
-import { getRevisionNominaProyecto } from "@/lib/revision-nomina-actions"
 import { getHorarioTolva } from "@/lib/horario-tolva-actions"
+import { getDespachoKpis, getVehiculosNoProcesados } from "@/lib/pedidos-kpis-actions"
+import { getControlToneladas } from "@/lib/control-toneladas-actions"
+import { TON_MES_CARGUE_DESCARGUE, DIAS_OPERACION_MES } from "@/lib/meta-productividad-utils"
 import type {
   CoberturaTurno,
   ItemBandeja,
   OperacionDiaData,
+  OperacionHoy,
   RequisicionResumen,
 } from "@/lib/operacion-dia-tipos"
 
@@ -293,6 +296,8 @@ export async function getOperacionDia(
     // --- BANDEJA DEL DÍA ---------------------------------------------------
     const bandeja: ItemBandeja[] = []
     let novedadesAbiertas = 0
+    let turnosPorAprobar = 0
+    let ausentismosSinCompletar = 0
 
     // (a) Solicitudes de turnos y horas extra pendientes de aprobar.
     try {
@@ -302,6 +307,7 @@ export async function getOperacionDia(
         .eq("idempresa", empresaId)
         .eq("estado", "pendiente")
       const n = (data ?? []).length
+      turnosPorAprobar = n
       if (n > 0) {
         novedadesAbiertas += n
         bandeja.push({
@@ -339,6 +345,7 @@ export async function getOperacionDia(
         .eq("idempresa", empresaId)
         .eq("estado_registro", "BORRADOR")
       const n = (data ?? []).length
+      ausentismosSinCompletar = n
       if (n > 0) {
         novedadesAbiertas += n
         bandeja.push({
@@ -425,27 +432,62 @@ export async function getOperacionDia(
       console.error("[v0] getOperacionDia vacantes:", e?.message ?? e)
     }
 
-    // --- PAGO DE LA QUINCENA ----------------------------------------------
-    // Se reusa getRevisionNominaProyecto: es la MISMA cifra que revisa nómina,
-    // con el neteo de destajo y la exclusión del día de cierre ya aplicados.
-    // Recalcular por fuera daría un número distinto al que se paga.
-    let pago = { total: 0, personas: 0, disponible: false, mensaje: null as string | null }
+    // --- VEHÍCULOS Y TONELADAS DE HOY ---------------------------------------
+    // (Sustituye al pago de la quincena, 2026-09-30: el dinero de nómina no va
+    // en el panel operativo; vive en Compensación.) Mismas fuentes que ya usan
+    // Gestión de Órdenes, Vehículos por cerrar y Control de Toneladas.
+    const operacionHoy: OperacionHoy = {
+      ordenesHoy: 0,
+      finalizadas: 0,
+      sinCerrar: 0,
+      enPatio: 0,
+      toneladas: 0,
+      metaTonDia: Math.round(((TON_MES_CARGUE_DESCARGUE[empresaId] || 0) / DIAS_OPERACION_MES) * 10) / 10,
+      tiempoPromMin: null,
+      auxiliares: [],
+      disponible: false,
+      mensaje: null,
+    }
     try {
-      const r = await getRevisionNominaProyecto(empresaId, anio, mes, numero)
-      if (r.success && r.data) {
-        pago = {
-          total: Number(r.data.resumen?.totalLipgo) || 0,
-          personas: Number(r.data.resumen?.nConDatos) || 0,
-          disponible: true,
-          mensaje: null,
-        }
-      } else {
-        pago.mensaje = r.message ?? "No se pudo calcular."
+      const [kpis, patio, ton] = await Promise.all([
+        getDespachoKpis(empresaId),
+        getVehiculosNoProcesados(empresaId),
+        getControlToneladas(empresaId, fecha, fecha),
+      ])
+      operacionHoy.ordenesHoy = kpis.ordenesHoy
+      operacionHoy.finalizadas = kpis.finalizadasHoy
+      operacionHoy.sinCerrar = kpis.sinCerrar
+      operacionHoy.tiempoPromMin = kpis.operacionesMedidas > 0 ? kpis.tiempoPromOperacion : null
+      // Solo los que LLEGARON HOY y siguen sin procesar: el conteo total de
+      // "no procesados" arrastra citas viejas (38 en Avimol el 30-sep) y no es
+      // el patio de hoy.
+      operacionHoy.enPatio = patio.vehiculos.filter((v) => String(v.fechallegada ?? "").startsWith(fecha)).length
+      if (ton.success && ton.data) {
+        operacionHoy.toneladas = Math.round(ton.data.totalToneladas * 10) / 10
+        operacionHoy.auxiliares = ton.data.trabajadores
+          .map((t) => ({ persona: t.persona, ton: Math.round(t.tonAcumulada * 10) / 10 }))
+          .filter((t) => t.ton > 0)
+          .sort((a, b) => b.ton - a.ton)
+      } else if (ton.message) {
+        operacionHoy.mensaje = ton.message
       }
+      operacionHoy.disponible = true
     } catch (e: any) {
-      // pagonomina es una VISTA que recalcula: puede tardar o expirar.
-      pago.mensaje = "El cálculo tardó más de lo normal. Ábrelo en Revisión de Nómina."
-      console.error("[v0] getOperacionDia pago:", e?.message ?? e)
+      operacionHoy.mensaje = e?.message || "No se pudo leer la operación de hoy."
+      console.error("[v0] getOperacionDia operacionHoy:", e?.message ?? e)
+    }
+
+    // --- CIERRE DEL DÍA: ¿ya se escribió la bitácora de hoy? ----------------
+    let bitacoraHoy = false
+    try {
+      const { count } = await sb
+        .from("bitacora")
+        .select("id", { count: "exact", head: true })
+        .eq("idempresa", empresaId)
+        .eq("fecha", fecha)
+      bitacoraHoy = (count || 0) > 0
+    } catch (e: any) {
+      console.error("[v0] getOperacionDia bitacora:", e?.message ?? e)
     }
 
     return {
@@ -466,7 +508,14 @@ export async function getOperacionDia(
           return orden[a.nivel] - orden[b.nivel]
         }),
         requisiciones,
-        pago,
+        operacionHoy,
+        cierre: {
+          vehiculosSinCerrar: operacionHoy.sinCerrar,
+          sinMarcar: totalHoy.sinMarcar,
+          turnosPorAprobar,
+          ausentismosSinCompletar,
+          bitacoraHoy,
+        },
         avisos,
       },
     }

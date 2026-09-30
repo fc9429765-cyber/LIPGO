@@ -6,6 +6,13 @@
 // máximo visible, más el costo mensual que implica la vacante.
 // Derecha: las requisiciones en curso con su avance real.
 //
+// "Todo amarrado" (gerencia, 2026-09-30): el cargo se elige de la lista fija
+// de Head Count, el puesto del maestro de turnos (el mismo que programa el
+// coordinador) y el turno de los turnos definidos para la planta. El salario
+// se sugiere con la mediana de lo que ganan los activos con ese cargo y se
+// contrasta con el SMLV. Nada se escribe a mano salvo que el catálogo no
+// tenga la opción ("Otro…").
+//
 // El costo NO usa un factor quemado: suma los porcentajes reales de
 // `parametros_prestaciones` y `parametros_parafiscales`, que son editables
 // porque la ley cambia.
@@ -17,11 +24,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
-import { AlertTriangle, Info, Loader2, Scale, Send } from "lucide-react"
+import { AlertTriangle, Info, Link2, Loader2, Scale, Send, Users } from "lucide-react"
 import {
   crearRequisicion,
+  getCatalogosRequisicion,
   getFactoresCosto,
   getRequisiciones,
+  type CatalogosRequisicion,
   type RequisicionResumen,
 } from "@/lib/requisicion-actions"
 import {
@@ -36,6 +45,9 @@ const COP = new Intl.NumberFormat("es-CO", {
   currency: "COP",
   maximumFractionDigits: 0,
 })
+
+const OTRO = "__otro__"
+const SELECT = "mt-1 w-full rounded border bg-background px-2 py-2 text-sm"
 
 type Factores = FactoresCosto & { detalle: string[]; aiuDeclarado: boolean }
 
@@ -61,24 +73,32 @@ export default function RequisicionPersonal() {
   const [reqs, setReqs] = useState<RequisicionResumen[]>([])
   const [factores, setFactores] = useState<Factores | null>(null)
   const [avisoFactores, setAvisoFactores] = useState<string | null>(null)
+  const [catalogos, setCatalogos] = useState<CatalogosRequisicion | null>(null)
+  const [avisoCatalogos, setAvisoCatalogos] = useState<string | null>(null)
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
 
   // Formulario
   const [cargo, setCargo] = useState("")
+  const [cargoOtro, setCargoOtro] = useState("")
+  const [puesto, setPuesto] = useState("")
   const [vacantes, setVacantes] = useState("1")
   const [causal, setCausal] = useState<string>("")
   const [salario, setSalario] = useState("")
+  // true mientras el salario sea el sugerido por el cargo (se reemplaza al cambiar de cargo).
+  const [salarioSugerido, setSalarioSugerido] = useState(false)
   const [turno, setTurno] = useState("")
+  const [turnoOtro, setTurnoOtro] = useState("")
   const [ciudad, setCiudad] = useState("")
   const [requisitos, setRequisitos] = useState("")
   const [aiu, setAiu] = useState("0")
 
   const cargar = useCallback(async () => {
     setCargando(true)
-    const [r, f] = await Promise.all([
+    const [r, f, c] = await Promise.all([
       getRequisiciones(selectedEmpresaId ?? null),
       getFactoresCosto(selectedEmpresaId ?? null),
+      getCatalogosRequisicion(selectedEmpresaId ?? null),
     ])
     if (r.success && r.data) setReqs(r.data)
     if (f.success && f.data) {
@@ -88,6 +108,14 @@ export default function RequisicionPersonal() {
       setFactores(null)
       setAvisoFactores(f.message ?? "No se pudieron leer los parámetros de costo.")
     }
+    if (c.success && c.data) {
+      setCatalogos(c.data)
+      setAvisoCatalogos(null)
+      setCiudad((prev) => prev || c.data!.ciudad || "")
+    } else {
+      setCatalogos(null)
+      setAvisoCatalogos(c.message ?? "No se pudieron leer los catálogos de cargos y turnos.")
+    }
     setCargando(false)
   }, [selectedEmpresaId])
 
@@ -96,6 +124,30 @@ export default function RequisicionPersonal() {
   }, [cargar])
 
   const causalSel = causalPorId(causal)
+  const cargoFinal = cargo === OTRO ? cargoOtro.trim() : cargo
+  const turnoFinal = turno === OTRO ? turnoOtro.trim() : turno
+  const cargoCat = catalogos?.cargos.find((c) => c.cargo === cargo) ?? null
+  const puestoCat = catalogos?.puestos.find((p) => p.puesto === puesto) ?? null
+  const smlv = catalogos?.smlv ?? null
+  const bajoMinimo = smlv != null && Number(salario) > 0 && Number(salario) < smlv
+
+  const onCargo = (v: string) => {
+    setCargo(v)
+    const c = catalogos?.cargos.find((x) => x.cargo === v)
+    if (c?.salarioReferencia && (salarioSugerido || !salario)) {
+      setSalario(String(c.salarioReferencia))
+      setSalarioSugerido(true)
+    }
+  }
+  const onPuesto = (p: string) => {
+    setPuesto(p)
+    // Si el puesto trae hora de entrada y hay un turno con esa hora, se propone.
+    const pc = catalogos?.puestos.find((x) => x.puesto === p)
+    if (pc?.horaEntrada && !turnoFinal) {
+      const t = catalogos?.turnos.find((x) => x.horaInicio === pc.horaEntrada)
+      if (t) setTurno(t.etiqueta)
+    }
+  }
 
   const costo = useMemo(() => {
     if (!factores) return null
@@ -110,13 +162,14 @@ export default function RequisicionPersonal() {
     setGuardando(true)
     const r = await crearRequisicion({
       empresaId: selectedEmpresaId,
-      cargo,
+      cargo: cargoFinal,
       vacantes: Number(vacantes) || 0,
       causal,
       salarioMensual: Number(salario) || 0,
-      turno: turno || null,
+      turno: turnoFinal || null,
       ciudad: ciudad || null,
       requisitos: requisitos || null,
+      puesto: puesto || null,
     })
     setGuardando(false)
     if (!r.success) {
@@ -127,13 +180,12 @@ export default function RequisicionPersonal() {
       title: "Requisición enviada",
       description: r.message ?? "Queda pendiente de aprobación de RRHH y Operaciones.",
     })
-    setCargo(""); setVacantes("1"); setCausal(""); setSalario("")
-    setTurno(""); setCiudad(""); setRequisitos("")
+    setCargo(""); setCargoOtro(""); setPuesto(""); setVacantes("1"); setCausal(""); setSalario(""); setSalarioSugerido(false)
+    setTurno(""); setTurnoOtro(""); setRequisitos("")
     cargar()
   }
 
-  const puedeEnviar =
-    cargo.trim() && causal && Number(vacantes) > 0 && Number(salario) > 0 && !guardando
+  const puedeEnviar = !!cargoFinal && !!causal && Number(vacantes) > 0 && Number(salario) > 0 && !guardando
 
   return (
     <div className="space-y-4 p-4">
@@ -146,22 +198,53 @@ export default function RequisicionPersonal() {
         {/* ---------------- FORMULARIO ---------------- */}
         <section className="h-fit rounded-xl border border-border bg-card">
           <div className="border-b border-border px-4 py-3">
-            <h2 className="text-sm font-semibold">Solicitar personal en misión</h2>
+            <h2 className="text-sm font-semibold">Solicitar personal en misión{catalogos?.proyecto ? ` · ${catalogos.proyecto}` : ""}</h2>
             <p className="text-xs text-muted-foreground">
-              La causal define el plazo máximo permitido por ley.
+              Cargo, puesto y turno salen de los catálogos de la planta. La causal define el plazo máximo permitido por ley.
             </p>
           </div>
 
           <div className="space-y-3 p-4">
+            {avisoCatalogos && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                <p className="flex items-start gap-1.5">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  {avisoCatalogos} Puedes escribir los datos a mano.
+                </p>
+              </div>
+            )}
+
+            {/* CARGO + VACANTES */}
             <div className="grid grid-cols-[1fr_auto] gap-2">
               <div>
                 <Label className="text-xs">Cargo requerido</Label>
-                <Input
-                  value={cargo}
-                  onChange={(e) => setCargo(e.target.value)}
-                  placeholder="Operario de producción"
-                  className="mt-1 h-9 text-sm"
-                />
+                <select value={cargo} onChange={(e) => onCargo(e.target.value)} className={SELECT}>
+                  <option value="">Selecciona el cargo…</option>
+                  {(catalogos?.cargos ?? []).map((c) => (
+                    <option key={c.cargo} value={c.cargo}>
+                      {c.cargo}
+                      {c.activos ? ` · ${c.activos} activo${c.activos === 1 ? "" : "s"}` : ""}
+                    </option>
+                  ))}
+                  <option value={OTRO}>Otro cargo…</option>
+                </select>
+                {cargo === OTRO && (
+                  <Input
+                    value={cargoOtro}
+                    onChange={(e) => setCargoOtro(e.target.value)}
+                    placeholder="Escribe el cargo"
+                    className="mt-1 h-9 text-sm"
+                  />
+                )}
+                {cargoCat && (
+                  <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+                    <Users className="h-3 w-3" />
+                    {cargoCat.activos
+                      ? `${cargoCat.activos} activo${cargoCat.activos === 1 ? "" : "s"} con este cargo en la planta`
+                      : "Sin activos con este cargo en la planta"}
+                    {cargoCat.salarioReferencia ? ` · salario de referencia ${COP.format(cargoCat.salarioReferencia)}` : ""}
+                  </p>
+                )}
               </div>
               <div className="w-28">
                 <Label className="text-xs">Vacantes</Label>
@@ -175,13 +258,52 @@ export default function RequisicionPersonal() {
               </div>
             </div>
 
+            {/* PUESTO + TURNO */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs">Puesto operativo</Label>
+                <select value={puesto} onChange={(e) => onPuesto(e.target.value)} className={SELECT}>
+                  <option value="">Sin puesto específico</option>
+                  {(catalogos?.puestos ?? []).map((p) => (
+                    <option key={p.puesto} value={p.puesto}>
+                      {p.puesto}
+                      {p.especialidad ? " · especialidad" : ""}
+                    </option>
+                  ))}
+                </select>
+                {puestoCat && (puestoCat.horaEntrada || puestoCat.tarifaBase) && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {puestoCat.horaEntrada ? `Entrada ${puestoCat.horaEntrada}` : ""}
+                    {puestoCat.horaEntrada && puestoCat.tarifaBase ? " · " : ""}
+                    {puestoCat.tarifaBase ? `tarifa base ${COP.format(puestoCat.tarifaBase)} por turno` : ""}
+                  </p>
+                )}
+              </div>
+              <div>
+                <Label className="text-xs">Turno previsto</Label>
+                <select value={turno} onChange={(e) => setTurno(e.target.value)} className={SELECT}>
+                  <option value="">Selecciona el turno…</option>
+                  {(catalogos?.turnos ?? []).map((t) => (
+                    <option key={t.codigo} value={t.etiqueta}>
+                      {t.nombre !== t.codigo ? `${t.nombre} · ${t.horaInicio}${t.horaFin ? `–${t.horaFin}` : ""}` : t.etiqueta}
+                    </option>
+                  ))}
+                  <option value={OTRO}>Otro horario…</option>
+                </select>
+                {turno === OTRO && (
+                  <Input
+                    value={turnoOtro}
+                    onChange={(e) => setTurnoOtro(e.target.value)}
+                    placeholder="T1 · 06:00–14:00"
+                    className="mt-1 h-9 text-sm"
+                  />
+                )}
+              </div>
+            </div>
+
             <div>
               <Label className="text-xs">Causal de contratación temporal</Label>
-              <select
-                value={causal}
-                onChange={(e) => setCausal(e.target.value)}
-                className="mt-1 w-full rounded border bg-background px-2 py-2 text-sm"
-              >
+              <select value={causal} onChange={(e) => setCausal(e.target.value)} className={SELECT}>
                 <option value="">Selecciona la causal…</option>
                 {CAUSALES_TEMPORALES.map((c) => (
                   <option key={c.id} value={c.id}>{c.etiqueta}</option>
@@ -208,30 +330,33 @@ export default function RequisicionPersonal() {
                   type="number"
                   min={0}
                   value={salario}
-                  onChange={(e) => setSalario(e.target.value)}
-                  placeholder="1750905"
+                  onChange={(e) => {
+                    setSalario(e.target.value)
+                    setSalarioSugerido(false)
+                  }}
+                  placeholder={smlv ? String(smlv) : "1750905"}
                   className="mt-1 h-9 text-sm"
                 />
+                {salarioSugerido && salario && (
+                  <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+                    <Link2 className="h-3 w-3" /> Sugerido por el cargo; puedes cambiarlo.
+                  </p>
+                )}
+                {bajoMinimo && (
+                  <p className="mt-1 flex items-center gap-1 text-[11px] text-amber-700">
+                    <AlertTriangle className="h-3 w-3" /> Por debajo del mínimo vigente ({COP.format(smlv!)}).
+                  </p>
+                )}
               </div>
               <div>
-                <Label className="text-xs">Turno previsto</Label>
+                <Label className="text-xs">Ciudad</Label>
                 <Input
-                  value={turno}
-                  onChange={(e) => setTurno(e.target.value)}
-                  placeholder="T1 · 06–14"
+                  value={ciudad}
+                  onChange={(e) => setCiudad(e.target.value)}
+                  placeholder="Bogotá"
                   className="mt-1 h-9 text-sm"
                 />
               </div>
-            </div>
-
-            <div>
-              <Label className="text-xs">Ciudad</Label>
-              <Input
-                value={ciudad}
-                onChange={(e) => setCiudad(e.target.value)}
-                placeholder="Bogotá"
-                className="mt-1 h-9 text-sm"
-              />
             </div>
 
             <div>
@@ -323,7 +448,7 @@ export default function RequisicionPersonal() {
               </div>
             ) : (
               <p className="rounded-lg border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
-                Indica salario y vacantes para ver el costo mensual.
+                Elige el cargo (o indica salario) y las vacantes para ver el costo mensual.
               </p>
             )}
 

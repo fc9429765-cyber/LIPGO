@@ -15,11 +15,14 @@ import { Button } from "@/components/ui/button"
 import {
   AlertTriangle,
   ArrowRight,
-  CalendarDays,
+  CheckCircle2,
+  ClipboardCheck,
   Loader2,
+  Printer,
   RefreshCw,
+  Scale,
+  Truck,
   UserPlus,
-  Users,
 } from "lucide-react"
 import { getOperacionDia } from "@/lib/operacion-dia-actions"
 import type { CoberturaTurno, ItemBandeja, OperacionDiaData } from "@/lib/operacion-dia-tipos"
@@ -40,6 +43,40 @@ const COLOR_NIVEL: Record<ItemBandeja["nivel"], string> = {
   alto: "#dc2626",
   medio: "#f59e0b",
   bajo: "#16a34a",
+}
+const T1 = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 1 })
+
+/** Cifra compacta de la tarjeta "Vehículos y toneladas de hoy". */
+function Cifra({ label, valor, sub, color }: { label: string; valor: string | number; sub: string; color?: string }) {
+  return (
+    <div className="px-4 py-3">
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-0.5 text-2xl font-semibold tabular-nums" style={{ color }}>{valor}</p>
+      <p className="text-[11px] text-muted-foreground">{sub}</p>
+    </div>
+  )
+}
+
+/** Renglón de la lista de cierre: en verde cuando está en cero. */
+function ItemCierre({ ok, texto, pendiente, modulo, boton }: { ok: boolean; texto: string; pendiente: string; modulo: string; boton: string }) {
+  return (
+    <li className="flex items-center gap-3 px-4 py-2">
+      {ok ? (
+        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+      ) : (
+        <span className="h-4 w-4 shrink-0 rounded-full border-2 border-amber-500" />
+      )}
+      <div className="min-w-0 flex-1">
+        <p className={`text-sm ${ok ? "text-muted-foreground line-through decoration-muted-foreground/40" : "font-medium"}`}>{texto}</p>
+        {!ok && <p className="text-[11px] text-amber-700">{pendiente}</p>}
+      </div>
+      {!ok && (
+        <Button variant="outline" size="sm" className="h-7 shrink-0 text-xs" onClick={() => irAModulo(modulo)}>
+          {boton}
+        </Button>
+      )}
+    </li>
+  )
 }
 
 /** El anillo de cobertura de la cabecera. */
@@ -361,54 +398,174 @@ export function OperacionDelDia() {
             </div>
           </section>
 
-          {/* PAGO DE LA QUINCENA */}
+          {/* VEHÍCULOS Y TONELADAS DE HOY — el corazón del día del coordinador.
+              (Reemplaza a la tarjeta de pago de la quincena, 2026-09-30.) */}
           <section className="rounded-xl border border-border bg-card">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
               <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                  Pago de personal
-                </p>
-                <h2 className="text-sm font-semibold">Quincena en curso</h2>
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Operación en vivo</p>
+                <h2 className="text-sm font-semibold">Vehículos y toneladas de hoy</h2>
               </div>
-              <span className="rounded bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-                en construcción
-              </span>
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => irAModulo("Centro de Coordinación")}>
+                <Truck className="h-3.5 w-3.5" />
+                Centro de Coordinación
+              </Button>
             </div>
-            <div className="px-4 py-4">
-              {d.pago.disponible ? (
-                <>
-                  <p className="text-3xl font-semibold tabular-nums">{COP.format(d.pago.total)}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {NUM.format(d.pago.personas)} personas con pago ·{" "}
-                    {NUM.format(d.turnosProgramadosQuincena)} turnos
-                  </p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    Calculado sobre los turnos y novedades registrados hasta hoy. Cambia hasta el
-                    cierre.
-                  </p>
-                </>
-              ) : (
-                <div className="rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-                  <p className="flex items-center gap-1.5 font-medium">
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                    No se pudo calcular el pago
-                  </p>
-                  <p className="mt-1">{d.pago.mensaje}</p>
-                </div>
-              )}
-              <div className="mt-3 flex gap-2">
-                <Button
-                  size="sm"
-                  className="flex-1 gap-1.5"
-                  onClick={() => irAModulo("Revisión de nómina")}
-                >
-                  <CalendarDays className="h-3.5 w-3.5" />
-                  Ver detalle
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => irAModulo("Tabla Asistencia")}>
-                  <Users className="h-3.5 w-3.5" />
-                </Button>
+
+            {!d.operacionHoy.disponible ? (
+              <div className="m-4 rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                <p className="flex items-center gap-1.5 font-medium">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  No se pudo leer la operación de hoy
+                </p>
+                <p className="mt-1">{d.operacionHoy.mensaje}</p>
               </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 divide-x divide-border sm:grid-cols-4">
+                  <Cifra label="Vehículos hoy" valor={d.operacionHoy.ordenesHoy} sub={`${d.operacionHoy.finalizadas} finalizados`} />
+                  <Cifra
+                    label="Sin cerrar"
+                    valor={d.operacionHoy.sinCerrar}
+                    sub={d.operacionHoy.sinCerrar ? "iniciados sin finalizar" : "todo cerrado"}
+                    color={d.operacionHoy.sinCerrar ? "#d97706" : "#0f766e"}
+                  />
+                  <Cifra
+                    label="En patio"
+                    valor={d.operacionHoy.enPatio}
+                    sub={d.operacionHoy.enPatio ? "llegaron hoy, sin procesar" : "nadie en espera"}
+                    color={d.operacionHoy.enPatio > 3 ? "#d97706" : undefined}
+                  />
+                  <Cifra
+                    label="Tiempo promedio"
+                    valor={d.operacionHoy.tiempoPromMin != null ? `${d.operacionHoy.tiempoPromMin} min` : "—"}
+                    sub="promedio histórico por operación"
+                  />
+                </div>
+
+                <div className="border-t border-border px-4 py-3">
+                  <div className="flex flex-wrap items-end justify-between gap-2">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Toneladas cerradas hoy</p>
+                      <p className="text-2xl font-semibold tabular-nums">
+                        {T1.format(d.operacionHoy.toneladas)}
+                        <span className="text-sm font-normal text-muted-foreground">
+                          {" "}t{d.operacionHoy.metaTonDia > 0 ? ` / ${T1.format(d.operacionHoy.metaTonDia)} t meta del día` : ""}
+                        </span>
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => irAModulo("Control de Toneladas")}
+                    >
+                      <Scale className="h-3.5 w-3.5" /> Control de toneladas <ArrowRight className="h-3 w-3" />
+                    </button>
+                  </div>
+                  {d.operacionHoy.metaTonDia > 0 && (
+                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded bg-muted">
+                      <div
+                        className="h-full rounded"
+                        style={{
+                          width: `${Math.min(100, Math.round((d.operacionHoy.toneladas / d.operacionHoy.metaTonDia) * 100))}%`,
+                          background: d.operacionHoy.toneladas >= d.operacionHoy.metaTonDia ? "#14b8a6" : "#f59e0b",
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {d.operacionHoy.auxiliares.length > 0 && (
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-[11px]">
+                      <div>
+                        <p className="mb-1 font-semibold uppercase tracking-wide text-muted-foreground">Más toneladas</p>
+                        {d.operacionHoy.auxiliares.slice(0, 3).map((a) => (
+                          <p key={a.persona} className="flex justify-between gap-2">
+                            <span className="truncate">{a.persona}</span>
+                            <span className="shrink-0 tabular-nums font-medium">{T1.format(a.ton)} t</span>
+                          </p>
+                        ))}
+                      </div>
+                      {d.operacionHoy.auxiliares.length > 3 && (
+                        <div>
+                          <p className="mb-1 font-semibold uppercase tracking-wide text-muted-foreground">Menos toneladas</p>
+                          {d.operacionHoy.auxiliares.slice(-3).reverse().map((a) => (
+                            <p key={a.persona} className="flex justify-between gap-2">
+                              <span className="truncate">{a.persona}</span>
+                              <span className="shrink-0 tabular-nums font-medium text-amber-700">{T1.format(a.ton)} t</span>
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </section>
+
+          {/* CIERRE DEL DÍA — lo que debe quedar en cero antes de irse. */}
+          <section className="rounded-xl border border-border bg-card">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Antes de irte</p>
+                <h2 className="text-sm font-semibold">Cierre del día</h2>
+              </div>
+              {(() => {
+                // Los ausentismos en borrador se acumulan de días anteriores y
+                // ya salen en la Bandeja; aquí solo va lo que cierra HOY.
+                const pend =
+                  (d.cierre.vehiculosSinCerrar > 0 ? 1 : 0) +
+                  (d.cierre.sinMarcar > 0 ? 1 : 0) +
+                  (d.cierre.turnosPorAprobar > 0 ? 1 : 0) +
+                  (d.cierre.bitacoraHoy ? 0 : 1)
+                return (
+                  <span
+                    className="rounded px-2 py-0.5 text-[10px] font-medium"
+                    style={{ background: pend === 0 ? "#dcfce7" : "#fef3c7", color: pend === 0 ? "#166534" : "#92400e" }}
+                  >
+                    {pend === 0 ? "Listo para cerrar" : `${pend} pendiente${pend === 1 ? "" : "s"}`}
+                  </span>
+                )
+              })()}
+            </div>
+            <ul className="divide-y divide-border">
+              <ItemCierre
+                ok={d.cierre.vehiculosSinCerrar === 0}
+                texto="Vehículos cerrados"
+                pendiente={`${d.cierre.vehiculosSinCerrar} iniciado${d.cierre.vehiculosSinCerrar === 1 ? "" : "s"} sin finalizar`}
+                modulo="Centro de Coordinación"
+                boton="Cerrar"
+              />
+              <ItemCierre
+                ok={d.cierre.sinMarcar === 0}
+                texto="Asistencia completa"
+                pendiente={`${d.cierre.sinMarcar} persona${d.cierre.sinMarcar === 1 ? "" : "s"} sin marcar`}
+                modulo="Tabla Asistencia"
+                boton="Revisar"
+              />
+              <ItemCierre
+                ok={d.cierre.turnosPorAprobar === 0}
+                texto="Turnos y horas extra aprobados"
+                pendiente={`${d.cierre.turnosPorAprobar} solicitud${d.cierre.turnosPorAprobar === 1 ? "" : "es"} por aprobar`}
+                modulo="Aprobar Turnos"
+                boton="Aprobar"
+              />
+              <ItemCierre
+                ok={d.cierre.bitacoraHoy}
+                texto="Bitácora del día escrita"
+                pendiente="Aún no hay anotación de hoy"
+                modulo="Bitácora"
+                boton="Escribir"
+              />
+            </ul>
+            <div className="border-t border-border px-4 py-2.5">
+              <Button size="sm" variant="outline" className="w-full gap-1.5" onClick={() => irAModulo("Bitácora")}>
+                <Printer className="h-3.5 w-3.5" />
+                Generar cierre del día (PDF)
+              </Button>
+              <p className="mt-1.5 flex items-center gap-1 text-[10.5px] text-muted-foreground">
+                <ClipboardCheck className="h-3 w-3" /> El PDF sale de la pestaña Cierre del día en Bitácora.
+              </p>
             </div>
           </section>
         </div>

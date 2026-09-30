@@ -67,15 +67,48 @@ export interface OperacionDiaData {
   /** Requisiciones de personal en curso. */
   requisiciones: RequisicionResumen[]
 
-  /** Pago de la quincena en curso. */
-  pago: {
-    total: number
-    personas: number
-    /** null = no se pudo calcular (la vista pagonomina puede tardar). */
-    disponible: boolean
-    mensaje: string | null
-  }
+  /**
+   * Vehículos y toneladas de HOY. Reemplaza (2026-09-30) a la tarjeta de pago
+   * de la quincena: el dinero de nómina es información financiera de LIP y no
+   * va en el panel operativo del coordinador; vive en Compensación.
+   * Mismas fuentes que Gestión de Órdenes (getDespachoKpis), Vehículos por
+   * cerrar (getVehiculosNoProcesados) y Control de Toneladas (misma fórmula
+   * que paga nómina).
+   */
+  operacionHoy: OperacionHoy
+
+  /** Lista de cierre del día: lo que debe quedar en cero antes de irse. */
+  cierre: CierreDia
 
   /** Avisos de datos que no se pudieron leer, para no mostrar ceros falsos. */
   avisos: string[]
+}
+
+export interface OperacionHoy {
+  /** Órdenes de vehículo con fecha de cargue hoy. */
+  ordenesHoy: number
+  finalizadas: number
+  /** Iniciadas y aún sin fincargue (de cualquier fecha: siguen abiertas). */
+  sinCerrar: number
+  /** Vehículos en patio sin procesar (citasvehiculos sin estatus). */
+  enPatio: number
+  /** Toneladas de órdenes cerradas hoy, repartidas como paga nómina. */
+  toneladas: number
+  /** Meta de toneladas del día (meta mensual / días de operación). 0 si no hay meta. */
+  metaTonDia: number
+  /** Tiempo promedio de operación (min) sobre el histórico medido; null si no hay. */
+  tiempoPromMin: number | null
+  /** Auxiliares con tonelaje hoy, de mayor a menor. */
+  auxiliares: { persona: string; ton: number }[]
+  disponible: boolean
+  mensaje: string | null
+}
+
+export interface CierreDia {
+  vehiculosSinCerrar: number
+  sinMarcar: number
+  turnosPorAprobar: number
+  ausentismosSinCompletar: number
+  /** true si hoy ya hay al menos una anotación en la Bitácora. */
+  bitacoraHoy: boolean
 }

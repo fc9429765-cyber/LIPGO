@@ -15,6 +15,140 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import type { FactoresCosto } from "@/lib/requisicion-causales"
+import { CARGOS_HEADCOUNT, cargoCanonico } from "@/lib/headcount-cargos"
+
+// ---------------------------------------------------------------------------
+// CATÁLOGOS DE LA REQUISICIÓN — "todo amarrado" (gerencia, 2026-09-30).
+//
+// La requisición ya no se escribe a mano: el CARGO sale de la lista fija de
+// Head Count (lib/headcount-cargos.ts), el PUESTO operativo del maestro de
+// turnos (`tarifasturnos`, el mismo catálogo que usa Programación de Turnos) y
+// el TURNO de `turnos_definicion` de la empresa. El salario de referencia es la
+// mediana de lo que hoy ganan los activos con ese cargo en la misma planta, y
+// se contrasta con el SMLV vigente de `parametros_legales_anio`.
+// ---------------------------------------------------------------------------
+
+export interface CargoCatalogo {
+  cargo: string
+  /** Activos hoy con ese cargo en la planta. */
+  activos: number
+  /** Mediana del salario contractual de esos activos; null si no hay dato. */
+  salarioReferencia: number | null
+}
+
+export interface PuestoCatalogo {
+  puesto: string
+  especialidad: boolean
+  /** Hora de entrada del maestro ("HH:MM") si está definida. */
+  horaEntrada: string | null
+  /** Tarifa base vigente del turno ($) si está definida. */
+  tarifaBase: number | null
+}
+
+export interface TurnoCatalogo {
+  codigo: string
+  nombre: string
+  horaInicio: string
+  horaFin: string
+  /** Texto que se guarda en `vacantes.turno`, p. ej. "T1 · 06:00–14:00". */
+  etiqueta: string
+}
+
+export interface CatalogosRequisicion {
+  cargos: CargoCatalogo[]
+  puestos: PuestoCatalogo[]
+  turnos: TurnoCatalogo[]
+  /** Ciudad más frecuente entre los activos de la planta (headcount.ciudad). */
+  ciudad: string | null
+  /** Salario mínimo legal vigente del año, o null si no está parametrizado. */
+  smlv: number | null
+  /** Planta/proyecto (owners.nombre) para el texto de la pantalla. */
+  proyecto: string | null
+}
+
+const hhmm = (v: unknown) => (v ? String(v).slice(0, 5) : null)
+
+function mediana(nums: number[]): number | null {
+  const v = nums.filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => a - b)
+  if (!v.length) return null
+  const m = Math.floor(v.length / 2)
+  return v.length % 2 ? v[m] : Math.round((v[m - 1] + v[m]) / 2)
+}
+
+export async function getCatalogosRequisicion(
+  empresaId: number | null | undefined,
+): Promise<{ success: boolean; data?: CatalogosRequisicion; message?: string }> {
+  if (!empresaId) return { success: false, message: "Selecciona una empresa en el selector de arriba." }
+  try {
+    const sb: any = await getSupabaseAdmin()
+    const anio = new Date().getFullYear()
+
+    const [hc, tt, td, par, own] = await Promise.all([
+      sb.from("headcount").select("cargo, salario, ciudad").eq("idempresa", empresaId).eq("estado", "Activo").not("admin", "is", true).limit(2000),
+      // Sin filtro de empresa, igual que getPuestosFromTarifas (Programación de
+      // Turnos): el catálogo de puestos es transversal; filtrado por empresa,
+      // Indupan queda sin puestos.
+      sb.from("tarifasturnos").select("puesto, especialidad, horaentrada, base, fechaini").order("fechaini", { ascending: false, nullsFirst: false }).limit(2000),
+      sb.from("turnos_definicion").select("codigo, nombre, hora_inicio, hora_fin, es_administrativo, activo, orden").eq("idempresa", empresaId).eq("activo", true).order("orden").order("codigo"),
+      sb.from("parametros_legales_anio").select("smlv").eq("anio", anio).maybeSingle(),
+      sb.from("owners").select("nombre").eq("id", empresaId).maybeSingle(),
+    ])
+
+    // Cargos: lista fija de Head Count + cuántos activos hay y qué ganan.
+    const porCargo = new Map<string, number[]>()
+    const ciudades = new Map<string, number>()
+    for (const r of (hc.data ?? []) as any[]) {
+      const c = cargoCanonico(r.cargo)
+      if (c) {
+        if (!porCargo.has(c)) porCargo.set(c, [])
+        porCargo.get(c)!.push(Number(r.salario) || 0)
+      }
+      const ciu = String(r.ciudad ?? "").trim()
+      if (ciu) ciudades.set(ciu, (ciudades.get(ciu) || 0) + 1)
+    }
+    const cargos: CargoCatalogo[] = CARGOS_HEADCOUNT.map((c) => ({
+      cargo: c,
+      activos: porCargo.get(c)?.length ?? 0,
+      salarioReferencia: mediana(porCargo.get(c) ?? []),
+    }))
+
+    // Puestos: una fila por puesto, con la tarifa más reciente (lista viene por fechaini desc).
+    const puestosMap = new Map<string, PuestoCatalogo>()
+    for (const r of (tt.data ?? []) as any[]) {
+      const p = String(r.puesto ?? "").trim()
+      if (!p || puestosMap.has(p)) continue
+      puestosMap.set(p, {
+        puesto: p,
+        especialidad: r.especialidad === true,
+        horaEntrada: hhmm(r.horaentrada),
+        tarifaBase: r.base != null ? Number(r.base) : null,
+      })
+    }
+    const puestos = [...puestosMap.values()].sort((a, b) => a.puesto.localeCompare(b.puesto, "es", { sensitivity: "base" }))
+
+    // Turnos: los definidos para la empresa (sin administrativos). Si no hay,
+    // se ofrecen las horas de entrada distintas del maestro de puestos.
+    let turnos: TurnoCatalogo[] = ((td.data ?? []) as any[])
+      .filter((t) => !t.es_administrativo)
+      .map((t) => {
+        const hi = hhmm(t.hora_inicio) ?? ""
+        const hf = hhmm(t.hora_fin) ?? ""
+        return { codigo: String(t.codigo), nombre: String(t.nombre ?? t.codigo), horaInicio: hi, horaFin: hf, etiqueta: `${t.codigo} · ${hi}–${hf}` }
+      })
+    if (turnos.length === 0) {
+      const horas = [...new Set(puestos.map((p) => p.horaEntrada).filter((h): h is string => !!h))].sort()
+      turnos = horas.map((h) => ({ codigo: h, nombre: `Entrada ${h}`, horaInicio: h, horaFin: "", etiqueta: `Entrada ${h}` }))
+    }
+
+    const ciudad = [...ciudades.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+    const smlv = par.data?.smlv != null ? Number(par.data.smlv) : null
+
+    return { success: true, data: { cargos, puestos, turnos, ciudad, smlv, proyecto: own.data?.nombre ?? null } }
+  } catch (e: any) {
+    console.error("[v0] getCatalogosRequisicion excepción:", e?.message ?? e)
+    return { success: false, message: e?.message || "No se pudieron leer los catálogos." }
+  }
+}
 
 /** Tasas de ARL por clase de riesgo (Decreto 1772/1994). */
 const ARL_POR_CLASE: Record<string, number> = {
@@ -231,10 +365,13 @@ export async function crearRequisicion(payload: {
   turno?: string | null
   ciudad?: string | null
   requisitos?: string | null
+  /** Puesto operativo del maestro de turnos (opcional). */
+  puesto?: string | null
 }): Promise<{ success: boolean; message?: string }> {
   try {
     if (!payload.empresaId) return { success: false, message: "Falta la empresa." }
     if (!payload.cargo?.trim()) return { success: false, message: "Indica el cargo requerido." }
+    if (!payload.salarioMensual || payload.salarioMensual <= 0) return { success: false, message: "Indica el salario mensual." }
     if (!payload.causal) return { success: false, message: "Indica la causal de contratación." }
     if (!payload.vacantes || payload.vacantes < 1) {
       return { success: false, message: "Indica cuántas vacantes se necesitan." }
@@ -265,11 +402,20 @@ export async function crearRequisicion(payload: {
       requisitos: payload.requisitos?.trim() || null,
       estado: "en_revision",
     }
-    // `causal` puede no existir todavía: se intenta con ella y, si la columna
-    // falta, se reintenta sin ella en vez de perder la requisición.
-    const { error } = await sb.from("vacantes").insert({ ...fila, causal: payload.causal })
+    // `causal` (SQL 178) y `puesto` (SQL 210) pueden no existir todavía: se
+    // intenta con ellas y, si una columna falta, se reintenta sin ella en vez
+    // de perder la requisición (el puesto cae al texto de requisitos).
+    const puesto = payload.puesto?.trim() || null
+    const conTodo = { ...fila, causal: payload.causal, ...(puesto ? { puesto } : {}) }
+    const { error } = await sb.from("vacantes").insert(conTodo)
     if (error) {
       const msg = String(error.message ?? "").toLowerCase()
+      if (msg.includes("puesto")) {
+        const sinPuesto = { ...fila, causal: payload.causal, requisitos: [puesto ? `Puesto: ${puesto}` : null, fila.requisitos].filter(Boolean).join(" · ") || null }
+        const { error: e3 } = await sb.from("vacantes").insert(sinPuesto)
+        if (e3) return { success: false, message: e3.message }
+        return { success: true, message: "Requisición creada. El puesto quedó en el texto: falta correr el script 210." }
+      }
       if (msg.includes("causal")) {
         const { error: e2 } = await sb.from("vacantes").insert(fila)
         if (e2) return { success: false, message: e2.message }
