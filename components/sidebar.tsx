@@ -22,6 +22,7 @@ import {
 import Image from "next/image"
 import type { GroupKey, Module, Subgroup } from "@/lib/dashboard-data"
 import { groups } from "@/lib/dashboard-data"
+import { hubDe, plegarEnHubs, type EntradaMenu } from "@/lib/navegacion"
 import { useState, useEffect, useMemo, type CSSProperties } from "react"
 
 interface SidebarProps {
@@ -391,10 +392,13 @@ export function Sidebar({
     for (const g of visibleGroups) {
       const groupLabel = (groupLabelByKey.get(g.key) as string) ?? g.title
       const pushModule = (m: Module, subgroupTitle?: string) => {
+        // Si el módulo es una pestaña de un hub, el subtítulo muestra el hub
+        // (así el usuario ve en qué pantalla queda).
+        const hub = hubDe(g.key, m.name)
         result.push({
           groupKey: g.key,
           groupLabel,
-          subgroupTitle,
+          subgroupTitle: hub ? hub.title : subgroupTitle,
           name: m.name,
           label: m.label ?? m.name,
           icon: m.icon,
@@ -425,6 +429,57 @@ export function Sidebar({
     onSelectModule(moduleName)
     setExpandedGroups(new Set([groupKey]))
     setModuleSearch("")
+  }
+
+  // Botón de una entrada del menú: módulo suelto o HUB (pantalla con pestañas,
+  // lib/navegacion.ts). El hub abre su primera pestaña visible y queda activo
+  // cuando el módulo seleccionado es cualquiera de sus pestañas. Las pestañas
+  // NO se anidan en la barra (se ven dentro de la pantalla y en el buscador).
+  const renderEntrada = (entrada: EntradaMenu, groupKey: GroupKey) => {
+    const clases = (activo: boolean) => `
+      flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs
+      transition-all duration-200
+      ${activo ? "text-foreground bg-accent/70 font-medium" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"}
+    `
+    if (entrada.tipo === "hub") {
+      const HubIcon = entrada.hub.icon
+      const isHubActive = selectedGroup === groupKey && hubDe(selectedGroup, selectedModule)?.key === entrada.hub.key
+      const primera = entrada.tabs[0]?.name
+      return (
+        <button
+          key={`hub:${entrada.hub.key}`}
+          onClick={() => {
+            if (!primera) return
+            onSelectGroup(groupKey)
+            onSelectModule(primera)
+          }}
+          className={clases(isHubActive)}
+          title={entrada.tabs.map((t) => t.label ?? t.name).join(" · ")}
+        >
+          <HubIcon className="h-3.5 w-3.5 flex-shrink-0" />
+          <span className="text-left whitespace-nowrap overflow-hidden text-ellipsis">{entrada.hub.title}</span>
+          <span className="ml-auto flex-shrink-0 rounded-full bg-white/10 px-1.5 text-[9.5px] tabular-nums text-muted-foreground/80">
+            {entrada.tabs.length}
+          </span>
+        </button>
+      )
+    }
+    const module = entrada.modulo
+    const ModuleIcon = module.icon
+    const isModuleActive = selectedModule === module.name && selectedGroup === groupKey
+    return (
+      <button
+        key={module.name}
+        onClick={() => {
+          onSelectGroup(groupKey)
+          onSelectModule(module.name)
+        }}
+        className={clases(isModuleActive)}
+      >
+        <ModuleIcon className="h-3.5 w-3.5 flex-shrink-0" />
+        <span className="text-left whitespace-nowrap overflow-hidden text-ellipsis">{module.label ?? module.name}</span>
+      </button>
+    )
   }
 
   return (
@@ -722,67 +777,13 @@ export function Sidebar({
                                   ${isSubgroupExpanded ? "max-h-96 opacity-100" : "max-h-0 opacity-0"}
                                 `}
                                 >
-                                  {subgroup.modules.map((module) => {
-                                    const ModuleIcon = module.icon
-                                    const isModuleActive = selectedModule === module.name && selectedGroup === item.key
-
-                                    return (
-                                      <button
-                                        key={module.name}
-                                        onClick={() => {
-                                          onSelectGroup(item.key!)
-                                          onSelectModule(module.name)
-                                        }}
-                                        className={`
-                                        flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs
-                                        transition-all duration-200
-                                        ${
-                                          isModuleActive
-                                            ? "text-foreground bg-accent/70 font-medium"
-                                            : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                                        }
-                                      `}
-                                      >
-                                        <ModuleIcon className="h-3.5 w-3.5 flex-shrink-0" />
-                                        <span className="text-left whitespace-nowrap overflow-hidden text-ellipsis">
-                                          {module.label ?? module.name}
-                                        </span>
-                                      </button>
-                                    )
-                                  })}
+                                  {plegarEnHubs(item.key!, subgroup.modules).map((e) => renderEntrada(e, item.key!))}
                                 </div>
                               </div>
                             )
                           })
                         : // Render direct modules (for groups without subgroups)
-                          group.modules?.map((module) => {
-                            const ModuleIcon = module.icon
-                            const isModuleActive = selectedModule === module.name && selectedGroup === item.key
-
-                            return (
-                              <button
-                                key={module.name}
-                                onClick={() => {
-                                  onSelectGroup(item.key!)
-                                  onSelectModule(module.name)
-                                }}
-                                className={`
-                                flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs
-                                transition-all duration-200
-                                ${
-                                  isModuleActive
-                                    ? "text-foreground bg-accent/70 font-medium"
-                                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                                }
-                              `}
-                              >
-                                <ModuleIcon className="h-3.5 w-3.5 flex-shrink-0" />
-                                <span className="text-left whitespace-nowrap overflow-hidden text-ellipsis">
-                                  {module.label ?? module.name}
-                                </span>
-                              </button>
-                            )
-                          })}
+                          plegarEnHubs(item.key!, group.modules ?? []).map((e) => renderEntrada(e, item.key!))}
                     </>
                   )}
                 </div>

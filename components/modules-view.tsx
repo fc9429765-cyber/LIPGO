@@ -12,6 +12,7 @@ import { VehiculosNoProcesadosCard } from "@/components/vehiculos-no-procesados-
 import { useAuth } from "@/components/auth-provider"
 import { getIndicadoresValores } from "@/lib/sig-actions"
 import { AREA_KPIS } from "@/lib/kpis-area"
+import { plegarEnHubs, type EntradaMenu } from "@/lib/navegacion"
 
 interface ModulesViewProps {
   groupKey: GroupKey
@@ -60,6 +61,50 @@ function ModuleCard({
       <span className="mod-name">{module.label ?? module.name}</span>
       <ArrowRight className="mod-arrow h-4 w-4" />
     </button>
+  )
+}
+
+// Tarjeta de HUB (pantalla con pestañas): mismo lenguaje visual que la de
+// módulo, con el conteo de pestañas visibles para el usuario. Abre la primera.
+function HubCard({
+  entrada,
+  onSelect,
+  tint,
+}: {
+  entrada: Extract<EntradaMenu, { tipo: "hub" }>
+  onSelect: (name: string) => void
+  tint: string
+}) {
+  const Icon = entrada.hub.icon
+  const n = entrada.tabs.length
+  return (
+    <button
+      onClick={() => entrada.tabs[0] && onSelect(entrada.tabs[0].name)}
+      className="mod-card"
+      style={{ "--tint": tint } as CSSProperties}
+      title={entrada.tabs.map((t) => t.label ?? t.name).join(" · ")}
+    >
+      <span className="mod-ico">
+        <Icon className="h-[17px] w-[17px]" />
+      </span>
+      <span className="mod-name">
+        {entrada.hub.title}
+        <span className="mt-0.5 block text-[10.5px] font-medium text-muted-foreground">
+          {n} pestaña{n !== 1 ? "s" : ""}
+        </span>
+      </span>
+      <ArrowRight className="mod-arrow h-4 w-4" />
+    </button>
+  )
+}
+
+function renderEntradas(entradas: EntradaMenu[], onSelect: (name: string) => void, tint: string) {
+  return entradas.map((e) =>
+    e.tipo === "hub" ? (
+      <HubCard key={`hub:${e.hub.key}`} entrada={e} onSelect={onSelect} tint={tint} />
+    ) : (
+      <ModuleCard key={e.modulo.name} module={e.modulo} onSelect={onSelect} tint={tint} />
+    ),
   )
 }
 
@@ -113,10 +158,10 @@ export function ModulesView({ groupKey, onBack, onSelectModule }: ModulesViewPro
 
   const GroupIcon = group.icon
   const tint = TINT[groupKey] ?? TEAL
-  // Suma módulos directos + de subgrupos. (Antes daba 0 cuando `modules: []`
-  // existía junto a subgrupos, porque el array vacío se tomaba como válido.)
-  const totalModules =
-    (group.modules?.length ?? 0) + (group.subgroups?.reduce((acc, sg) => acc + sg.modules.length, 0) ?? 0)
+  // Entradas ya plegadas en hubs (un hub = una tarjeta con N pestañas).
+  const entradasDirectas = group.modules ? plegarEnHubs(groupKey, group.modules) : []
+  const entradasSub = (group.subgroups ?? []).map((sg) => ({ title: sg.title, entradas: plegarEnHubs(groupKey, sg.modules) }))
+  const totalModules = entradasDirectas.length + entradasSub.reduce((acc, s) => acc + s.entradas.length, 0)
 
   return (
     <div className="space-y-5" style={{ "--tint": tint } as CSSProperties}>
@@ -169,7 +214,7 @@ export function ModulesView({ groupKey, onBack, onSelectModule }: ModulesViewPro
         <div className="min-w-0">
           <h1 className="text-xl font-bold leading-tight text-foreground sm:text-2xl">{group.title}</h1>
           <p className="text-[13px] text-muted-foreground">
-            Selecciona un módulo para continuar · {totalModules} módulo{totalModules !== 1 ? "s" : ""}
+            Selecciona una pantalla para continuar · {totalModules} pantalla{totalModules !== 1 ? "s" : ""}
           </p>
         </div>
       </div>
@@ -195,27 +240,22 @@ export function ModulesView({ groupKey, onBack, onSelectModule }: ModulesViewPro
         <AreaKpis groupKey={groupKey} valores={valores} loading={loading} />
       )}
 
-      {/* Módulos directos */}
-      {group.modules && group.modules.length > 0 && (
+      {/* Módulos directos (y hubs) */}
+      {entradasDirectas.length > 0 && (
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
-          {group.modules.map((m) => (
-            <ModuleCard key={m.name} module={m} onSelect={onSelectModule} tint={tint} />
-          ))}
+          {renderEntradas(entradasDirectas, onSelectModule, tint)}
         </div>
       )}
 
       {/* Subgrupos */}
-      {group.subgroups &&
-        group.subgroups.map((sg) => (
-          <div key={sg.title} className="space-y-2.5">
-            <h2 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">{sg.title}</h2>
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
-              {sg.modules.map((m) => (
-                <ModuleCard key={m.name} module={m} onSelect={onSelectModule} tint={tint} />
-              ))}
-            </div>
+      {entradasSub.map((sg) => (
+        <div key={sg.title} className="space-y-2.5">
+          <h2 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">{sg.title}</h2>
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+            {renderEntradas(sg.entradas, onSelectModule, tint)}
           </div>
-        ))}
+        </div>
+      ))}
     </div>
   )
 }

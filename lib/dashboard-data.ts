@@ -189,24 +189,50 @@ export const groups: Group[] = [
           // pendientes del dia, solicitudes de personal y pago de la quincena,
           // todo de la empresa seleccionada. No calcula nada por su cuenta:
           // reune las cifras de los modulos que ya las producen.
+          // REORG navegación (2026-09-30): el ORDEN de esta lista define el orden
+          // de las pantallas en la barra lateral; los hubs (pantallas con
+          // pestañas) se definen en lib/navegacion.ts y aparecen en la posición
+          // de su primera pestaña. Los `name` y permisos NO cambian.
+          //
+          // — Hub "Operación del día" —
+          // Panel ejecutivo del coordinador: personal, cobertura de turnos,
+          // pendientes del dia, solicitudes de personal y pago de la quincena,
+          // todo de la empresa seleccionada. No calcula nada por su cuenta:
+          // reune las cifras de los modulos que ya las producen.
           { name: "Operación del día", icon: LayoutDashboard },
-          { name: "Picking", icon: PackagePlus },
-          { name: "Packing", icon: Package },
-          { name: "Ver Picking/Packing", icon: Eye },
-          { name: "Registro de QR estibas", icon: QrCode },
-          { name: "Lectura de QR estibas", icon: QrCode },
-          { name: "Inventario por Estiba", icon: QrCode },
-          // "Proyecciones" se movio al grupo RRHH Lip por solicitud del
-          // negocio: el modulo proyecta cargas/ingresos asociados al
-          // personal y conceptualmente vive mas cerca de RRHH que de
-          // operacion logistica.
-          { name: "Dashboard Operaciones LIP", icon: LayoutDashboard },
           { name: "Panel LIP Operación", icon: BarChart3, label: "Tablero del Coordinador" },
+          { name: "Dashboard Operaciones LIP", icon: LayoutDashboard },
+          // Modulo "Bitácora": registro diario de novedades/observaciones
+          // de la operacion. CRUD sobre la tabla `bitacora` filtrado por
+          // empresa y protegido por el permiso `bitacora`.
+          { name: "Bitácora", icon: NotebookPen },
+          // — Hub "Centro de Coordinación" —
           // Une en una sola pantalla lo que hoy está disperso en Picking,
           // Packing y el control de muelles/SLA: el coordinador ve los
           // muelles en vivo (Cargue/Descargue/Distribución), asigna
           // personal, inicia y cierra órdenes desde ahí mismo.
           { name: "Centro de Coordinación", icon: LayoutGrid },
+          { name: "Picking", icon: PackagePlus },
+          { name: "Packing", icon: Package },
+          { name: "Ver Picking/Packing", icon: Eye },
+          // Calificación del conductor EN CALIENTE al fin de cargue (kiosko 🟢🟡🔴).
+          { name: "Calificación del Conductor", icon: Star, label: "Calificación del Conductor (en caliente)" },
+          // — Hub "Personal del día" —
+          // Movido desde "Compensación" por solicitud del negocio.
+          // Conserva su permiso original.
+          { name: "Programación de turnos", icon: CalendarClock, label: "Programación de Turnos" },
+          // Movido desde "Compensación" por solicitud del negocio.
+          // Conserva su permiso original.
+          { name: "Registro de asistencia", icon: UserCheck, label: "Registro de Asistencia" },
+          { name: "Aprobar Turnos", icon: CheckCircle },
+          // Movido desde "Reclutamiento y Selección" por solicitud del
+          // negocio: la solicitud de personal se gestiona dentro de la
+          // operacion LIP. Conserva su permiso original.
+          { name: "Solicitud de Personal", icon: UserCheck },
+          // Envio de alertas y programacion de turnos por WhatsApp al
+          // celular del personal (desde colaboradores_th / registroasistencia).
+          { name: "Notificaciones al Personal", icon: Send, label: "Notificaciones al Personal (WhatsApp)" },
+          // — Hub "Toneladas y productividad" —
           // Toneladas por día y acumuladas por trabajador (mismo cálculo que
           // paga nómina): para que el coordinador gestione personal — quién
           // mueve menos, quién es más eficiente, qué vehículos atendió.
@@ -215,6 +241,11 @@ export const groups: Group[] = [
           // (cabeceraoc.auxiliares_real, lo que asignó el coordinador), por día
           // y por mes, ranking y real vs. pagado en pago Global. Solo lectura.
           { name: "Productividad de Auxiliares", icon: Trophy },
+          // — Hub "Estibas QR" —
+          { name: "Registro de QR estibas", icon: QrCode },
+          { name: "Lectura de QR estibas", icon: QrCode },
+          { name: "Inventario por Estiba", icon: QrCode },
+          // — Pantallas solas —
           // "Gestión de Facturas" reubicado aquí desde Gestión Financiera: es
           // función operativa propia del coordinador/líder de LIP. Conserva su
           // nombre y permiso (gestionfacturas).
@@ -223,26 +254,10 @@ export const groups: Group[] = [
           // y cliente): gestiona aquí satisfacción y PQRSF. Mismo módulo del SIG,
           // permiso propio (satisfaccion_pqrsf).
           { name: "Satisfacción y PQRSF", icon: ClipboardList, label: "Satisfacción y PQRSF (conductores y cliente)" },
-          // Calificación del conductor EN CALIENTE al fin de cargue (kiosko 🟢🟡🔴).
-          { name: "Calificación del Conductor", icon: Star, label: "Calificación del Conductor (en caliente)" },
-          { name: "Aprobar Turnos", icon: CheckCircle },
-          // Modulo "Bitácora": registro diario de novedades/observaciones
-          // de la operacion. CRUD sobre la tabla `bitacora` filtrado por
-          // empresa y protegido por el permiso `bitacora`.
-          { name: "Bitácora", icon: NotebookPen },
-          // Movido desde "Reclutamiento y Selección" por solicitud del
-          // negocio: la solicitud de personal se gestiona dentro de la
-          // operacion LIP. Conserva su permiso original.
-          { name: "Solicitud de Personal", icon: UserCheck },
-          // Movido desde "Compensación" por solicitud del negocio.
-          // Conserva su permiso original.
-          { name: "Programación de turnos", icon: CalendarClock, label: "Programación de Turnos" },
-          // Movido desde "Compensación" por solicitud del negocio.
-          // Conserva su permiso original.
-          { name: "Registro de asistencia", icon: UserCheck, label: "Registro de Asistencia" },
-          // Envio de alertas y programacion de turnos por WhatsApp al
-          // celular del personal (desde colaboradores_th / registroasistencia).
-          { name: "Notificaciones al Personal", icon: Send, label: "Notificaciones al Personal (WhatsApp)" },
+          // "Proyecciones" se movio al grupo RRHH Lip por solicitud del
+          // negocio: el modulo proyecta cargas/ingresos asociados al
+          // personal y conceptualmente vive mas cerca de RRHH que de
+          // operacion logistica.
         ],
       },
       // REORG (2026-07-03): el subgrupo "Administración LIP" (Registrar Gasto,

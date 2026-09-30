@@ -27,6 +27,7 @@ import { ClaveFinancieraGuard } from "@/components/clave-financiera-guard"
 // mensual estimado con los porcentajes reales de prestaciones y parafiscales.
 import { ModuleKpiHeader } from "@/components/module-kpi-header"
 import { ModuleHub } from "@/components/module-hub"
+import { MigaNavegacion } from "@/components/miga-navegacion"
 import { hubDe } from "@/lib/navegacion"
 import { GroupKey } from "@/lib/dashboard-data"
 import dynamic from "next/dynamic"
@@ -203,6 +204,8 @@ interface MainContentProps {
   onNavigateModule: (moduleName: string) => void
   /** Abrir un módulo principal (grupo/barra izquierda). La usa el asistente IA. */
   onOpenGroup: (key: string) => void
+  /** Volver al Inicio (sin grupo ni módulo). Lo usa la miga de pan. */
+  onInicio?: () => void
   sidebarCollapsed: boolean
 }
 
@@ -214,6 +217,7 @@ export function MainContent({
   onSelectModule,
   onNavigateModule,
   onOpenGroup,
+  onInicio,
   sidebarCollapsed,
 }: MainContentProps) {
   const [editingOrderId, setEditingOrderId] = React.useState<number | null>(null)
@@ -1133,6 +1137,10 @@ export function MainContent({
               : "w-full max-w-full px-2 sm:px-4 lg:px-8 xl:px-12 py-2 sm:py-4 lg:py-6"
           }
         >
+          {/* Miga de pan: Inicio › Área › Pantalla › Pestaña. */}
+          {selectedGroup && selectedModule && !editingOrderId ? (
+            <MigaNavegacion groupKey={selectedGroup} moduleName={selectedModule} onInicio={onInicio} onGrupo={(k) => onOpenGroup(k)} />
+          ) : null}
           {/* KPIs del módulo, presentes en CUALQUIER submódulo del módulo (self-gated:
               solo pinta en submódulos de grupos con KPIs; null en home/portada). */}
           {selectedGroup && selectedModule ? <ModuleKpiHeader selectedModule={selectedModule} /> : null}

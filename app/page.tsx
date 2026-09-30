@@ -204,6 +204,10 @@ export default function DashboardPage() {
           onSelectModule={setSelectedModule}
           onNavigateModule={navigateToModule}
           onOpenGroup={openGroup}
+          onInicio={() => {
+            setSelectedGroup(null)
+            setSelectedModule(null)
+          }}
           onBack={() => {
             if (selectedModule) {
               setSelectedModule(null)
