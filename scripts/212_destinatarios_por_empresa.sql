@@ -1,5 +1,5 @@
 -- ============================================================================
--- 207 — DESTINATARIOS DEL REPORTE INTERNO, POR EMPRESA
+-- 212 — DESTINATARIOS DEL REPORTE INTERNO, POR EMPRESA
 -- ----------------------------------------------------------------------------
 -- Hoy cada destinatario recibe los avisos de TODAS las empresas habilitadas en
 -- el evento. Esto permite decir de cuáles: el coordinador de Indupan recibe lo
