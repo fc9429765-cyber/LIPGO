@@ -25,6 +25,7 @@ import {
   UserPlus,
 } from "lucide-react"
 import { getOperacionDia } from "@/lib/operacion-dia-actions"
+import { createBitacora } from "@/lib/bitacora-actions"
 import type { CoberturaTurno, ItemBandeja, OperacionDiaData } from "@/lib/operacion-dia-tipos"
 
 const COP = new Intl.NumberFormat("es-CO", {
@@ -57,24 +58,41 @@ function Cifra({ label, valor, sub, color }: { label: string; valor: string | nu
   )
 }
 
-/** Renglón de la lista de cierre: en verde cuando está en cero. */
-function ItemCierre({ ok, texto, pendiente, modulo, boton }: { ok: boolean; texto: string; pendiente: string; modulo: string; boton: string }) {
+/** Renglón de la lista de cierre: en verde cuando está en cero. `children` = acción en línea (p. ej. anotar la bitácora). */
+function ItemCierre({
+  ok,
+  texto,
+  pendiente,
+  modulo,
+  boton,
+  children,
+}: {
+  ok: boolean
+  texto: string
+  pendiente: string
+  modulo?: string
+  boton?: string
+  children?: React.ReactNode
+}) {
   return (
-    <li className="flex items-center gap-3 px-4 py-2">
-      {ok ? (
-        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-      ) : (
-        <span className="h-4 w-4 shrink-0 rounded-full border-2 border-amber-500" />
-      )}
-      <div className="min-w-0 flex-1">
-        <p className={`text-sm ${ok ? "text-muted-foreground line-through decoration-muted-foreground/40" : "font-medium"}`}>{texto}</p>
-        {!ok && <p className="text-[11px] text-amber-700">{pendiente}</p>}
+    <li className="px-4 py-2">
+      <div className="flex items-center gap-3">
+        {ok ? (
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+        ) : (
+          <span className="h-4 w-4 shrink-0 rounded-full border-2 border-amber-500" />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className={`text-sm ${ok ? "text-muted-foreground line-through decoration-muted-foreground/40" : "font-medium"}`}>{texto}</p>
+          {!ok && <p className="text-[11px] text-amber-700">{pendiente}</p>}
+        </div>
+        {!ok && modulo && boton && (
+          <Button variant="outline" size="sm" className="h-7 shrink-0 text-xs" onClick={() => irAModulo(modulo)}>
+            {boton}
+          </Button>
+        )}
       </div>
-      {!ok && (
-        <Button variant="outline" size="sm" className="h-7 shrink-0 text-xs" onClick={() => irAModulo(modulo)}>
-          {boton}
-        </Button>
-      )}
+      {!ok && children && <div className="mt-2 pl-7">{children}</div>}
     </li>
   )
 }
@@ -142,6 +160,11 @@ export function OperacionDelDia() {
   const [data, setData] = useState<OperacionDiaData | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Anotación rápida de la bitácora desde el cierre del día (misma acción que
+  // usa el módulo Bitácora; no se recalcula nada aquí).
+  const [nota, setNota] = useState("")
+  const [guardandoNota, setGuardandoNota] = useState(false)
+  const [errorNota, setErrorNota] = useState<string | null>(null)
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -158,6 +181,20 @@ export function OperacionDelDia() {
   useEffect(() => {
     cargar()
   }, [cargar])
+
+  async function guardarNota() {
+    if (!selectedEmpresaId || !nota.trim()) return
+    setGuardandoNota(true)
+    setErrorNota(null)
+    const r = await createBitacora(selectedEmpresaId, { bitacora: nota.trim() })
+    setGuardandoNota(false)
+    if (!r.success) {
+      setErrorNota(r.error ?? "No se pudo guardar la anotación.")
+      return
+    }
+    setNota("")
+    cargar()
+  }
 
   if (cargando) {
     return (
@@ -323,6 +360,7 @@ export function OperacionDelDia() {
       </section>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="space-y-4">
         {/* BANDEJA DEL DÍA */}
         <section className="rounded-xl border border-border bg-card">
           <div className="border-b border-border px-4 py-3">
@@ -362,6 +400,84 @@ export function OperacionDelDia() {
             </ul>
           )}
         </section>
+
+        {/* CIERRE DEL DÍA — lo que debe quedar en cero antes de irse. Va bajo la
+            bandeja (el espacio que quedaba en blanco) y permite anotar la
+            bitácora de hoy sin salir del panel. */}
+        <section className="rounded-xl border border-border bg-card">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Antes de irte</p>
+              <h2 className="text-sm font-semibold">Cierre del día</h2>
+            </div>
+            {(() => {
+              // Los ausentismos en borrador se acumulan de días anteriores y
+              // ya salen en la Bandeja; aquí solo va lo que cierra HOY.
+              const pend =
+                (d.cierre.vehiculosSinCerrar > 0 ? 1 : 0) +
+                (d.cierre.sinMarcar > 0 ? 1 : 0) +
+                (d.cierre.turnosPorAprobar > 0 ? 1 : 0) +
+                (d.cierre.bitacoraHoy ? 0 : 1)
+              return (
+                <span
+                  className="rounded px-2 py-0.5 text-[10px] font-medium"
+                  style={{ background: pend === 0 ? "#dcfce7" : "#fef3c7", color: pend === 0 ? "#166534" : "#92400e" }}
+                >
+                  {pend === 0 ? "Listo para cerrar" : `${pend} pendiente${pend === 1 ? "" : "s"}`}
+                </span>
+              )
+            })()}
+          </div>
+          <ul className="divide-y divide-border">
+            <ItemCierre
+              ok={d.cierre.vehiculosSinCerrar === 0}
+              texto="Vehículos cerrados"
+              pendiente={`${d.cierre.vehiculosSinCerrar} iniciado${d.cierre.vehiculosSinCerrar === 1 ? "" : "s"} sin finalizar`}
+              modulo="Centro de Coordinación"
+              boton="Cerrar"
+            />
+            <ItemCierre
+              ok={d.cierre.sinMarcar === 0}
+              texto="Asistencia completa"
+              pendiente={`${d.cierre.sinMarcar} persona${d.cierre.sinMarcar === 1 ? "" : "s"} sin marcar`}
+              modulo="Tabla Asistencia"
+              boton="Revisar"
+            />
+            <ItemCierre
+              ok={d.cierre.turnosPorAprobar === 0}
+              texto="Turnos y horas extra aprobados"
+              pendiente={`${d.cierre.turnosPorAprobar} solicitud${d.cierre.turnosPorAprobar === 1 ? "" : "es"} por aprobar`}
+              modulo="Aprobar Turnos"
+              boton="Aprobar"
+            />
+            <ItemCierre ok={d.cierre.bitacoraHoy} texto="Bitácora del día escrita" pendiente="Aún no hay anotación de hoy">
+              <div className="flex gap-2">
+                <textarea
+                  value={nota}
+                  onChange={(e) => setNota(e.target.value)}
+                  rows={2}
+                  placeholder="Anota aquí las novedades del turno: incidentes, vehículos pendientes, personal…"
+                  className="min-h-[52px] flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <Button size="sm" className="h-auto self-stretch" disabled={!nota.trim() || guardandoNota} onClick={guardarNota}>
+                  {guardandoNota ? <Loader2 className="h-4 w-4 animate-spin" /> : "Guardar"}
+                </Button>
+              </div>
+              {errorNota && <p className="mt-1 text-[11px] text-red-700">{errorNota}</p>}
+              <p className="mt-1 text-[10.5px] text-muted-foreground">Queda registrada en Bitácora con la fecha de hoy.</p>
+            </ItemCierre>
+          </ul>
+          <div className="border-t border-border px-4 py-2.5">
+            <Button size="sm" variant="outline" className="w-full gap-1.5" onClick={() => irAModulo("Bitácora")}>
+              <Printer className="h-3.5 w-3.5" />
+              Generar cierre del día (PDF)
+            </Button>
+            <p className="mt-1.5 flex items-center gap-1 text-[10.5px] text-muted-foreground">
+              <ClipboardCheck className="h-3 w-3" /> El PDF sale de la pestaña Cierre del día en Bitácora.
+            </p>
+          </div>
+        </section>
+        </div>
 
         <div className="space-y-4">
           {/* SOLICITAR PERSONAL */}
@@ -524,72 +640,6 @@ export function OperacionDelDia() {
                 </div>
               </>
             )}
-          </section>
-
-          {/* CIERRE DEL DÍA — lo que debe quedar en cero antes de irse. */}
-          <section className="rounded-xl border border-border bg-card">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Antes de irte</p>
-                <h2 className="text-sm font-semibold">Cierre del día</h2>
-              </div>
-              {(() => {
-                // Los ausentismos en borrador se acumulan de días anteriores y
-                // ya salen en la Bandeja; aquí solo va lo que cierra HOY.
-                const pend =
-                  (d.cierre.vehiculosSinCerrar > 0 ? 1 : 0) +
-                  (d.cierre.sinMarcar > 0 ? 1 : 0) +
-                  (d.cierre.turnosPorAprobar > 0 ? 1 : 0) +
-                  (d.cierre.bitacoraHoy ? 0 : 1)
-                return (
-                  <span
-                    className="rounded px-2 py-0.5 text-[10px] font-medium"
-                    style={{ background: pend === 0 ? "#dcfce7" : "#fef3c7", color: pend === 0 ? "#166534" : "#92400e" }}
-                  >
-                    {pend === 0 ? "Listo para cerrar" : `${pend} pendiente${pend === 1 ? "" : "s"}`}
-                  </span>
-                )
-              })()}
-            </div>
-            <ul className="divide-y divide-border">
-              <ItemCierre
-                ok={d.cierre.vehiculosSinCerrar === 0}
-                texto="Vehículos cerrados"
-                pendiente={`${d.cierre.vehiculosSinCerrar} iniciado${d.cierre.vehiculosSinCerrar === 1 ? "" : "s"} sin finalizar`}
-                modulo="Centro de Coordinación"
-                boton="Cerrar"
-              />
-              <ItemCierre
-                ok={d.cierre.sinMarcar === 0}
-                texto="Asistencia completa"
-                pendiente={`${d.cierre.sinMarcar} persona${d.cierre.sinMarcar === 1 ? "" : "s"} sin marcar`}
-                modulo="Tabla Asistencia"
-                boton="Revisar"
-              />
-              <ItemCierre
-                ok={d.cierre.turnosPorAprobar === 0}
-                texto="Turnos y horas extra aprobados"
-                pendiente={`${d.cierre.turnosPorAprobar} solicitud${d.cierre.turnosPorAprobar === 1 ? "" : "es"} por aprobar`}
-                modulo="Aprobar Turnos"
-                boton="Aprobar"
-              />
-              <ItemCierre
-                ok={d.cierre.bitacoraHoy}
-                texto="Bitácora del día escrita"
-                pendiente="Aún no hay anotación de hoy"
-                modulo="Bitácora"
-                boton="Escribir"
-              />
-            </ul>
-            <div className="border-t border-border px-4 py-2.5">
-              <Button size="sm" variant="outline" className="w-full gap-1.5" onClick={() => irAModulo("Bitácora")}>
-                <Printer className="h-3.5 w-3.5" />
-                Generar cierre del día (PDF)
-              </Button>
-              <p className="mt-1.5 flex items-center gap-1 text-[10.5px] text-muted-foreground">
-                <ClipboardCheck className="h-3 w-3" /> El PDF sale de la pestaña Cierre del día en Bitácora.
-              </p>
-            </div>
           </section>
         </div>
       </div>
