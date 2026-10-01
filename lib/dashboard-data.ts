@@ -196,8 +196,13 @@ export const groups: Group[] = [
     title: "Torre de Control",
     icon: LayoutDashboard,
     modules: [
-      { name: "Dashboard Operacion", icon: Activity },
+      // Etiqueta "vista clásica" (2026-09-30) para no confundirlo con la pantalla
+      // "Operación del día" de Operación LIP. Nombre y permiso intactos.
+      { name: "Dashboard Operacion", icon: Activity, label: "Dashboard Operación · vista clásica" },
       { name: "Asistente IA", icon: Sparkles },
+      // Viene de Gestión Humana (2026-09-30): proyecta cargas/ingresos de
+      // operación (cabeceraoc/detalleoc), no nómina. Conserva nombre y permiso.
+      { name: "Proyecciones", icon: Calculator, label: "Proyecciones de operación" },
     ],
   },
   {
@@ -300,21 +305,27 @@ export const groups: Group[] = [
     subgroups: [
       {
         title: "Facturación",
+        // REORG navegación (2026-09-30): el orden define los hubs de
+        // lib/navegacion.ts (Facturación · Producción y conciliación). Nombres y
+        // permisos intactos; todo sigue bajo ClaveFinancieraGuard.
         modules: [
-          { name: "Indicador de Facturación por Proyectos", icon: BarChart3 },
-          { name: "Facturación Proyectos", icon: CreditCard },
+          // — Hub "Facturación" —
           // Cruce órdenes procesadas vs facturado por owner + prefactura. Permiso propio.
           { name: "Cuadro de Control Facturación", icon: ClipboardCheck },
+          // Flujo documental de una prefactura ya aprobada: anexo enviado ->
+          // firmado por el cliente -> factura enviada -> firmada -> cierre,
+          // más cartera/cobro (días vencidos) desde el cierre. Permiso propio.
+          { name: "Ciclo de Facturación", icon: Landmark },
+          // Consulta por proyecto: esperado (acuerdo) vs a quién se factura de
+          // verdad. Solo lectura. Mismo permiso que Cuadro de Control.
+          { name: "Resumen de Facturación por Proyecto", icon: ClipboardList },
+          { name: "Facturación Proyectos", icon: CreditCard },
+          { name: "Indicador de Facturación por Proyectos", icon: BarChart3 },
           // Consulta de solo lectura contra la API de Siigo: facturas, su
           // detalle y el PDF. Permiso propio: da acceso a TODA la facturacion
           // de la empresa, no solo a la que genera LIPgo.
           { name: "Consulta Facturas SIIGO", icon: FileSearch },
-          // Consulta por proyecto: esperado (acuerdo) vs a quién se factura de
-          // verdad. Solo lectura. Mismo permiso que Cuadro de Control.
-          { name: "Resumen de Facturación por Proyecto", icon: ClipboardList },
-          // Alquiler de montacargas facturado (id1/id3) + $2M Manejo de
-          // Inventario (id1/id3) + 600 ton fijas Avimol. Permiso propio.
-          { name: "Cargos Fijos", icon: CalendarClock },
+          // — Hub "Producción y conciliación" —
           // Avimol: se cobra por producción (tolva × tarifa/ton) pero se paga por
           // turnos (Estibado PT / Salvado). Cruce día a día. Permiso propio.
           { name: "Conciliación Avimol", icon: Scale },
@@ -322,10 +333,10 @@ export const groups: Group[] = [
           // Avimol (Salvado / Estibado PT + horas extra) e Indupan (Tolva / Tolva f).
           // La de Avimol también vive como pestaña dentro de Conciliación Avimol.
           { name: "Prefactura de Producción", icon: FileText },
-          // Flujo documental de una prefactura ya aprobada: anexo enviado ->
-          // firmado por el cliente -> factura enviada -> firmada -> cierre,
-          // más cartera/cobro (días vencidos) desde el cierre. Permiso propio.
-          { name: "Ciclo de Facturación", icon: Landmark },
+          // Alquiler de montacargas facturado (id1/id3) + $2M Manejo de
+          // Inventario (id1/id3) + 600 ton fijas Avimol. Permiso propio.
+          { name: "Cargos Fijos", icon: CalendarClock },
+          // — Pantallas solas —
           { name: "Tarifas", icon: CreditCard },
           // Edición directa de cabeceraoc/detalleoc de una orden ya creada
           // (antes Facturación lo hacía a mano en Supabase). Permiso propio.
@@ -358,13 +369,17 @@ export const groups: Group[] = [
     title: "Gestión Humana",
     icon: Users,
     // REORG (2026-07-06): navegación ordenada por el CICLO DE VIDA del colaborador.
-    // Se consolidó el subgrupo delgado "Gestión de Contratación" (1 módulo) dentro
-    // de Selección, y "Gestión de Solicitudes" (solicitud de personal) volvió a
-    // Selección desde Bienestar. Todos los módulos CONSERVAN su name/permiso.
+    // REORG navegación (2026-09-30, gerencia): TRES bloques al estilo de las suites
+    // de talento humano (Recruiting · Core HR · Payroll): "Selección y
+    // contratación", "Gestión del talento" y "Tiempos y novedades". Lo de
+    // compensación vive en Compensación: "Turnos" (tarifas por puesto, maestro de
+    // pago) se fue allá; "Proyecciones" (no es nómina) se fue a Torre de Control.
+    // Todos los módulos CONSERVAN su name/permiso.
     subgroups: [
       {
-        title: "Reclutamiento, Selección y Contratación",
+        title: "Selección y contratación",
         modules: [
+          // — Hub "Selección y contratación" —
           { name: "Gestión de Solicitudes", icon: ClipboardList },
           { name: "Aprobación de Solicitudes de Personal", icon: BadgeCheck },
           { name: "Hojas de Vida", icon: BookOpen },
@@ -374,37 +389,35 @@ export const groups: Group[] = [
         ],
       },
       {
-        title: "Directorio y Expediente",
+        title: "Gestión del talento",
         modules: [
+          // — Hub "Colaboradores" —
           { name: "Gestión de Colaboradores", icon: UserCog, label: "Directorio de Colaboradores" },
           { name: "Head Count", icon: Users },
           { name: "Carpetas de Trabajadores", icon: FolderOpen, label: "Expediente del Colaborador" },
-          { name: "Panel LIP Gestión Humana", icon: BarChart3, label: "Panel LIP · Gestión Humana (SIG)" },
-        ],
-      },
-      {
-        title: "Inducción, Formación y Desempeño",
-        modules: [
+          // — Hub "Formación y desempeño" —
           { name: "Inducciones", icon: GraduationCap },
           { name: "Evidencia de Inducciones", icon: BookOpen },
           { name: "Gestión de Capacitaciones", icon: GraduationCap },
           { name: "Asistencia a Capacitaciones", icon: ClipboardList },
           { name: "Evaluaciones de Desempeño", icon: BadgeCheck },
+          // — Hub "Bienestar" —
+          { name: "Programa de Bienestar", icon: HeartHandshake },
+          { name: "Participación y Evidencias", icon: ClipboardList },
+          // — Pantalla sola —
+          { name: "Panel LIP Gestión Humana", icon: BarChart3, label: "Panel LIP · Gestión Humana (SIG)" },
         ],
       },
       {
-        title: "Asistencia, Turnos y Tiempos",
+        title: "Tiempos y novedades",
         modules: [
+          // — Hub "Asistencia y tiempos" — (registrar horas es gestión de tiempos;
+          // pagarlas es Compensación)
           { name: "Tabla Asistencia", icon: ClipboardList, label: "Tabla de Asistencia" },
           { name: "Visor", icon: Eye, label: "Visor de Asistencia" },
-          { name: "Turnos", icon: Clock, label: "Turnos por Puesto" },
           { name: "Asignación horas extra", icon: Clock, label: "Asignación de Horas Extra" },
           // Vacaciones se movió al grupo "Compensación" (REORG 2026-07-29).
-        ],
-      },
-      {
-        title: "Relaciones Laborales y Ausentismo",
-        modules: [
+          // — Hub "Novedades y ausentismo" —
           { name: "Novedades de personal", icon: NotebookPen, label: "Novedades de Personal" },
           // Asistencia Administrativa se movió al grupo "Compensación" (REORG
           // 2026-09-09, pedido explícito): ahí es donde vive todo lo que
@@ -422,23 +435,6 @@ export const groups: Group[] = [
           { name: "Procesos Disciplinarios", icon: Scale },
         ],
       },
-      {
-        title: "Bienestar",
-        modules: [
-          { name: "Programa de Bienestar", icon: HeartHandshake },
-          { name: "Participación y Evidencias", icon: ClipboardList },
-        ],
-      },
-      {
-        title: "Nómina",
-        modules: [
-          // Nominapersonal/Liquidaciones/Parafiscales/Revisión de nómina/Vacaciones
-          // se movieron al grupo "Compensación" (REORG 2026-07-29). Proyecciones NO
-          // es de nómina (proyecciones de producción/pedidos, cabeceraoc/detalleoc);
-          // se deja aquí sin tocar, por decisión explícita del negocio.
-          { name: "Proyecciones", icon: Calculator, label: "Proyecciones de Nómina" },
-        ],
-      },
     ],
   },
   {
@@ -451,31 +447,52 @@ export const groups: Group[] = [
     key: "compensacion",
     title: "Compensación",
     icon: Wallet,
-    modules: [
-      { name: "Nominapersonal", icon: Banknote, label: "Nómina de Personal" },
-      { name: "Liquidaciones", icon: Receipt, label: "Liquidaciones" },
-      // Aportes de seguridad social y parafiscales del mes (guía de la planilla PILA).
-      { name: "Parafiscales", icon: Landmark, label: "Parafiscales y Seguridad Social" },
-      // Cuadro definitivo por colaborador: liquidación diaria + resumen + archivo plano (Siigo).
-      { name: "Revisión de nómina", icon: ClipboardCheck, label: "Revisión de nómina" },
-      // Bonos operativos/administrativos por día y persona (no prestacionales).
-      // Al aprobarse entran a pagonomina y salen en el archivo plano (43/50/66).
-      { name: "Bonos", icon: Gift },
-      // Agrega personal extra (aparte de Picking/Packing) a una orden de
-      // Cargue/Descargue para que también entre en el reparto de toneladas.
-      { name: "Asignación de apoyo en cargue", icon: UserPlus },
-      // Causación desde fecha de ingreso, disfrute (novedad del control diario), saldo y liquidación.
-      { name: "Vacaciones", icon: CalendarClock },
-      // Reporte de Acumulados que LIPgo CONSTRUYE (mismo formato que el export
-      // de Siigo), fuente de verdad hacia adelante -- ver lib/acumulados-lipgo-actions.ts.
-      { name: "Acumulados LIPgo", icon: FileSpreadsheet, label: "Acumulados LIPgo" },
-      // Movido desde "Gestión Humana" (REORG 2026-09-09, pedido explícito):
-      // registra/corrige asistencia y novedades para CUALQUIER fecha (pasada
-      // o futura) -- tapa huecos de captura operativa y lleva la asistencia
-      // diaria del personal administrativo. Alimenta directo a pagonomina,
-      // por eso pertenece aquí. Permiso propio (no comparte con "Novedades
-      // de personal"): puede tocar meses ya cerrados de nómina.
-      { name: "Asistencia Administrativa", icon: ClipboardList },
+    // REORG navegación (2026-09-30, gerencia: "todo lo de compensación en
+    // Compensación"): dos bloques, Nómina y Prestaciones y parámetros. "Turnos"
+    // (tarifas por puesto) viene de Gestión Humana: es un maestro de PAGO y por
+    // eso queda como módulo financiero (solo LIP). Nombres y permisos intactos.
+    subgroups: [
+      {
+        title: "Nómina",
+        modules: [
+          // — Hub "Nómina de la quincena" —
+          // Cuadro definitivo por colaborador: liquidación diaria + resumen + archivo plano (Siigo).
+          { name: "Revisión de nómina", icon: ClipboardCheck, label: "Revisión de nómina" },
+          { name: "Nominapersonal", icon: Banknote, label: "Nómina de Personal" },
+          // Reporte de Acumulados que LIPgo CONSTRUYE (mismo formato que el export
+          // de Siigo), fuente de verdad hacia adelante -- ver lib/acumulados-lipgo-actions.ts.
+          { name: "Acumulados LIPgo", icon: FileSpreadsheet, label: "Acumulados LIPgo" },
+          // Bonos operativos/administrativos por día y persona (no prestacionales).
+          // Al aprobarse entran a pagonomina y salen en el archivo plano (43/50/66).
+          { name: "Bonos", icon: Gift },
+          // Agrega personal extra (aparte de Picking/Packing) a una orden de
+          // Cargue/Descargue para que también entre en el reparto de toneladas.
+          { name: "Asignación de apoyo en cargue", icon: UserPlus },
+          // — Pantalla sola —
+          // Movido desde "Gestión Humana" (REORG 2026-09-09, pedido explícito):
+          // registra/corrige asistencia y novedades para CUALQUIER fecha (pasada
+          // o futura) -- tapa huecos de captura operativa y lleva la asistencia
+          // diaria del personal administrativo. Alimenta directo a pagonomina,
+          // por eso pertenece aquí. Permiso propio (no comparte con "Novedades
+          // de personal"): puede tocar meses ya cerrados de nómina.
+          { name: "Asistencia Administrativa", icon: ClipboardList },
+        ],
+      },
+      {
+        title: "Prestaciones y parámetros",
+        modules: [
+          // — Hub "Prestaciones y seguridad social" —
+          { name: "Liquidaciones", icon: Receipt, label: "Liquidaciones" },
+          // Aportes de seguridad social y parafiscales del mes (guía de la planilla PILA).
+          { name: "Parafiscales", icon: Landmark, label: "Parafiscales y Seguridad Social" },
+          // Causación desde fecha de ingreso, disfrute (novedad del control diario), saldo y liquidación.
+          { name: "Vacaciones", icon: CalendarClock },
+          // — Pantalla sola —
+          // Viene de Gestión Humana (2026-09-30): tarifa base, recargos y vigencia
+          // por puesto = maestro de pago. Conserva su nombre y permiso.
+          { name: "Turnos", icon: Clock, label: "Turnos y tarifas por puesto" },
+        ],
+      },
     ],
   },
   {
@@ -489,19 +506,27 @@ export const groups: Group[] = [
     subgroups: [
       {
         // Transversal: aplica a las 3 normas a la vez.
+        // REORG navegación (2026-09-30): el orden define los hubs de
+        // lib/navegacion.ts (Tablero SIG · Requisitos y mejora · Documentos ·
+        // Procesos). Nombres y permisos intactos.
         title: "Sistema Integrado (SIG) · Transversal",
         modules: [
+          // — Hub "Tablero SIG" —
           { name: "Dashboard SIG", icon: BarChart3, label: "Dashboard SIG (Auditoría)" },
-          { name: "Análisis de Contexto DOFA", icon: ClipboardCheck, label: "Análisis de Contexto (DOFA)" },
-          { name: "Matriz Integrada SIG", icon: ClipboardCheck, label: "Matriz Integrada (ISO 9001·14001·45001)" },
-          { name: "Repositorio por Norma SIG", icon: FolderArchive, label: "Repositorio Documental por Norma" },
-          { name: "Repositorio Universal", icon: FolderArchive, label: "Repositorio Universal de Documentos" },
-          { name: "Objetivos y Metas SIG", icon: ClipboardList, label: "Objetivos y Metas (6.2)" },
-          { name: "No Conformidades SIG", icon: ClipboardList, label: "No Conformidades (10.2)" },
           { name: "Indicadores SIG", icon: Gauge, label: "BSC · Cuadro de Mando Integral" },
           { name: "Evaluación por Área", icon: Gauge, label: "Evaluación de Desempeño por Área" },
+          // — Hub "Requisitos y mejora" —
+          { name: "Matriz Integrada SIG", icon: ClipboardCheck, label: "Matriz Integrada (ISO 9001·14001·45001)" },
+          { name: "Análisis de Contexto DOFA", icon: ClipboardCheck, label: "Análisis de Contexto (DOFA)" },
+          { name: "Objetivos y Metas SIG", icon: ClipboardList, label: "Objetivos y Metas (6.2)" },
+          { name: "No Conformidades SIG", icon: ClipboardList, label: "No Conformidades (10.2)" },
+          // — Hub "Documentos" —
+          { name: "Repositorio por Norma SIG", icon: FolderArchive, label: "Repositorio Documental por Norma" },
+          { name: "Repositorio Universal", icon: FolderArchive, label: "Repositorio Universal de Documentos" },
+          // — Hub "Procesos" —
           { name: "Mapa de Procesos", icon: ClipboardCheck, label: "Mapa de Procesos (SIG)" },
           { name: "Mapa de Interacción del Proceso", icon: ClipboardCheck, label: "Mapa de Interacción del Proceso (LIPgo)" },
+          // — Pantalla sola —
           { name: "Satisfacción y PQRSF", icon: ClipboardList, label: "Satisfacción y PQRSF (9.1.2)" },
         ],
       },
@@ -531,27 +556,35 @@ export const groups: Group[] = [
     key: "sst",
     title: "Seguridad y Salud en el Trabajo (SST)",
     icon: ShieldCheck,
+    // REORG navegación (2026-09-30): el orden define los hubs de
+    // lib/navegacion.ts. "Gestión del Cambio" pasa al bloque de riesgos (es
+    // gestión del cambio de peligros). Nombres y permisos intactos.
     subgroups: [
       {
         title: "Autoevaluación y Mejora (Dec. 0312)",
         modules: [
+          // — Hub "Autoevaluación 0312" —
           { name: "Auditoría 0312", icon: ShieldCheck, label: "Auditoría 0312" },
           { name: "Matriz de Estándares", icon: ClipboardCheck, label: "Matriz 60 Estándares" },
-          { name: "Repositorio de Soportes", icon: FolderArchive, label: "Repositorio de Soportes (Matriz)" },
           { name: "Plan de Mejoramiento", icon: ClipboardList, label: "Plan de Mejoramiento" },
+          { name: "Repositorio de Soportes", icon: FolderArchive, label: "Repositorio de Soportes (Matriz)" },
           { name: "Indicadores SST", icon: BarChart3, label: "Indicadores SG-SST" },
         ],
       },
       {
         title: "Peligros, Riesgos y Operación Segura",
         modules: [
+          // — Hub "Riesgos y cambio" —
           { name: "IPEVR", icon: Gauge, label: "IPEVR (GTC 45)" },
-          { name: "Registro Preoperacional", icon: ClipboardCheck },
-          { name: "Equipos y Mantenimiento", icon: Settings, label: "Equipos y Mantenimiento" },
+          { name: "Gestión del Cambio", icon: ArrowRightLeft, label: "Gestión del Cambio" },
+          // — Hub "Equipos y montacargas" —
           // Va junto al preoperacional (que alimenta su hoja de vida) y a
           // Equipos y Mantenimiento, con el que comparte sst_equipos y
           // sst_mantenimientos. Ver scripts/104_create_gestion_montacargas.sql.
           { name: "Gestión de Montacargas", icon: Forklift, label: "Gestión de Montacargas" },
+          { name: "Equipos y Mantenimiento", icon: Settings, label: "Equipos y Mantenimiento" },
+          { name: "Registro Preoperacional", icon: ClipboardCheck },
+          // — Hub "EPP" —
           { name: "Entrega de EPP", icon: ShieldCheck, label: "Entrega de EPP" },
           { name: "Gestión de Dotación EPP", icon: Package, label: "Dotación de EPP" },
         ],
@@ -559,8 +592,9 @@ export const groups: Group[] = [
       {
         title: "Accidentalidad y Salud en el Trabajo",
         modules: [
-          { name: "Investigación AT", icon: Activity, label: "Investigación de AT (SST-FOR-21)" },
+          // — Hub "Accidentes y salud" —
           { name: "Alertas de AT", icon: AlertTriangle, label: "Alertas de AT (Ausentismo)" },
+          { name: "Investigación AT", icon: Activity, label: "Investigación de AT (SST-FOR-21)" },
           { name: "Investigaciones Realizadas", icon: FolderArchive, label: "Repositorio de Investigaciones" },
           { name: "Examenes Médicos", icon: Stethoscope },
           { name: "MEDEVAC", icon: Stethoscope, label: "MEDEVAC (Plan de Emergencias Médicas)" },
@@ -570,8 +604,8 @@ export const groups: Group[] = [
       {
         title: "Comunicación, Cambio y Cultura",
         modules: [
+          // — Hub "Comunicación y comités" —
           { name: "Comunicación SST", icon: NotebookPen, label: "Comunicación / Autorreporte / PQRSF" },
-          { name: "Gestión del Cambio", icon: ArrowRightLeft, label: "Gestión del Cambio" },
           { name: "Actividades y Comités", icon: GraduationCap, label: "Actividades y Comités" },
         ],
       },
@@ -587,11 +621,16 @@ export const groups: Group[] = [
       // para enviar, y tenerlo en dos sitios hacia que nadie supiera cual era la
       // fuente de verdad. El permiso `whatsapp` se conserva por si mas adelante
       // se quiere separar de nuevo.
+      // REORG navegación (2026-09-30): un hub por bloque (lib/navegacion.ts).
+      // Nombres y permisos intactos; Usuarios/Accesos/Autorizaciones siguen
+      // siendo exclusivos de LIPgo.
       {
-        title: "Gestión de Clientes",
+        title: "Clientes y ventas",
         modules: [
           { name: "Clientes", icon: Users },
           { name: "Sucursales", icon: Store },
+          { name: "Condiciones Pago", icon: CreditCard },
+          { name: "Vendedores", icon: UserCheck },
         ],
       },
       {
@@ -603,32 +642,33 @@ export const groups: Group[] = [
         ],
       },
       {
-        title: "Bodegas",
+        title: "Bodegas y muelles",
         modules: [
           { name: "Bodegas", icon: Warehouse },
           { name: "Localizaciones", icon: MapPin },
+          { name: "Muelles de Cargue", icon: Warehouse },
         ],
       },
       {
-        title: "Transportes",
+        title: "Transporte",
         modules: [
-          { name: "Tipos Despacho", icon: Truck },
           { name: "Transportadoras", icon: Truck },
           { name: "Tipos de Vehiculos", icon: Truck },
+          { name: "Tipos Despacho", icon: Truck },
+          { name: "Placas de Distribución", icon: Truck },
         ],
       },
       {
-        title: "General",
+        title: "Seguridad y accesos",
         modules: [
-          { name: "Condiciones Pago", icon: CreditCard },
-          { name: "Vendedores", icon: UserCheck },
           { name: "Gestión de Usuarios", icon: Users },
           { name: "Accesos de Usuario", icon: Lock },
           { name: "Autorizaciones por clave", icon: KeyRound },
-          { name: "Bitácora de Auditoría", icon: History },
-          { name: "Placas de Distribución", icon: Truck },
-          { name: "Muelles de Cargue", icon: Warehouse },
         ],
+      },
+      {
+        title: "Auditoría",
+        modules: [{ name: "Bitácora de Auditoría", icon: History }],
       },
     ],
   },
@@ -636,13 +676,15 @@ export const groups: Group[] = [
     key: "mrp",
     title: "MRP",
     icon: Layers,
+    // REORG navegación (2026-09-30): "Ingresos MP", "Saldos de empaque" y
+    // "Saldos de materia prima" NO tienen implementación (caían en
+    // ModulePlaceholder) y salen del menú hasta que existan; sus permisos
+    // (ingresos_mp, saldos_empaque, saldos_materia_prima) se conservan.
     modules: [
+      // — Hub "Materiales" —
       { name: "Creación de materiales", icon: Package },
-      { name: "Ingresos MP", icon: PackagePlus },
       { name: "Explosión de materiales", icon: Layers },
       { name: "Gestión de proveedores", icon: Users },
-      { name: "Saldos de empaque", icon: Box },
-      { name: "Saldos de materia prima", icon: Package2 },
     ],
   },
   // Guia de usuario. Universal a proposito: "Aprendizaje" NO se registra en
