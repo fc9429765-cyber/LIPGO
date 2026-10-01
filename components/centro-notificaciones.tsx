@@ -40,6 +40,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/components/auth-provider"
 import { usePendingTurnos } from "@/hooks/usePendingTurnos"
 import { usePreoperacionalAlerts } from "@/hooks/usePreoperacionalAlerts"
 import { useRendimientoAlerts } from "@/hooks/useRendimientoAlerts"
@@ -117,6 +118,10 @@ const fechaCorta = (s: string) => {
 }
 
 export function CentroNotificaciones({ empresaId, userId }: { empresaId: number | null; userId?: string }) {
+  // Todas las alertas son del ID del selector global (top-bar remonta este
+  // componente con `key` por ID). Única excepción: Ciclo de Facturación, que
+  // depende de la sesión (jefe/coordinador) y cubre todos sus proyectos.
+  const { selectedEmpresaNombre } = useAuth()
   const { pendingSolicitudes, count: turnosCount } = usePendingTurnos(empresaId)
   const preop = usePreoperacionalAlerts(empresaId, userId)
   const rend = useRendimientoAlerts(empresaId, userId)
@@ -374,7 +379,7 @@ export function CentroNotificaciones({ empresaId, userId }: { empresaId: number 
       out.push({
         key: "ciclo_facturacion",
         titulo: "Ciclo de facturación",
-        descripcion: "Te toca actuar en estos ciclos",
+        descripcion: "Te toca actuar en estos ciclos (todos tus proyectos)",
         icono: ClipboardCheck,
         hue: "blue",
         nivel: "atencion",
@@ -525,6 +530,12 @@ export function CentroNotificaciones({ empresaId, userId }: { empresaId: number 
             <h4 className="flex items-center gap-2 text-sm font-semibold">
               <Bell className="h-4 w-4" />
               Notificaciones
+              {empresaId != null && (
+                <span className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  ID {empresaId}
+                  {selectedEmpresaNombre ? ` · ${selectedEmpresaNombre}` : ""}
+                </span>
+              )}
             </h4>
             <span className="text-xs text-muted-foreground">
               {total > 0

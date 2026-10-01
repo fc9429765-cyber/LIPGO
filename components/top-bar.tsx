@@ -157,7 +157,10 @@ export function TopBar() {
                 evaluaciones, asistencia, operaciones del día, conteo cíclico y
                 ajustes de inventario). Cada alerta conserva su hook, su permiso
                 y su ritmo de refresco: ver components/centro-notificaciones.tsx. */}
-            {profile && <CentroNotificaciones empresaId={selectedEmpresaId} userId={profile.id} />}
+            {/* `key` por ID: al cambiar el selector global, los 11 hooks de alertas se
+                remontan limpios. Sin esto, un hook que al cambiar de empresa no tiene
+                permiso o falla se quedaba mostrando las alertas del ID anterior. */}
+            {profile && <CentroNotificaciones key={`notif-${selectedEmpresaId ?? "none"}`} empresaId={selectedEmpresaId} userId={profile.id} />}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <span className="relative inline-flex" title={avisoClave ? "Crea tu clave de autorización" : "Menú de usuario"}>
