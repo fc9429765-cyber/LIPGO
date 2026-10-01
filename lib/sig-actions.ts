@@ -57,6 +57,7 @@ import { getSlaCargueMin, esNombreSubproducto, PLANTA_ACORDADA, factorTiempoSiti
 import { esCodigoTrasladoNetoCero, nombreMovimientoPorCodigo } from "@/lib/transacciones-codigo"
 import { excluirNoFacturable } from "@/lib/facturas-exclusiones"
 import { categoriaDeNovedad, diasActivosEnPeriodo, diasAusenciaDistintos } from "@/lib/ausentismo-categorias"
+import { codigosOrdenPorUnidad } from "@/lib/ordenes-por-unidad"
 
 // Mapea el estado del Centro de Evidencia ISO 9001 al estado de la matriz SIG.
 function isoEstadoASig(e: EstadoISO): SigEstadoCobertura {
@@ -2042,7 +2043,7 @@ async function _computeIndicadoresValores(
       filtroFechaOrden(
         supabase
           .from("cabeceraoc")
-          .select("pesovascula,idempresa,fechaorden")
+          .select("pesovascula,idempresa,fechaorden,ordendecargue")
           .in("idempresa", clientes)
           .neq("tipooperacion", "proyeccion")
           .neq("tipooperacion", "Tolva")
@@ -2051,7 +2052,12 @@ async function _computeIndicadoresValores(
         .order("id", { ascending: true })
         .range(from, to),
     )
-    const toneladas = (tonRows ?? []).reduce((s: number, r: any) => s + (Number(r.pesovascula) || 0), 0)
+    // Huevos / Empaque MP (por unidad, Avimol): su "peso" son unidades, no
+    // toneladas -- fuera del indicador (lib/ordenes-por-unidad.ts, 2026-09-30).
+    const porUnidadTon = await codigosOrdenPorUnidad(supabase, (tonRows ?? []).map((r: any) => r.ordendecargue))
+    const toneladas = (tonRows ?? [])
+      .filter((r: any) => !porUnidadTon.has(String(r.ordendecargue ?? "").trim()))
+      .reduce((s: number, r: any) => s + (Number(r.pesovascula) || 0), 0)
     // Cumplimiento de meta de tonelaje = ton / (meta_día por sede × días operativos).
     const diasPorCliente: Record<number, Set<string>> = {}
     for (const r of tonRows ?? []) {
@@ -4709,7 +4715,12 @@ export async function getPanelOperacionLIP(
     // Se excluye SOLO del tonelaje/cumplimiento de meta -- conteos de
     // órdenes, SLA, evidencia y facturación pendiente siguen igual (no es
     // lo que se reportó mezclado).
-    const rowsTon = rows.filter((r) => r.tipooperacion !== "Tolva" && r.tipooperacion !== "Tolva f")
+    // ...y también fuera los productos POR UNIDAD (Huevos / Empaque MP en
+    // Avimol): su "peso" son unidades (lib/ordenes-por-unidad.ts, 2026-09-30).
+    const porUnidadPanel = await codigosOrdenPorUnidad(supabase, rows.map((r) => r.ordendecargue))
+    const rowsTon = rows.filter(
+      (r) => r.tipooperacion !== "Tolva" && r.tipooperacion !== "Tolva f" && !porUnidadPanel.has(String(r.ordendecargue ?? "").trim()),
+    )
     const ton = rowsTon.reduce((s, r) => s + (Number(r.pesovascula) || 0), 0)
     const durs = rows
       .filter((r) => r.iniciocargue && r.fincargue)

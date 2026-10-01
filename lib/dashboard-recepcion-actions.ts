@@ -15,6 +15,7 @@
 
 import { createClient } from "@/lib/supabase-client"
 import { getCurrentEmpresaId } from "@/lib/company-filter"
+import { codigosOrdenPorUnidad } from "@/lib/ordenes-por-unidad"
 
 // ============================================================================
 // Tipos
@@ -453,6 +454,15 @@ export async function getDashboardRecepcionData(
 
       if (page.length < PAGE_SIZE) break
       from += PAGE_SIZE
+    }
+
+    // Huevos / Empaque MP (por unidad, Avimol): cuentan como orden/vehículo
+    // pero NO como toneladas: su "peso" son unidades. Se deja en 0 aquí, una
+    // sola vez, para que TODO el cálculo posterior (día, mes, año, por
+    // transporte, por cliente) los excluya (lib/ordenes-por-unidad.ts, 2026-09-30).
+    const porUnidadRec = await codigosOrdenPorUnidad(supabase, rows.map((r) => String(r.ordendecargue ?? "")))
+    for (const r of rows as any[]) {
+      if (porUnidadRec.has(String(r.ordendecargue ?? "").trim())) r.pesovascula = 0
     }
 
     // ========================================================================
