@@ -100,6 +100,20 @@ as $fn$
             -- TOTAL, mismo criterio que la de Avimol arriba.
             AND NOT (cabeceraoc.tipooperacion = 'proyeccion'::text)
             AND (cabeceraoc.fechacargue BETWEEN (p_desde - 7) AND (p_hasta + 7))
+            -- POR UNIDAD (2026-09-30, gerencia: "los huevos no tienen nada que ver con
+            -- las toneladas y se pagan por turno"): Huevos y Empaque MP (Avimol) se
+            -- cobran y pagan por UNIDAD; lo que la orden guarda como "peso" son
+            -- unidades (una del 30-sep traía 102.000). Misma regla que
+            -- esProductoPorUnidad (lib/facturacion-billed-party.ts) y
+            -- lib/ordenes-por-unidad.ts. Exclusión TOTAL de la orden: ni toneladas ni
+            -- pago por destajo (el 14-sep-2026 una de estas órdenes llevaba auxiliares).
+            AND NOT EXISTS (
+                SELECT 1
+                  FROM detalleoc du
+                  JOIN productos pu ON pu.nombre = du.producto
+                 WHERE du.numeroorden = cabeceraoc.ordendecargue
+                   AND upper(btrim(pu.subcategoria)) = ANY (ARRAY['HUEVOS'::text, 'MATERIA PRIMA'::text])
+            )
         ), produccion_diaria AS (
          SELECT t.fechacargue AS fecha,
             t.nombre_auxiliar AS persona,
@@ -266,6 +280,13 @@ as $fn$
           WHERE ((cabeceraoc.fincargue IS NOT NULL) AND ((cabeceraoc.fincargue)::text <> ''::text))
             AND NOT ((cabeceraoc.idempresa = 2) AND (cabeceraoc.tipooperacion = 'Distribucion'::text))
             AND NOT (cabeceraoc.tipooperacion = 'proyeccion'::text)
+            AND NOT EXISTS (
+                SELECT 1
+                  FROM detalleoc du
+                  JOIN productos pu ON pu.nombre = du.producto
+                 WHERE du.numeroorden = cabeceraoc.ordendecargue
+                   AND upper(btrim(pu.subcategoria)) = ANY (ARRAY['HUEVOS'::text, 'MATERIA PRIMA'::text])
+            )
         UNION
          SELECT DISTINCT registroasistencia.nombre AS persona
            FROM registroasistencia
