@@ -288,7 +288,7 @@ export default function ProductividadAuxiliares() {
               <span className="font-semibold">Huevos y empaque por unidad</span>
               <span>{data.porUnidad.ordenes} orden{data.porUnidad.ordenes === 1 ? "" : "es"}</span>
               <span>{data.porUnidad.unidades.toLocaleString("es-CO")} unidades</span>
-              <span className="text-amber-700/80">se pagan por unidad · no suman toneladas ni entran al ranking</span>
+              <span className="text-amber-700/80">control de facturación · no suman toneladas ni entran al ranking</span>
             </div>
           )}
 

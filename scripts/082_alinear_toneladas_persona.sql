@@ -52,15 +52,17 @@ create or replace view public.toneladasauxiliares as
             -- scripts/053_pagonomina_reemplazo.sql) -- sin esto, el portal "Mi
             -- Aporte" del trabajador podía mostrarle un tonelaje personal inflado.
             AND cabeceraoc.tipooperacion <> 'proyeccion'::text
-            -- POR UNIDAD (2026-09-30): Huevos y Empaque MP (Avimol) se pagan por turno,
+            -- HUEVOS (2026-09-30): el descargue de Huevos (Avimol) se paga por turno,
             -- no por tonelada; su "peso" son unidades. Misma exclusión que pagonomina
-            -- (scripts/053) y lib/ordenes-por-unidad.ts.
+            -- (scripts/053). "Empaque MP" (MATERIA PRIMA) NO se excluye: ese descargue
+            -- SÍ se paga a los auxiliares (gerencia, 30-sep-2026) y el portal muestra
+            -- lo que se paga.
             AND NOT EXISTS (
                 SELECT 1
                   FROM detalleoc du
                   JOIN productos pu ON pu.nombre = du.producto
                  WHERE du.numeroorden = cabeceraoc.ordendecargue
-                   AND upper(btrim(pu.subcategoria)) = ANY (ARRAY['HUEVOS'::text, 'MATERIA PRIMA'::text])
+                   AND upper(btrim(pu.subcategoria)) = 'HUEVOS'::text
             )
         ), liquidacion_final AS (
          SELECT t.ordendecargue,
@@ -138,8 +140,9 @@ create or replace view public.operaciones_desglosadas as
             -- fue tonelaje real -- se saca de aquí también para seguir contando
             -- igual que el portal.
             AND c.tipooperacion <> 'proyeccion'::text
-            -- POR UNIDAD (2026-09-30): Huevos y Empaque MP fuera del tonelaje del panel
-            -- (misma exclusión que pagonomina y toneladasauxiliares).
+            -- POR UNIDAD (2026-09-30): Huevos y Empaque MP fuera del TONELAJE del panel
+            -- (es un indicador, no nómina: aquí sí van los dos; en pagonomina y en el
+            -- portal solo se excluye Huevos, porque el empaque sí se paga).
             AND NOT EXISTS (
                 SELECT 1
                   FROM detalleoc du

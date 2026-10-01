@@ -330,7 +330,7 @@ export function LipDailyOperations() {
           <span className="font-semibold">{porUnidad.productos.join(" / ") || "Por unidad"}</span>
           <span>{porUnidad.viajes} descargue{porUnidad.viajes === 1 ? "" : "s"}</span>
           <span>{porUnidad.unidades.toLocaleString("es-CO")} unidades</span>
-          <span className="text-amber-700/80 dark:text-amber-300/80">se cobran y pagan por unidad · no suman toneladas</span>
+          <span className="text-amber-700/80 dark:text-amber-300/80">control de facturación · no suman toneladas</span>
         </div>
       )}
 
