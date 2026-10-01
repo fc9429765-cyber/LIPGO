@@ -490,4 +490,98 @@ export const APRENDIZAJE_FINANCIERA: ContenidoAprendizaje[] = [
       },
     ],
   },
+  // Guías agregadas 2026-09-30 (reorg de navegación: el buscador global usa este texto).
+  {
+    modulo: "Consulta Facturas SIIGO",
+    resumen: "Ventana de solo lectura a las facturas de Siigo: listado, detalle y PDF.",
+    proposito: "Permite consultar la contabilidad real de la empresa (todas las ventas, a todos los clientes, con sus saldos) sin salir de LIPgo y sin tocar nada en Siigo. Requiere la clave financiera porque muestra toda la facturación, no solo la que genera LIPgo.",
+    puedes: [
+      "Buscar facturas por cliente, fecha o número.",
+      "Ver el detalle de cada factura y descargar su PDF.",
+      "Revisar saldos y estado de pago tal como están en Siigo."
+    ],
+    noPuedes: [
+      "Crear, modificar o anular facturas: eso se hace en Siigo.",
+      "Verlo sin la clave financiera: es información de LIP."
+    ],
+    funcionalidades: [
+      {
+        nombre: "Listado",
+        descripcion: "Facturas sincronizadas desde la API de Siigo con filtros por cliente, rango de fechas y número."
+      },
+      {
+        nombre: "Detalle y PDF",
+        descripcion: "Líneas, valores e impuestos de la factura y descarga del PDF oficial."
+      },
+      {
+        nombre: "Sincronización",
+        descripcion: "Muestra cuándo fue la última lectura desde Siigo; los datos no se editan aquí."
+      }
+    ]
+  },
+  {
+    modulo: "Ciclo de Facturación",
+    resumen: "Flujo documental de cada prefactura aprobada: anexo, firma del cliente, factura, firma y cierre, más cartera.",
+    proposito: "Lleva paso a paso cada prefactura desde que se envía el anexo hasta que se cierra y se cobra. Separa lo que hace el Jefe de Facturación (enviar anexo, enviar factura, cerrar) de lo que confirma el Coordinador (firmas del cliente), y desde el cierre calcula días vencidos y pagos.",
+    puedes: [
+      "Ver en qué paso está cada prefactura y quién debe actuar.",
+      "Registrar el envío del anexo y de la factura (Jefe) y la firma del cliente (Coordinador).",
+      "Cerrar el ciclo y registrar pagos; ver cartera con días vencidos.",
+      "Saltar a Gestión de Facturas, ya filtrado, para resolver órdenes sin gestionar."
+    ],
+    noPuedes: [
+      "Saltarse pasos: cada etapa exige la anterior.",
+      "Editar los valores de la prefactura: eso se hace en Prefactura de Producción o en el Cuadro de Control."
+    ],
+    funcionalidades: [
+      {
+        nombre: "Tablero por etapa",
+        descripcion: "Prefacturas agrupadas por etapa del ciclo, con fechas y responsable de cada paso."
+      },
+      {
+        nombre: "Acciones por rol",
+        descripcion: "El Jefe de Facturación envía y cierra; el Coordinador confirma las firmas del cliente. Cada acción queda con fecha y usuario."
+      },
+      {
+        nombre: "Cartera",
+        descripcion: "Desde el cierre, días vencidos según las condiciones de pago y registro de pagos recibidos."
+      },
+      {
+        nombre: "Alertas",
+        descripcion: "Avisos de órdenes sin gestionar y de etapas atrasadas, con salto directo a resolverlas."
+      }
+    ]
+  },
+  {
+    modulo: "Corrección de Órdenes",
+    resumen: "Buscar una orden por número y corregir sus datos (peso, placa, producto, líneas) con motivo obligatorio y auditoría.",
+    proposito: "Antes, un dato mal cargado en una orden solo se corregía a mano en la base de datos. Aquí Facturación busca la orden y corrige cabecera y líneas desde la app; cada corrección exige un motivo y queda auditada campo por campo en la Bitácora de Auditoría.",
+    puedes: [
+      "Corregir peso de báscula y de orden, placa, conductor, transporte, cliente, fecha de cargue, auxiliares, muelle y tipo de pago.",
+      "Editar, agregar o eliminar líneas de producto.",
+      "Dejar el motivo de la corrección, que queda registrado con quién y cuándo."
+    ],
+    noPuedes: [
+      "Cambiar el número de orden ni los datos de factura (factura Siigo, estado de factura): esos los maneja el flujo de facturación.",
+      "Corregir sin motivo."
+    ],
+    funcionalidades: [
+      {
+        nombre: "Búsqueda por número",
+        descripcion: "Se escribe el número exacto de la orden y se carga su cabecera y sus líneas."
+      },
+      {
+        nombre: "Cabecera editable",
+        descripcion: "Los campos corregibles de la orden; los de factura se muestran solo para contexto."
+      },
+      {
+        nombre: "Líneas",
+        descripcion: "Tabla editable de productos con cantidad y toneladas; se pueden agregar y eliminar líneas."
+      },
+      {
+        nombre: "Auditoría",
+        descripcion: "El motivo va a un registro propio y el antes y después de cada campo queda en la Bitácora de Auditoría."
+      }
+    ]
+  },
 ]

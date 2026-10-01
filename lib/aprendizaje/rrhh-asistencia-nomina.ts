@@ -434,4 +434,33 @@ export const APRENDIZAJE_RRHH_B: ContenidoAprendizaje[] = [
       "Se realista con el tonelaje proyectado: la diferencia con lo real se paga o se descuenta en la quincena siguiente.",
     ],
   },
+  // Guías agregadas 2026-09-30 (reorg de navegación: el buscador global usa este texto).
+  {
+    modulo: "Procesos Disciplinarios",
+    resumen: "Radicar una solicitud de medida disciplinaria y seguir el trámite de descargos hasta la decisión.",
+    proposito: "La empresa usuaria reporta la conducta y solicita la medida; el empleador cita a descargos y decide. La pantalla mantiene esa separación porque una sanción impuesta sin oír al trabajador es ineficaz. Cada caso guarda relato, testigos, citación, descargos y decisión.",
+    puedes: [
+      "Radicar la solicitud con relato de los hechos y testigos.",
+      "Registrar la citación a descargos, los descargos y la decisión.",
+      "Consultar el estado de cada caso y su bitácora."
+    ],
+    noPuedes: [
+      "Imponer la sanción desde la solicitud: el trámite de descargos es obligatorio.",
+      "Verlo sin permiso propio: contiene relatos de conducta y nombres de testigos."
+    ],
+    funcionalidades: [
+      {
+        nombre: "Radicar",
+        descripcion: "Formulario de la solicitud de medida: trabajador, hechos, fecha, testigos y medida solicitada."
+      },
+      {
+        nombre: "Trámite",
+        descripcion: "Pasos del proceso en orden: citación, descargos, decisión y notificación, cada uno con fecha y responsable."
+      },
+      {
+        nombre: "Bitácora del caso",
+        descripcion: "Historial de todo lo registrado en el caso para soporte ante una reclamación."
+      }
+    ]
+  },
 ]

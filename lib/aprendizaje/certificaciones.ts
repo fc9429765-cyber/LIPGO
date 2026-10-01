@@ -580,4 +580,32 @@ export const APRENDIZAJE_CERTIFICACIONES: ContenidoAprendizaje[] = [
       "Cuando una norma cambie o salga una nueva, actualiza la matriz de una vez: el porcentaje de cumplimiento es de los primeros datos que mira el auditor ambiental.",
     ],
   },
+  // Guías agregadas 2026-09-30 (reorg de navegación: el buscador global usa este texto).
+  {
+    modulo: "Mapa de Procesos",
+    resumen: "Mapa de procesos del SIG, clicable: cada proceso abre sus formatos, información documentada y registros.",
+    proposito: "Muestra los procesos estratégicos, misionales y de apoyo con la entrada de requerimientos y la salida de satisfacción. Cada proceso abre un panel con sus documentos, que van al mismo maestro del Listado Maestro del Dashboard SIG: lo que se carga aquí también sale allá.",
+    puedes: [
+      "Ver el mapa completo y cuántos documentos tiene cada proceso.",
+      "Abrir un proceso y cargar o descargar sus formatos, información documentada y registros con código, versión y archivo."
+    ],
+    noPuedes: [
+      "Cambiar la estructura del mapa: es la definida por la organización.",
+      "Cargar documentos sin código y versión."
+    ],
+    funcionalidades: [
+      {
+        nombre: "Mapa",
+        descripcion: "Las tres bandas del mapa (estratégicos, misionales, apoyo) con entrada y salida, cada proceso como botón con su conteo de documentos."
+      },
+      {
+        nombre: "Panel de documentos",
+        descripcion: "Tres listas por proceso: formatos, información documentada y registros, con carga de archivo y versión."
+      },
+      {
+        nombre: "Conteo por proceso",
+        descripcion: "Cuántos documentos tiene cada proceso, visible desde el mapa."
+      }
+    ]
+  },
 ]

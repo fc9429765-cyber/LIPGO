@@ -45,6 +45,20 @@ function leerModulosDelMenu() {
   return [...new Set(nombres)]
 }
 
+/** Modulos con permiso (claves de MODULE_PERMISSION_MAP en lib/permissions-map.ts), esten o no en el menu. */
+function leerModulosConPermiso() {
+  try {
+    const src = readFileSync(join(raiz, "lib", "permissions-map.ts"), "utf8")
+    const ini = src.indexOf("MODULE_PERMISSION_MAP")
+    const cuerpo = ini >= 0 ? src.slice(ini) : src
+    // Claves con comillas ("Gestión de Ordenes": "x") o sin ellas (Picking: "x").
+    const nombres = [...cuerpo.matchAll(/^\s*(?:"([^"]+)"|([A-Za-z_][\w]*)):\s*"[a-z0-9_]+"/gm)].map((m) => m[1] ?? m[2])
+    return [...new Set(nombres)]
+  } catch {
+    return []
+  }
+}
+
 /** Guias escritas: entradas `modulo: "X"` en lib/aprendizaje-content.ts y lib/aprendizaje/*.ts. */
 function leerModulosDocumentados() {
   let areas = []
@@ -98,7 +112,14 @@ const nuevosSinGuia = delMenu.filter((m) => !setDocumentados.has(m) && !setBasel
 
 // 2. Guias que apuntan a un modulo que no existe en el menu (typo o modulo
 //    renombrado/eliminado). Tambien rompe: la guia seria inalcanzable.
-const guiasHuerfanas = documentados.filter((m) => !setMenu.has(m))
+//    EXCEPCION (reorg de navegacion 2026-09-30): modulos que siguen existiendo
+//    con permiso y rama de codigo pero se RETIRARON del menu a proposito
+//    (p. ej. "Gestion integral de pedidos", "Ingresos MP"). Su guia se
+//    conserva para cuando vuelvan y LIPbot puede seguir consultandola: se
+//    reporta como aviso, no como error.
+const enPermisos = new Set(leerModulosConPermiso())
+const guiasOcultas = documentados.filter((m) => !setMenu.has(m) && enPermisos.has(m))
+const guiasHuerfanas = documentados.filter((m) => !setMenu.has(m) && !enPermisos.has(m))
 
 // 3. Entradas de la linea base que ya fueron documentadas, o que ya no
 //    existen en el menu: solo hay que podarlas. No rompe el chequeo.
@@ -140,6 +161,11 @@ if (guiasHuerfanas.length > 0) {
     "\n  El campo `modulo` debe coincidir EXACTAMENTE (tildes incluidas) con el\n" +
       "  `name` del modulo en lib/dashboard-data.ts.",
   )
+}
+
+if (guiasOcultas.length > 0) {
+  console.warn(amarillo(`\n! ${guiasOcultas.length} guia(s) de modulos retirados del menu (con permiso, sin entrada en dashboard-data): se conservan.`))
+  for (const m of guiasOcultas) console.warn(amarillo(`    · ${m}`))
 }
 
 if (baselineObsoleta.length > 0) {
