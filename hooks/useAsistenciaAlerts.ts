@@ -1,7 +1,8 @@
 "use client"
-
+
 
 import { setVisibleInterval } from "@/lib/polling"
+import { getUserModulesCached } from "@/lib/user-modules-client-cache"
 import { useEffect, useState } from "react"
 
 export interface AsistenciaPendiente {
@@ -55,18 +56,15 @@ export function useAsistenciaAlerts(
         // devuelve los nombres de modulos permitidos. Verificamos que
         // "Tabla Asistencia" este en esa lista (es la key registrada
         // en lib/permissions-map.ts -> tabla_asistencia).
-        const permRes = await fetch(`/api/user-modules`, { cache: "no-store" })
-        if (!permRes.ok) {
+        const permData = await getUserModulesCached().catch(() => null)
+        if (!permData) {
           if (!cancelled) {
             setHasPermission(false)
             setLoading(false)
           }
           return
         }
-        const permData = await permRes.json()
-        const allowedModules: string[] = Array.isArray(permData?.allowedModules)
-          ? permData.allowedModules
-          : []
+        const allowedModules: string[] = permData.allowedModules
         const allowed = allowedModules.includes("Tabla Asistencia")
         if (!cancelled) setHasPermission(allowed)
         if (!allowed) {

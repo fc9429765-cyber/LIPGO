@@ -202,10 +202,13 @@ export default function DashboardPage() {
       {/* Main Content — el ErrorBoundary evita que un error de render en un
           módulo (p. ej. al desbloquear una clave y montar contenido por
           primera vez) se lleve puesto TODO el árbol, sidebar incluido (ver
-          components/error-boundary.tsx). El `key` remonta el boundary limpio
-          cada vez que cambia el módulo/grupo seleccionado, así que navegar
-          fuera de un módulo roto lo recupera solo. */}
-      <ErrorBoundary key={`${selectedGroup ?? ""}|${selectedModule ?? ""}`}>
+          components/error-boundary.tsx). `resetKey` limpia el error cada vez
+          que cambia el módulo/grupo seleccionado, así que navegar fuera de un
+          módulo roto lo recupera solo. OJO: no usar `key` aquí — remontaría
+          MainContent y borraría el estado de los saltos con dato (orden a
+          Báscula, persona a Ausentismos, filtro a Gestión de Facturas,
+          registro del buscador) antes de que el destino lo lea. */}
+      <ErrorBoundary resetKey={`${selectedGroup ?? ""}|${selectedModule ?? ""}`}>
         <MainContent
           selectedGroup={selectedGroup}
           selectedModule={selectedModule}

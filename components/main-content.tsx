@@ -248,7 +248,10 @@ export function MainContent({
   const [nowInfo, setNowInfo] = React.useState<{ saludo: string; fecha: string }>({ saludo: "Hola", fecha: "" })
   const [homeAlertas, setHomeAlertas] = React.useState<AtencionItem[]>([])
   React.useEffect(() => {
-    if (!selectedEmpresaId) return
+    // Solo en el Inicio (es donde se pintan). Como MainContent ya no se remonta
+    // al navegar, se vuelve a pedir al VOLVER al Inicio (la caché compartida
+    // evita repetir la consulta si es reciente).
+    if (!selectedEmpresaId || selectedGroup || selectedModule) return
     let cancel = false
     getAtencionDelDiaCompartida(profile?.id, selectedEmpresaId ?? undefined)
       .then((r) => {
@@ -258,7 +261,7 @@ export function MainContent({
     return () => {
       cancel = true
     }
-  }, [selectedEmpresaId, profile?.id])
+  }, [selectedEmpresaId, profile?.id, selectedGroup, selectedModule])
   React.useEffect(() => {
     const d = new Date()
     const h = d.getHours()
@@ -266,6 +269,12 @@ export function MainContent({
     const f = d.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long" })
     setNowInfo({ saludo, fecha: f.charAt(0).toUpperCase() + f.slice(1) })
   }, [])
+  // MainContent ya NO se remonta al navegar (app/page.tsx usa `resetKey`, no
+  // `key`, en el ErrorBoundary). La edición de pedido abierta debe cerrarse
+  // al cambiar de pantalla; antes lo hacía el remonte.
+  React.useEffect(() => {
+    setEditingOrderId(null)
+  }, [selectedGroup, selectedModule])
   const primerNombre = (profile?.nombre || "").trim().split(" ")[0]
 
   // Helper to match module names to config keys more reliably
@@ -275,74 +284,16 @@ export function MainContent({
     const map: Record<string, string> = {
       Bodegas: "almacenes",
       Categorías: "categorias",
-      "Sub Categorías": "subcategorias",
       Clientes: "clientes",
       "Condiciones Pago": "condicionespago",
       Destinos: "destinos",
       Grupos: "grupos",
       Medios: "medios",
-      Productos: "productos",
       Sucursales: "sucursales",
       "Tipos Despacho": "tipodespacho",
-      Transportadoras: "transportes",
-      "Tipos de Vehiculos": "tiposvehiculos",
       Vendedores: "vendedores",
-      Localizaciones: "localizaciones",
       "Ver Citas": "citas_vehiculos",
       "Citas de vehículos": "citas_vehiculos",
-      "Ingreso de Producción": "production_entry",
-      "Aprobación de ingreso de producción": "production_approval",
-      "Gestión de transacciones": "inventory_transactions",
-      "Registro sanitario": "sanitary_registry",
-      "Registrar Vehículos": "registrar_vehiculos",
-      "Ver Vehículos": "ver_vehiculos",
-      "Asignación de Lotes": "batch_approval",
-      Picking: "picking",
-      Packing: "packing",
-      "Dashboard Operacion": "dashboard_operacion",
-      "Historial de lotes": "batch_history",
-      "Auditoría de Inventario": "inventory_audit",
-      "Ver historial de Inspección": "sanitary_inspection_history",
-      "Historial Aprobaciones": "approval_history",
-      "Capacidad Bodega": "warehouse_capacity",
-      "Registro de QR estibas": "qr_pallet_registration",
-      "Lectura de QR estibas": "qr_pallet_reading",
-      "Gestión de proveedores": "proveedores",
-      "Creación de materiales": "materiales",
-      "Explosión de materiales": "material_explosion",
-      "Inventario por Estiba": "pallet_inventory_view",
-      "Gestión de Usuarios": "user_permissions",
-      "Head Count": "headcount",
-      "Registro de asistencia": "attendance_registration", // Added mapping for attendance module
-      "Tabla Asistencia": "attendance_table", // Added mapping for attendance table
-      "Asignación horas extra": "extra_hours_assignment", // Added mapping for extra hours assignment module
-      "Asignación de apoyo en cargue": "apoyo_cargue", // Added mapping for apoyo en cargue module
-      "Novedades de personal": "personnel_notices", // Added mapping for personnel notices module
-      "Ver Picking": "view_picking", // Added mapping for ViewPicking module
-      "Ver Picking/Packing": "view_picking", // Added mapping for renamed module Ver Picking/Packing
-      Tarifas: "tarifas", // Added mapping for Tarifas module
-      "Facturación Proyectos": "facturacion_proyectos", // Added mapping for Facturacion Proyectos module
-      "Cuadro de Control Facturación": "cuadro_facturacion",
-      "Prefactura de Producción": "prefactura_produccion",
-      "Gestión de Facturas": "gestionfacturas", // Added mapping for Gestión de Facturas module
-      "Dashboard Operaciones LIP": "dashboardop", // Dashboard Operaciones LIP
-      "Recepción de Traslado": "transfer_requests", // Added mapping for renamed module
-      Proyecciones: "proyecciones", // Added mapping for Proyecciones module
-      Liquidaciones: "liquidaciones", // Submódulo de liquidaciones de personal retirado
-      Parafiscales: "parafiscales", // Aportes de seguridad social y parafiscales (PILA)
-      "Gestión de Contratos": "gestion_contratos",
-      "Gestión de Dotación EPP": "dotacion_epp",
-      "Gestión de Capacitaciones": "capacitaciones",
-      "Asistencia a Capacitaciones": "asistencia_capacitaciones",
-      "Operación del día": "operacion_dia",
-      "Solicitud de Personal": "solicitud_personal",
-      "Evaluaciones de Desempeño": "evaluacionpersonal",
-      "Gestión de Solicitudes": "gestionsolicitudes",
-      // Mismo permiso que Gestión de Solicitudes (peticion del cliente).
-      "Aprobación de Solicitudes de Personal": "gestionsolicitudes",
-      "Registro Preoperacional": "prechequeo",
-      "Servicios Adicionales": "solicitudturnos",
-      "Aprobar Turnos": "aprobacionturnos",
     }
 
     return configModules[map[moduleName]]

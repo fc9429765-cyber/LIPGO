@@ -1,7 +1,8 @@
 "use client"
-
+
 
 import { setVisibleInterval } from "@/lib/polling"
+import { getUserModulesCached } from "@/lib/user-modules-client-cache"
 import { useState, useEffect } from "react"
 
 export interface RendimientoAlert {
@@ -33,12 +34,9 @@ export function useRendimientoAlerts(empresaId: number | null, userId: string | 
         // permisos del cliente es `/api/user-modules`, que devuelve los
         // modulos cuyo flag de permiso esta activo. Mismo patron ya usado en
         // useOperacionesDiaAlerts/useAsistenciaAlerts para este mismo permiso.
-        const permResponse = await fetch(`/api/user-modules`, { cache: "no-store" })
-        if (permResponse.ok) {
-          const permData = await permResponse.json()
-          const allowedModules: string[] = Array.isArray(permData?.allowedModules)
-            ? permData.allowedModules
-            : []
+        const permData = await getUserModulesCached().catch(() => null)
+        if (permData) {
+          const allowedModules: string[] = permData.allowedModules
           const hasDashboardOperacionPermission = allowedModules.includes("Dashboard Operacion")
           setHasPermission(hasDashboardOperacionPermission)
 

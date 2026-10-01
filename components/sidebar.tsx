@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import Image from "next/image"
 import type { GroupKey, Module, Subgroup } from "@/lib/dashboard-data"
+import { getUserModulesCached } from "@/lib/user-modules-client-cache"
 import { groups } from "@/lib/dashboard-data"
 import { colorDeEntrada, hubDe, plegarEnHubs, type EntradaMenu } from "@/lib/navegacion"
 import { useState, useEffect, useMemo, type CSSProperties } from "react"
@@ -198,13 +199,7 @@ export function Sidebar({
         // respuesta cacheada y un permiso recién otorgado NO aparece en el
         // menú hasta un refresco fuerte. Mismo criterio que ya usan
         // useAsistenciaAlerts / useOperacionesDiaAlerts contra este endpoint.
-        const res = await fetch("/api/user-modules", { method: "GET", cache: "no-store" })
-        if (!res.ok) {
-          console.error("[v0] Sidebar: failed to fetch user-modules:", res.status)
-          if (!cancelled) setPermissionsLoaded(true)
-          return
-        }
-        const data = (await res.json()) as UserModulesResponse
+        const data = await getUserModulesCached()
         if (cancelled) return
         setProtectedModules(new Set(data.protectedModules))
         setAllowedModules(new Set(data.allowedModules))

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { getUserModulesCached } from "@/lib/user-modules-client-cache"
 
 interface UserModulesResponse {
   protectedModules: string[]
@@ -39,12 +40,7 @@ export function useModulePermissions(): ModulePermissions {
       try {
         // `no-store`: mismo motivo que en sidebar.tsx — sin esto un permiso
         // recién otorgado no aparece hasta un refresco fuerte.
-        const res = await fetch("/api/user-modules", { method: "GET", cache: "no-store" })
-        if (!res.ok) {
-          if (!cancelled) setLoaded(true)
-          return
-        }
-        const data = (await res.json()) as UserModulesResponse
+        const data = await getUserModulesCached()
         if (cancelled) return
         setProtectedModules(new Set(data.protectedModules))
         setAllowedModules(new Set(data.allowedModules))

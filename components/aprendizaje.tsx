@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { getUserModulesCached } from "@/lib/user-modules-client-cache"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -48,12 +49,7 @@ export function Aprendizaje() {
       try {
         // `no-store` por el mismo motivo que el sidebar: un permiso recien
         // otorgado debe verse sin refresco fuerte.
-        const res = await fetch("/api/user-modules", { method: "GET", cache: "no-store" })
-        if (!res.ok) {
-          console.error("[v0] Aprendizaje: fallo /api/user-modules:", res.status)
-          return
-        }
-        const data = (await res.json()) as UserModulesResponse
+        const data = await getUserModulesCached()
         if (cancelled) return
         setProtectedModules(new Set(data.protectedModules))
         setAllowedModules(new Set(data.allowedModules))

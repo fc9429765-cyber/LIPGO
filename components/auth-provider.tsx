@@ -4,6 +4,7 @@ import type React from "react"
 
 import { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
+import { invalidarUserModulesCache } from "@/lib/user-modules-client-cache"
 import type { User } from "@supabase/supabase-js"
 import type { UserProfile } from "@/lib/auth-actions"
 
@@ -248,6 +249,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('selectedEmpresaId')
     setSelectedEmpresaIdState(null)
     setAccessibleEmpresas([])
+    // Que el siguiente usuario de esta misma pestaña no herede los módulos del anterior.
+    invalidarUserModulesCache()
     await supabase.auth.signOut()
     setUser(null)
     setProfile(null)
