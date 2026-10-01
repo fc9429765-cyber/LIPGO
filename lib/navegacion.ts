@@ -200,11 +200,12 @@ export const HUBS: Hub[] = [
     title: "Pedidos",
     icon: PackagePlus,
     color: "#2563eb",
-    descripcion: "Registrar los pedidos del cliente, gestionarlos y ver su cumplimiento.",
+    descripcion: "Registrar los pedidos del cliente, gestionarlos, programar los vehículos de mañana y ver su cumplimiento.",
     tabs: [
       { module: "Entrada de pedidos", label: "Entrada" },
       { module: "Gestionar pedidos", label: "Gestionar" },
       { module: "Dashboard Pedidos", label: "Dashboard" },
+      { module: "Programación del cliente", label: "Programación de mañana" },
     ],
   },
   // ===== Almacenamiento (Fase 4) =====

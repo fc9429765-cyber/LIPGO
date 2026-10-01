@@ -4,6 +4,42 @@ import type { ContenidoAprendizaje } from "@/lib/aprendizaje-content"
 
 export const APRENDIZAJE_PEDIDOS: ContenidoAprendizaje[] = [
   // ==========================================================================
+  // PROGRAMACION DEL CLIENTE (2026-10-01)
+  // ==========================================================================
+  {
+    modulo: "Programación del cliente",
+    resumen: "El cliente envia antes de las 5:00 p. m. los vehiculos que llegaran manana y ve cuanto se cumplio cada dia.",
+    proposito:
+      "Es la programacion para manana que el cliente entrega un dia antes: cuantos vehiculos, de que tipo y a que destino o ruta. Con ella LIP planea la operacion y el personal, y ambos miden el cumplimiento: cuantos de los vehiculos programados llegaron de verdad a porteria, por tipo de vehiculo. Si el cliente no puede registrarla, el coordinador LIP la registra por el desde Torre de Control.",
+    puedes: [
+      "Registrar la programacion de manana (o de otra fecha) con lineas de cantidad, tipo de vehiculo, destino o ruta y producto opcional.",
+      "Corregirla las veces que haga falta: cada envio queda como version nueva y la ultima es la vigente.",
+      "Ver si quedo a tiempo (antes de las 5:00 p. m. del dia anterior) o tarde, y a que hora se envio.",
+      "Consultar el cumplimiento por semana, quincena, mes o fechas libres, con el detalle de cada dia por tipo de vehiculo.",
+    ],
+    noPuedes: [
+      "Ver el cumplimiento por destino: porteria registra el tipo de vehiculo, no el destino, asi que la medicion es por tipo.",
+      "Borrar una programacion enviada: queda el historial de versiones.",
+      "Registrar vehiculos que llegaron: eso lo hace porteria en Registrar Vehiculos; aqui solo se programa y se compara.",
+    ],
+    funcionalidades: [
+      {
+        nombre: "Programacion de manana",
+        descripcion:
+          "Formulario con lineas (cantidad, tipo de vehiculo del catalogo, destino o ruta con sugerencias, producto, observacion) y el total de vehiculos. Muestra la hora limite y, si ya paso, avisa que quedara como tarde.",
+      },
+      {
+        nombre: "Cumplimiento",
+        descripcion:
+          "Porcentaje de vehiculos programados que llegaron, los que no llegaron, los que llegaron sin programar y cuantas programaciones fueron a tiempo; grafico por dia y tabla con detalle desplegable.",
+      },
+    ],
+    consejos: [
+      "Enviala antes de las 5:00 p. m.: despues de esa hora queda marcada como tarde aunque llegue completa.",
+      "Si cambia algo durante la noche, guarda una version nueva en vez de avisar por chat: asi el cumplimiento se mide contra lo ultimo que enviaste.",
+    ],
+  },
+  // ==========================================================================
   // GESTION DE PEDIDOS
   // ==========================================================================
   {

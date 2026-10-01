@@ -450,6 +450,15 @@ export function OperacionDelDia() {
               modulo="Aprobar Turnos"
               boton="Aprobar"
             />
+            {d.cierre.programacionManana.usa && (
+              <ItemCierre
+                ok={d.cierre.programacionManana.recibida}
+                texto={`Programación del cliente para mañana recibida (${d.cierre.programacionManana.programados} vehículo${d.cierre.programacionManana.programados === 1 ? "" : "s"}${d.cierre.programacionManana.aTiempo === false ? ", tarde" : ""})`}
+                pendiente="Aún no llega la programación de mañana: pídesela al cliente o regístrala por él"
+                modulo="Proyecciones"
+                boton="Programación del cliente"
+              />
+            )}
             <ItemCierre ok={d.cierre.bitacoraHoy} texto="Bitácora del día escrita" pendiente="Aún no hay anotación de hoy">
               <div className="flex gap-2">
                 <textarea
@@ -622,6 +631,31 @@ export function OperacionDelDia() {
                       </span>
                       <span className="text-amber-700/80">aparte, no suman toneladas</span>
                     </p>
+                  )}
+
+                  {/* Programación del cliente para hoy (solo si la empresa la usa). */}
+                  {d.operacionHoy.programacion.usa && (
+                    <button
+                      type="button"
+                      onClick={() => irAModulo("Proyecciones")}
+                      className={`mt-2 inline-flex flex-wrap items-center gap-x-2 rounded-md border px-2 py-1 text-left text-[11px] transition-colors ${
+                        d.operacionHoy.programacion.tiene ? "border-sky-200 bg-sky-50 text-sky-900 hover:bg-sky-100" : "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                      }`}
+                      title="Abrir Programación del cliente · cumplimiento"
+                    >
+                      <span className="font-semibold">Programación del cliente:</span>
+                      {d.operacionHoy.programacion.tiene ? (
+                        <span>
+                          {d.operacionHoy.programacion.programados} programado{d.operacionHoy.programacion.programados === 1 ? "" : "s"} ·{" "}
+                          {d.operacionHoy.programacion.llegaron} llegaron
+                          {d.operacionHoy.programacion.porcentaje != null ? ` · ${d.operacionHoy.programacion.porcentaje} % cumplido` : ""}
+                          {d.operacionHoy.programacion.aTiempo === false ? " · enviada tarde" : ""}
+                        </span>
+                      ) : (
+                        <span>hoy no hubo programación del cliente · {d.operacionHoy.programacion.llegaron} llegaron sin programar</span>
+                      )}
+                      <ArrowRight className="h-3 w-3" />
+                    </button>
                   )}
 
                   {d.operacionHoy.auxiliares.length > 0 && (

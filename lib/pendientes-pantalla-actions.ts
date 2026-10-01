@@ -7,6 +7,7 @@
 // Devuelve conteos por NOMBRE DE MÓDULO hoja; el portal los agrega por hub.
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { diaSemana, sumarDias } from "@/lib/programacion-cliente-calculo"
 
 export interface PendientePantalla {
   /** `name` del módulo hoja al que lleva. */
@@ -42,7 +43,14 @@ export async function getPendientesPorPantalla(
     }
     const head = (tabla: string) => sb.from(tabla).select("*", { count: "exact", head: true })
 
-    const [sinCerrar, turnos, enPatio, sinMarcar, ausBorrador, ajustesInv, requisiciones] = await Promise.all([
+    // Programación del cliente para MAÑANA (SQL 211): solo cuenta como pendiente
+    // si la empresa ya usa el módulo (tiene alguna programación), desde el
+    // mediodía, y si mañana no es domingo.
+    const manana = sumarDias(hoy, 1)
+    const horaBogota = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Bogota", hour: "numeric", hour12: false }).format(new Date()))
+    const mananaDomingo = diaSemana(manana) === 0
+
+    const [sinCerrar, turnos, enPatio, sinMarcar, ausBorrador, ajustesInv, requisiciones, usaProgramacion, programacionManana] = await Promise.all([
       cuenta(head("cabeceraoc").eq("idempresa", empresaId).not("iniciocargue", "is", null).is("fincargue", null)),
       cuenta(head("solicitudesturnos").eq("idempresa", empresaId).eq("estado", "pendiente")),
       cuenta(head("citasvehiculos").eq("idempresa", empresaId).is("estatus", null).gte("fechallegada", hoy)),
@@ -50,9 +58,14 @@ export async function getPendientesPorPantalla(
       cuenta(head("ausentismosst").eq("idempresa", empresaId).eq("estado_registro", "BORRADOR")),
       cuenta(head("inv_ajustes_pendientes").eq("idempresa", empresaId).eq("estado", "pendiente")),
       cuenta(head("vacantes").eq("idempresa", empresaId).eq("estado", "en_revision")),
+      cuenta(head("programacion_cliente").eq("idempresa", empresaId)),
+      cuenta(head("programacion_cliente").eq("idempresa", empresaId).eq("fecha_operacion", manana).eq("vigente", true)),
     ])
 
     const out: PendientePantalla[] = []
+    if (usaProgramacion > 0 && programacionManana === 0 && horaBogota >= 12 && !mananaDomingo) {
+      out.push({ modulo: "Programación del cliente", cantidad: 1, texto: "sin programación para mañana", nivel: horaBogota >= 17 ? "alto" : "medio" })
+    }
     if (sinCerrar) out.push({ modulo: "Centro de Coordinación", cantidad: sinCerrar, texto: plural(sinCerrar, "vehículo sin cerrar", "vehículos sin cerrar"), nivel: "alto" })
     if (turnos) out.push({ modulo: "Aprobar Turnos", cantidad: turnos, texto: plural(turnos, "turno por aprobar", "turnos por aprobar"), nivel: "medio" })
     if (enPatio) out.push({ modulo: "Registrar Vehículos", cantidad: enPatio, texto: plural(enPatio, "vehículo en patio", "vehículos en patio"), nivel: "medio" })

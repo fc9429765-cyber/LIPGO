@@ -400,38 +400,44 @@ export const APRENDIZAJE_RRHH_B: ContenidoAprendizaje[] = [
   // NOMINA
   // ==========================================================================
   {
+    // 2026-10-01: ya no es la proyeccion de nomina del ultimo dia de la quincena
+    // (se paga el dia base). Conserva el nombre y el permiso `proyecciones`.
     modulo: "Proyecciones",
-    resumen: "Registra la proyeccion de tonelaje y personal de un dia para poder liquidar la nomina antes del cierre.",
+    resumen: "Programacion de vehiculos que el cliente entrega para manana y cuanto la cumple cada dia (vista LIP, Torre de Control).",
     proposito:
-      "La nomina se paga antes de que termine el ultimo dia de la quincena, asi que ese dia el tonelaje aun no esta completo: aqui se registra la proyeccion de lo que se espera mover, con los productos, las cantidades y el personal asignado. Esa proyeccion se suma a las ordenes reales del dia para que la liquidacion salga a tiempo; despues, el ajuste contra lo realmente ejecutado se gestiona en Revision de Nomina.",
+      "El cliente entrega un dia antes la programacion de los vehiculos de manana (cantidad, tipo de vehiculo, destino o ruta). Con eso el coordinador planea la operacion y el personal, y LIP mide el cumplimiento del cliente: cuantos vehiculos programados llegaron de verdad a porteria, por tipo de vehiculo, dia a dia. Si la programacion llega por WhatsApp o Excel, el coordinador la registra aqui por el cliente. Es la misma pantalla que el cliente ve en Pedidos y solicitudes > Programacion de manana.",
     puedes: [
-      "Registrar una proyeccion indicando la fecha, el personal asignado y los productos con su cantidad.",
-      "Ver el peso total en kilos calculado automaticamente a partir del peso unitario de cada producto.",
-      "Seleccionar varios empleados a la vez con el buscador de personal; solo aparece el personal activo del proyecto.",
-      "Consultar el listado de proyecciones registradas con su fecha, peso en toneladas, personal y estado.",
-      "Editar una proyeccion existente (fecha y personal asignado) o eliminarla con confirmacion.",
-      "Limpiar el formulario para empezar una proyeccion nueva.",
+      "Registrar o corregir la programacion de cualquier dia (por defecto manana): cantidad, tipo de vehiculo del catalogo, destino o ruta y producto opcional.",
+      "Ver si la programacion de un dia llego a tiempo (antes de las 5:00 p. m. del dia anterior) o tarde, quien la envio y cuantas versiones tuvo.",
+      "Consultar el cumplimiento por rango (semana, quincena, mes, mes anterior o fechas libres): porcentaje, programados, llegaron, no llegaron y vehiculos fuera de programacion.",
+      "Abrir el detalle de un dia: por tipo de vehiculo (programados vs. llegados) y las lineas que envio el cliente.",
+      "Ver desde Operacion del dia cuantos vehiculos programados llegaron hoy y si ya llego la programacion de manana (cierre del dia).",
     ],
     noPuedes: [
-      "Reemplazar las ordenes reales del dia: la proyeccion se suma a ellas, no las sustituye.",
-      "Ajustar aqui la diferencia entre lo proyectado y lo real: el ajuste automatico del ultimo dia de cada quincena (dia pleno pagado vs. lo producido real) se gestiona en Revision de Nomina (Ajuste Nomina Anterior), sin depender de lo que se registre aqui.",
-      "Asignar personal inactivo: el buscador solo ofrece colaboradores activos del proyecto seleccionado.",
+      "Medir el cumplimiento por destino o ruta: porteria registra el tipo de vehiculo, no el destino, asi que el cruce es por tipo (decision de gerencia para arrancar).",
+      "Borrar una programacion enviada: cada cambio queda como version nueva y las anteriores se conservan como historial.",
+      "Proyectar tonelaje o personal para la nomina: eso ya no existe; el ultimo dia de la quincena se paga el dia base y el ajuste va en Revision de Nomina.",
     ],
     funcionalidades: [
       {
-        nombre: "Formulario de proyeccion",
+        nombre: "Programacion del dia elegido",
         descripcion:
-          "Fecha de proyeccion, seleccion multiple de personal y lineas de producto con cantidad; el peso total se calcula solo.",
+          "Botones Manana y Hoy o una fecha libre. Muestra el estado (sin programacion, enviada a tiempo o tarde, version, total de vehiculos), las lineas vigentes y el boton para modificar creando una version nueva.",
       },
       {
-        nombre: "Proyecciones registradas",
+        nombre: "Formulario de lineas",
         descripcion:
-          "Tabla con las proyecciones del proyecto: numero, fechas, peso en toneladas, personal asignado y estado, con acciones de editar y eliminar.",
+          "Cantidad, tipo de vehiculo (catalogo Tipos de Vehiculos con su capacidad), destino o ruta con sugerencias de los usados antes, producto opcional y observacion. Al enviar queda la hora, quien la envio y si fue a tiempo.",
+      },
+      {
+        nombre: "Cumplimiento",
+        descripcion:
+          "Programado vs. llegado a porteria por dia y por tipo de vehiculo, con porcentaje, enviadas a tiempo, dias operados sin programacion y grafico de barras del rango.",
       },
     ],
     consejos: [
-      "Usala el ultimo dia de la quincena: es lo que permite pagar a tiempo el dia que aun no cierra.",
-      "Se realista con el tonelaje proyectado: la diferencia con lo real se paga o se descuenta en la quincena siguiente.",
+      "Un dia con vehiculos pero sin programacion cuenta como 'sin programacion': pidele al cliente que la envie antes de las 5:00 p. m. para que el indicador sea justo.",
+      "Si el cliente escribe 'Doble troque' y el catalogo dice 'Dobletroque', el cruce igual los reconoce como el mismo tipo.",
     ],
   },
   // Guías agregadas 2026-09-30 (reorg de navegación: el buscador global usa este texto).

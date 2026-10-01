@@ -95,7 +95,10 @@ const AutorizacionesClave = dynamic(() => import("@/components/configuration/aut
 const HeadcountManagement = dynamic(() => import("@/components/headcount-management"), { loading: ModuleLoading })
 const Tolva = dynamic(() => import("@/components/tolva").then((m) => m.Tolva), { loading: ModuleLoading })
 const VerTolva = dynamic(() => import("@/components/ver-tolva"), { loading: ModuleLoading })
-const Proyecciones = dynamic(() => import("@/components/proyecciones").then((m) => m.Proyecciones), { loading: ModuleLoading })
+// 2026-10-01: "Proyecciones" (Torre de Control) ya no es la proyección de nómina
+// (components/proyecciones.tsx queda sin montar); muestra la Programación del
+// cliente en modo LIP. El cliente la registra en Pedidos y solicitudes.
+const ProgramacionCliente = dynamic(() => import("@/components/programacion-cliente").then((m) => m.ProgramacionCliente), { loading: ModuleLoading })
 const AttendanceRegistration = dynamic(() => import("@/components/attendance-registration"), { loading: ModuleLoading })
 const AttendanceTable = dynamic(() => import("@/components/attendance-table"), { loading: ModuleLoading })
 const ExtraHoursAssignment = dynamic(() => import("@/components/extra-hours-assignment").then((m) => m.ExtraHoursAssignment), { loading: ModuleLoading })
@@ -417,7 +420,11 @@ export function MainContent({
             </PermissionGuard>
           ) : name === "Proyecciones" ? (
             <PermissionGuard moduleName="Proyecciones">
-              <Proyecciones />
+              <ProgramacionCliente modo="lip" />
+            </PermissionGuard>
+          ) : name === "Programación del cliente" ? (
+            <PermissionGuard moduleName="Programación del cliente">
+              <ProgramacionCliente modo="cliente" />
             </PermissionGuard>
           ) : name === "Ver ingresos de producción" ? (
             <PermissionGuard moduleName="Ver ingresos de producción">

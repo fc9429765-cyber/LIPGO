@@ -24,6 +24,8 @@ import { getHorarioTolva } from "@/lib/horario-tolva-actions"
 import { getDespachoKpis, getVehiculosNoProcesados } from "@/lib/pedidos-kpis-actions"
 import { getControlToneladas } from "@/lib/control-toneladas-actions"
 import { codigosOrdenPorUnidad } from "@/lib/ordenes-por-unidad"
+import { getProgramacionResumenDia } from "@/lib/programacion-cliente-actions"
+import { sumarDias } from "@/lib/programacion-cliente-calculo"
 import { TON_MES_CARGUE_DESCARGUE, DIAS_OPERACION_MES } from "@/lib/meta-productividad-utils"
 import type {
   CoberturaTurno,
@@ -447,9 +449,14 @@ export async function getOperacionDia(
       tiempoPromMin: null,
       auxiliares: [],
       porUnidad: { ordenes: 0, unidades: 0 },
+      programacion: { usa: false, tiene: false, programados: 0, llegaron: 0, cumplidos: 0, porcentaje: null, aTiempo: null, enviadaEn: null, enviadaPorUsuario: null },
       disponible: false,
       mensaje: null,
     }
+    // --- PROGRAMACIÓN DEL CLIENTE (SQL 211): hoy, para el chip de la tarjeta;
+    // mañana, para el cierre del día. Nunca lanza (si falta la tabla, usa=false).
+    const [progHoy, progManana] = await Promise.all([getProgramacionResumenDia(empresaId, fecha), getProgramacionResumenDia(empresaId, sumarDias(fecha, 1))])
+    operacionHoy.programacion = progHoy
     try {
       const [kpis, patio, ton, hoyRaw] = await Promise.all([
         getDespachoKpis(empresaId),
@@ -526,6 +533,14 @@ export async function getOperacionDia(
           turnosPorAprobar,
           ausentismosSinCompletar,
           bitacoraHoy,
+          programacionManana: {
+            usa: progManana.usa,
+            recibida: progManana.tiene,
+            aTiempo: progManana.aTiempo,
+            enviadaEn: progManana.enviadaEn,
+            enviadaPorUsuario: progManana.enviadaPorUsuario,
+            programados: progManana.programados,
+          },
         },
         avisos,
       },

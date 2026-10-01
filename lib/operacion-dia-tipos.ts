@@ -4,6 +4,8 @@
 // solo pueden exportar funciones async: exportar un tipo o una constante desde
 // alli rompe el BUILD aunque el typecheck pase.
 
+import type { ProgramacionResumenDia } from "@/lib/programacion-cliente-tipos"
+
 /** Cobertura de un turno: cuantos se programaron y cuantos marcaron. */
 export interface CoberturaTurno {
   /** 1 | 2 para puestos de doble jornada; null = jornada unica. */
@@ -102,6 +104,8 @@ export interface OperacionHoy {
   auxiliares: { persona: string; ton: number }[]
   /** Descargues POR UNIDAD de hoy (Huevos / Empaque MP): aparte de las toneladas. */
   porUnidad: { ordenes: number; unidades: number }
+  /** Programación del cliente para HOY (vehículos programados vs. llegados). `usa` = la empresa registra programaciones. */
+  programacion: ProgramacionResumenDia
   disponible: boolean
   mensaje: string | null
 }
@@ -113,4 +117,6 @@ export interface CierreDia {
   ausentismosSinCompletar: number
   /** true si hoy ya hay al menos una anotación en la Bitácora. */
   bitacoraHoy: boolean
+  /** Programación del cliente para MAÑANA (solo si la empresa usa el módulo). */
+  programacionManana: { usa: boolean; recibida: boolean; aTiempo: boolean | null; enviadaEn: string | null; enviadaPorUsuario: string | null; programados: number }
 }

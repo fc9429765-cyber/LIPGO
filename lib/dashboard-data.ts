@@ -113,6 +113,10 @@ export const groups: Group[] = [
       // queda gobernada por el permiso `dashboardpedidos` (mapeado en
       // `lib/permissions-map.ts`).
       { name: "Dashboard Pedidos", icon: LayoutDashboard },
+      // Programación de vehículos que el cliente entrega para mañana (cantidad ·
+      // tipo · destino) y su cumplimiento. Permiso `programacion_cliente` (SQL 211).
+      // La misma pantalla, en modo LIP, vive en Torre de Control como "Proyecciones".
+      { name: "Programación del cliente", icon: CalendarClock, label: "Programación de mañana" },
       // — Pantalla sola —
       // Viene de Producción (2026-09-30): es una SOLICITUD DEL CLIENTE (turnos u
       // horas adicionales), como los pedidos. La aprobación sigue en Operación
@@ -220,9 +224,11 @@ export const groups: Group[] = [
       // "Operación del día" de Operación LIP. Nombre y permiso intactos.
       { name: "Dashboard Operacion", icon: Activity, label: "Dashboard Operación · vista clásica" },
       { name: "Asistente IA", icon: Sparkles },
-      // Viene de Gestión Humana (2026-09-30): proyecta cargas/ingresos de
-      // operación (cabeceraoc/detalleoc), no nómina. Conserva nombre y permiso.
-      { name: "Proyecciones", icon: Calculator, label: "Proyecciones de operación" },
+      // 2026-10-01: ya no es la proyección de nómina del último día de la quincena
+      // (se paga el día base). Conserva `name` y permiso `proyecciones`, pero
+      // muestra la Programación del cliente (vehículos de mañana) y su
+      // cumplimiento, en modo LIP. El cliente la registra desde Pedidos y solicitudes.
+      { name: "Proyecciones", icon: CalendarClock, label: "Programación del cliente · cumplimiento" },
     ],
   },
   {

@@ -57,6 +57,9 @@ export interface UserPermissions {
   tolva: boolean
   ver_tolva: boolean
   proyecciones: boolean
+  // "Programación del cliente" (Pedidos y solicitudes): el cliente registra la
+  // programación de vehículos de mañana y ve su cumplimiento. SQL 211.
+  programacion_cliente: boolean
   ver_ingresos_produccion: boolean
   aprobacion_produccion: boolean
   liquidacion_tolva: boolean
@@ -313,6 +316,7 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   Tolva: "tolva",
   "Ver Tolva": "ver_tolva",
   Proyecciones: "proyecciones",
+  "Programación del cliente": "programacion_cliente",
   "Ver ingresos de producción": "ver_ingresos_produccion",
   "Aprobación de ingreso de producción": "aprobacion_produccion",
   "Liquidación Tolva del día": "liquidacion_tolva",
