@@ -236,7 +236,12 @@ function Destinatarios({
   onCambio: () => void
 }) {
   const { toast } = useToast()
-  const [nuevo, setNuevo] = useState({ nombre: "", telefono: "" })
+  // `empresas` vacío = recibe de todas. Es el caso normal, así que arranca así.
+  const [nuevo, setNuevo] = useState<{ nombre: string; telefono: string; empresas: number[] }>({
+    nombre: "",
+    telefono: "",
+    empresas: [],
+  })
   const [guardando, setGuardando] = useState(false)
 
   async function agregar() {
@@ -247,13 +252,14 @@ function Destinatarios({
       telefono: nuevo.telefono,
       activo: true,
       soloEventos: [],
+      empresas: nuevo.empresas,
     })
     setGuardando(false)
     if (!r.success) {
       toast({ title: "No se pudo agregar", description: r.message, variant: "destructive" })
       return
     }
-    setNuevo({ nombre: "", telefono: "" })
+    setNuevo({ nombre: "", telefono: "", empresas: [] })
     onCambio()
   }
 
@@ -262,6 +268,27 @@ function Destinatarios({
     const r = await eliminarDestinatario(d.id)
     if (!r.success) {
       toast({ title: "No se pudo quitar", description: r.message, variant: "destructive" })
+      return
+    }
+    onCambio()
+  }
+
+  async function alternarEmpresa(d: DestinatarioInterno, empresaId: number) {
+    const tiene = d.empresas.includes(empresaId)
+    const empresas = tiene
+      ? d.empresas.filter((e) => e !== empresaId)
+      : [...d.empresas, empresaId].sort((a, b) => a - b)
+
+    const r = await guardarDestinatario({
+      id: d.id,
+      nombre: d.nombre,
+      telefono: d.telefono,
+      activo: d.activo,
+      soloEventos: d.soloEventos,
+      empresas,
+    })
+    if (!r.success) {
+      toast({ title: "No se pudo guardar", description: r.message, variant: "destructive" })
       return
     }
     onCambio()
@@ -278,6 +305,7 @@ function Destinatarios({
       telefono: d.telefono,
       activo: d.activo,
       soloEventos,
+      empresas: d.empresas,
     })
     if (!r.success) {
       toast({ title: "No se pudo guardar", description: r.message, variant: "destructive" })
@@ -322,9 +350,45 @@ function Destinatarios({
                   </Button>
                 </div>
 
+                {/* De qué empresas recibe. Sin marcar ninguna, recibe de
+                    todas: es el caso de gerencia, y el más común. */}
+                <div className="mt-2">
+                  <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Empresas
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {EMPRESAS.map((e) => {
+                      const todas = d.empresas.length === 0
+                      const marcada = todas || d.empresas.includes(e.id)
+                      return (
+                        <button
+                          key={e.id}
+                          type="button"
+                          onClick={() => alternarEmpresa(d, e.id)}
+                          className={`rounded-full border px-2 py-0.5 text-[10px] ${
+                            marcada
+                              ? "border-sky-300 bg-sky-50 text-sky-800"
+                              : "border-border text-muted-foreground"
+                          }`}
+                        >
+                          {e.nombre}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {d.empresas.length === 0 && (
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      Recibe de todas las empresas.
+                    </p>
+                  )}
+                </div>
+
                 {/* Sin marcar nada recibe todo: es lo más común y no obliga a
                     tocar cinco casillas para el caso normal. */}
-                <div className="mt-2 flex flex-wrap gap-1">
+                <p className="mb-1 mt-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Eventos
+                </p>
+                <div className="flex flex-wrap gap-1">
                   {eventos.map((ev) => {
                     const todos = d.soloEventos.length === 0
                     const marcado = todos || d.soloEventos.includes(ev.evento)
@@ -377,6 +441,38 @@ function Destinatarios({
             {guardando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             Agregar
           </Button>
+
+          {/* Las empresas al dar de alta. Sin marcar ninguna recibe de todas,
+              que es lo que querrá gerencia; los coordinadores marcan la suya. */}
+          <div className="w-full">
+            <Label className="text-xs">Empresas (sin marcar = todas)</Label>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {EMPRESAS.map((e) => {
+                const marcada = nuevo.empresas.includes(e.id)
+                return (
+                  <button
+                    key={e.id}
+                    type="button"
+                    onClick={() =>
+                      setNuevo((n) => ({
+                        ...n,
+                        empresas: marcada
+                          ? n.empresas.filter((x) => x !== e.id)
+                          : [...n.empresas, e.id].sort((a, b) => a - b),
+                      }))
+                    }
+                    className={`rounded-full border px-2.5 py-1 text-[11px] ${
+                      marcada
+                        ? "border-sky-300 bg-sky-50 text-sky-800"
+                        : "border-border text-muted-foreground"
+                    }`}
+                  >
+                    {e.nombre}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -535,18 +631,34 @@ export default function ReporteInterno() {
    */
   const estimado = useMemo(() => {
     const activos = eventos.filter((e) => e.activo)
-    const porEvento = activos.map((ev) => {
-      const gente = destinatarios.filter(
-        (d) => d.activo && (!d.soloEventos.length || d.soloEventos.includes(ev.evento)),
-      ).length
-      return gente
-    })
-    // ~35 cargues al día, medido sobre los últimos 90 días de operación.
+
+    /*
+     * Los ~35 cargues diarios se reparten entre las empresas, no ocurren en
+     * cada una. Contar a cada destinatario por el total inflaría la cifra:
+     * cuatro coordinadores de empresas distintas no reciben 4×35, reciben 35
+     * entre todos.
+     *
+     * Se reparte a partes iguales porque LIPgo no sabe cuántos cargues tiene
+     * cada empresa. Es una estimación, y lo que importa de ella es el orden de
+     * magnitud: si sale 500 o si sale 50.
+     */
     const CARGUES_DIA = 35
-    return {
-      activos: activos.length,
-      mensajesDia: porEvento.reduce((a, b) => a + b, 0) * CARGUES_DIA,
+    const porEmpresa = CARGUES_DIA / Math.max(EMPRESAS.length, 1)
+
+    let mensajesDia = 0
+    for (const ev of activos) {
+      for (const emp of ev.empresas) {
+        const gente = destinatarios.filter(
+          (d) =>
+            d.activo &&
+            (!d.soloEventos.length || d.soloEventos.includes(ev.evento)) &&
+            (!d.empresas.length || d.empresas.includes(emp)),
+        ).length
+        mensajesDia += gente * porEmpresa
+      }
     }
+
+    return { activos: activos.length, mensajesDia: Math.round(mensajesDia) }
   }, [eventos, destinatarios])
 
   if (cargando) {

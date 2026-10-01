@@ -54,6 +54,7 @@ function mapearDestinatario(r: any): DestinatarioInterno {
     telefono: r.telefono,
     activo: r.activo !== false,
     soloEventos: Array.isArray(r.solo_eventos) ? r.solo_eventos : [],
+    empresas: Array.isArray(r.empresas) ? r.empresas.map(Number) : [],
   }
 }
 
@@ -190,6 +191,8 @@ export async function guardarDestinatario(payload: {
   telefono: string
   activo: boolean
   soloEventos: EventoInterno[]
+  /** Vacío = todas las empresas del evento. */
+  empresas?: number[]
 }): Promise<{ success: boolean; message?: string }> {
   try {
     if (!payload.nombre?.trim()) return { success: false, message: "Ponle un nombre." }
@@ -206,11 +209,45 @@ export async function guardarDestinatario(payload: {
     }
 
     const sb: any = await getSupabaseAdmin()
+    const empresas = payload.empresas ?? []
     const fila = {
       nombre: payload.nombre.trim(),
       telefono,
       activo: payload.activo,
       solo_eventos: payload.soloEventos,
+      empresas,
+    }
+
+    /*
+     * Un número que ya está en la lista NO crea otra fila: se le fusionan las
+     * empresas.
+     *
+     * Antes lo impedía un índice único, pero ahora un mismo número puede
+     * registrarse legítimamente para empresas distintas. Crear dos filas haría
+     * que esa persona recibiera cada aviso DOS VECES, y se cobrarían los dos.
+     */
+    if (!payload.id) {
+      const { data: ya } = await sb
+        .from("reporte_interno_destinatarios")
+        .select("id, empresas")
+        .eq("telefono", telefono)
+        .maybeSingle()
+
+      if (ya) {
+        const previas: number[] = Array.isArray(ya.empresas) ? ya.empresas.map(Number) : []
+        // Si alguna de las dos es "todas" (vacío), el resultado es todas.
+        const fusion =
+          previas.length === 0 || empresas.length === 0
+            ? []
+            : [...new Set([...previas, ...empresas])].sort((a, b) => a - b)
+
+        const { error } = await sb
+          .from("reporte_interno_destinatarios")
+          .update({ ...fila, empresas: fusion })
+          .eq("id", ya.id)
+        if (error) return { success: false, message: error.message }
+        return { success: true }
+      }
     }
 
     const { error } = payload.id
@@ -218,9 +255,6 @@ export async function guardarDestinatario(payload: {
       : await sb.from("reporte_interno_destinatarios").insert(fila)
 
     if (error) {
-      if (String(error.message).includes("uq_reporte_interno_telefono")) {
-        return { success: false, message: "Ese número ya está en la lista." }
-      }
       if (faltaTabla(error.message)) {
         return { success: false, message: "Falta correr scripts/196_reporte_interno_operacion.sql." }
       }
@@ -364,10 +398,21 @@ export async function reportarInterno(
       .eq("activo", true)
     const destinatarios = (destRows ?? [])
       .map(mapearDestinatario)
-      // `solo_eventos` vacío = todos.
+      // `solo_eventos` vacío = todos los eventos.
       .filter((d: DestinatarioInterno) => !d.soloEventos.length || d.soloEventos.includes(evento))
+      /*
+       * `empresas` vacío = todas las del evento.
+       *
+       * Es lo contrario de lo que significa en la configuración del evento,
+       * donde vacío es ninguna. Allá vacío protege --activar un evento no debe
+       * empezar a escribir de proyectos que nadie revisó-- y aquí es el caso
+       * normal: gerencia recibe todo, y los coordinadores solo lo suyo.
+       */
+      .filter((d: DestinatarioInterno) => !d.empresas.length || d.empresas.includes(empresaId))
 
-    if (!destinatarios.length) return { enviados: 0, motivo: "No hay destinatarios para este evento." }
+    if (!destinatarios.length) {
+      return { enviados: 0, motivo: `Nadie recibe este evento para la empresa ${empresaId}.` }
+    }
 
     /*
      * --- 4) Cómo está la plantilla en Meta ---------------------------------
