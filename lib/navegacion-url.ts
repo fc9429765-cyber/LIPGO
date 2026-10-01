@@ -19,7 +19,7 @@ export interface EstadoNav {
 
 const CLAVES_GRUPO = new Set<string>([
   "aprendizaje", "pedidos", "inventarios", "produccion", "integral", "lip", "rrhh",
-  "compensacion", "certificaciones_lip", "sst", "configuracion", "despachos", "mrp", "financiera",
+  "compensacion", "certificaciones_lip", "sst", "configuracion", "despachos", "financiera",
 ])
 
 /**

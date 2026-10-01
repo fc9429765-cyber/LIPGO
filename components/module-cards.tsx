@@ -18,7 +18,6 @@ export const TINT: Record<string, string> = {
   pedidos: "#4f63c4",
   despachos: "#1f8fb0",
   inventarios: "#0e9c9c",
-  mrp: "#b5852a",
   produccion: "#c56a2a",
   lip: "#7b57c9",
   financiera: "#2f9b64",

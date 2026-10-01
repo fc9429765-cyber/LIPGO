@@ -39,7 +39,6 @@ export type GroupKey =
   | "sst"
   | "configuracion"
   | "despachos"
-  | "mrp"
   | "financiera"
 
 /**
@@ -171,24 +170,45 @@ export const groups: Group[] = [
     // lib/navegacion.ts (Ingresos de producción · Tolva · Control de piso).
     // "Servicios Adicionales" pasó a "Pedidos y solicitudes" (es una solicitud
     // del cliente). Los `name` y permisos no cambian.
-    modules: [
-      // — Hub "Ingresos de producción" —
-      { name: "Ingreso de Producción", icon: PackagePlus },
-      { name: "Ver ingresos de producción", icon: Eye },
-      { name: "Aprobación de ingreso de producción", icon: CheckCircle },
-      { name: "Historial Aprobaciones", icon: History },
-      // — Hub "Tolva" —
-      // Toma las toneladas APROBADAS del día por Turno 1/Turno 2 (ventana
-      // horaria programada en RRHH > Programación de turnos, Auxiliar Mixto)
-      // y genera la orden de Tolva/Tolva f en cabeceraoc con un click.
-      { name: "Liquidación Tolva del día", icon: Wallet },
-      { name: "Tolva", icon: Package },
-      { name: "Ver Tolva", icon: Eye },
-      // — Hub "Control de piso" —
-      { name: "Dashboard de Producción", icon: Activity },
-      { name: "Reporte de Paros", icon: AlertTriangle },
-      // — Pantalla sola —
-      { name: "Reprocesos", icon: ArrowRightLeft },
+    // 2026-10-01: el área "MRP" (una sola tarjeta) se plegó aquí como subgrupo
+    // "Materiales · MRP"; la clave de grupo `mrp` ya no existe. Los permisos
+    // de esos módulos siguen bajo Producción en Gestión de Usuarios.
+    subgroups: [
+      {
+        title: "Planta",
+        modules: [
+          // — Hub "Ingresos de producción" —
+          { name: "Ingreso de Producción", icon: PackagePlus },
+          { name: "Ver ingresos de producción", icon: Eye },
+          { name: "Aprobación de ingreso de producción", icon: CheckCircle },
+          { name: "Historial Aprobaciones", icon: History },
+          // — Hub "Tolva" —
+          // Toma las toneladas APROBADAS del día por Turno 1/Turno 2 (ventana
+          // horaria programada en RRHH > Programación de turnos, Auxiliar Mixto)
+          // y genera la orden de Tolva/Tolva f en cabeceraoc con un click.
+          { name: "Liquidación Tolva del día", icon: Wallet },
+          { name: "Tolva", icon: Package },
+          { name: "Ver Tolva", icon: Eye },
+          // — Hub "Control de piso" —
+          { name: "Dashboard de Producción", icon: Activity },
+          { name: "Reporte de Paros", icon: AlertTriangle },
+          // — Pantalla sola —
+          { name: "Reprocesos", icon: ArrowRightLeft },
+        ],
+      },
+      {
+        title: "Materiales · MRP",
+        // "Ingresos MP", "Saldos de empaque" y "Saldos de materia prima" NO
+        // tienen implementación (caían en ModulePlaceholder) y están fuera del
+        // menú hasta que existan; sus permisos (ingresos_mp, saldos_empaque,
+        // saldos_materia_prima) se conservan.
+        modules: [
+          // — Hub "Materiales · MRP" —
+          { name: "Creación de materiales", icon: Package },
+          { name: "Explosión de materiales", icon: Layers },
+          { name: "Gestión de proveedores", icon: Users },
+        ],
+      },
     ],
   },
   {
@@ -670,21 +690,6 @@ export const groups: Group[] = [
         title: "Auditoría",
         modules: [{ name: "Bitácora de Auditoría", icon: History }],
       },
-    ],
-  },
-  {
-    key: "mrp",
-    title: "MRP",
-    icon: Layers,
-    // REORG navegación (2026-09-30): "Ingresos MP", "Saldos de empaque" y
-    // "Saldos de materia prima" NO tienen implementación (caían en
-    // ModulePlaceholder) y salen del menú hasta que existan; sus permisos
-    // (ingresos_mp, saldos_empaque, saldos_materia_prima) se conservan.
-    modules: [
-      // — Hub "Materiales" —
-      { name: "Creación de materiales", icon: Package },
-      { name: "Explosión de materiales", icon: Layers },
-      { name: "Gestión de proveedores", icon: Users },
     ],
   },
   // Guia de usuario. Universal a proposito: "Aprendizaje" NO se registra en

@@ -679,11 +679,12 @@ export const HUBS: Hub[] = [
       { module: "Autorizaciones por clave", label: "Autorizaciones" },
     ],
   },
-  // ===== MRP (Fase 4b) =====
+  // ===== Materiales · MRP (Fase 4b; desde 2026-10-01 es un subgrupo de Producción:
+  // un área con una sola tarjeta no era limpia) =====
   {
     key: "mrp_materiales",
-    group: "mrp",
-    title: "Materiales",
+    group: "produccion",
+    title: "Materiales · MRP",
     icon: Package,
     color: "#b45309",
     descripcion: "Maestro de materiales, explosión de materiales y proveedores.",
@@ -701,7 +702,6 @@ export const ETIQUETA_GRUPO: Record<GroupKey, string> = {
   pedidos: "Pedidos y solicitudes",
   despachos: "Recepción y Despacho",
   inventarios: "Almacenamiento",
-  mrp: "MRP · Materiales",
   produccion: "Producción",
   lip: "Operación LIP",
   financiera: "Gestión Financiera",
@@ -822,7 +822,6 @@ export const TINT_GRUPO: Record<string, string> = {
   pedidos: "#4f63c4",
   despachos: "#1f8fb0",
   inventarios: "#0e9c9c",
-  mrp: "#b5852a",
   produccion: "#c56a2a",
   lip: "#7b57c9",
   financiera: "#2f9b64",

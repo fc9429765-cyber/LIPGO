@@ -89,8 +89,7 @@ function HeroActor({ groupKey }: { groupKey: GroupKey | null }) {
           <circle cx="15.6" cy="14.6" r="1.5" className="hero-accent" fill="currentColor" />
         </g>
       )
-    case "mrp": // MRP / Planeación → engranaje
-    case "produccion": // Producción → engranaje girando
+    case "produccion": // Producción (incluye Materiales · MRP) → engranaje girando
       return (
         <g className="lipgo-gear">
           <g className="hero-lightstroke" strokeWidth="2.3" strokeLinecap="round">
@@ -335,7 +334,6 @@ export function Sidebar({
     { key: "pedidos" as GroupKey, label: "Pedidos y solicitudes", icon: FileText },
     { key: "despachos" as GroupKey, label: "Recepción y Despacho", icon: Truck },
     { key: "inventarios" as GroupKey, label: "Almacenamiento", icon: Package },
-    { key: "mrp" as GroupKey, label: "MRP · Materiales", icon: Layers },
     { key: "produccion" as GroupKey, label: "Producción", icon: Package },
     { key: "lip" as GroupKey, label: "Operación LIP", icon: Users },
     { key: "financiera" as GroupKey, label: "Gestión Financiera", icon: Wallet },
@@ -362,7 +360,6 @@ export function Sidebar({
     pedidos: "#8ea6f0",
     despachos: "#5fc8e6",
     inventarios: "#3fd7cf",
-    mrp: "#e0b45c",
     produccion: "#e79a5c",
     lip: "#b199ee",
     financiera: "#5fd398",
