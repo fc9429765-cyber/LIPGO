@@ -54,6 +54,14 @@ const TIPO_AJUSTE = [
 ]
 
 // Código de transacción resultante a partir del tipo + dirección.
+/** "mié. 30 sep" del día anterior a una fecha 'YYYY-MM-DD' (el corte del conteo total). */
+function fechaAnteriorTexto(fechaISO: string): string {
+  const [y, m, d] = fechaISO.slice(0, 10).split("-").map(Number)
+  if (!y || !m || !d) return "ayer"
+  const ant = new Date(Date.UTC(y, m - 1, d - 1, 12))
+  return ant.toLocaleDateString("es-CO", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })
+}
+
 function codigoDe(tipo: string, direccion: string): string {
   const t = TIPO_AJUSTE.find((x) => x.v === tipo)
   if (!t) return ""
@@ -721,7 +729,15 @@ export function CuadreInventario() {
             <>
               <DialogHeader><DialogTitle className="text-base">Nuevo conteo físico</DialogTitle></DialogHeader>
               <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">Se cargará el stock actual del sistema (saldoinvdetalle) como base; luego capturas el conteo físico.</p>
+                {nuevo.tipo === "total" && nuevo.modo === "todos" ? (
+                  <p className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-900">
+                    <span className="font-semibold">Conteo total (cierre de mes):</span> la fecha es el día del conteo. El sistema contra el que se
+                    cuenta queda <span className="font-semibold">congelado al cierre del día anterior</span>
+                    {nuevo.fecha ? ` (${fechaAnteriorTexto(nuevo.fecha)})` : " (ayer)"}, sin los movimientos del día: puedes crearlo aunque la operación ya haya empezado.
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Conteo cíclico: se carga el stock en vivo del sistema como base; luego capturas el conteo físico.</p>
+                )}
                 <DatePickerField value={nuevo.fecha} onChange={(value) => setNuevo({ ...nuevo, fecha: value })} />
                 <select value={nuevo.tipo} onChange={(e) => setNuevo({ ...nuevo, tipo: e.target.value })} className="h-9 w-full rounded-md border bg-background px-2 text-sm">
                   <option value="total">Conteo total</option>
