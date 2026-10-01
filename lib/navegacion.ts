@@ -89,9 +89,10 @@ export const HUBS: Hub[] = [
     title: "Operación del día",
     icon: LayoutDashboard,
     color: "#0d9488",
-    descripcion: "Cómo va el día en la planta: personal, pendientes, vehículos, toneladas y cierre.",
+    descripcion: "Cómo va el día en la planta: personal, pendientes, vehículos, toneladas, programación del cliente y cierre.",
     tabs: [
       { module: "Operación del día", label: "Resumen del día" },
+      { module: "Consignar programación del cliente", label: "Programación de mañana" },
       { module: "Panel LIP Operación", label: "Tablero del coordinador" },
       { module: "Dashboard Operaciones LIP", label: "Dashboard de operaciones" },
       { module: "Bitácora", label: "Bitácora" },

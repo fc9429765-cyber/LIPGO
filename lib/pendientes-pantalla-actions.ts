@@ -64,6 +64,8 @@ export async function getPendientesPorPantalla(
 
     const out: PendientePantalla[] = []
     if (usaProgramacion > 0 && programacionManana === 0 && horaBogota >= 12 && !mananaDomingo) {
+      // Al coordinador (responsable de consignarla) y al cliente (puede registrarla).
+      out.push({ modulo: "Consignar programación del cliente", cantidad: 1, texto: "sin programación para mañana", nivel: horaBogota >= 17 ? "alto" : "medio" })
       out.push({ modulo: "Programación del cliente", cantidad: 1, texto: "sin programación para mañana", nivel: horaBogota >= 17 ? "alto" : "medio" })
     }
     if (sinCerrar) out.push({ modulo: "Centro de Coordinación", cantidad: sinCerrar, texto: plural(sinCerrar, "vehículo sin cerrar", "vehículos sin cerrar"), nivel: "alto" })

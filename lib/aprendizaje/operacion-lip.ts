@@ -4,6 +4,48 @@ import type { ContenidoAprendizaje } from "@/lib/aprendizaje-content"
 
 export const APRENDIZAJE_OPERACION_LIP: ContenidoAprendizaje[] = [
   // ==========================================================================
+  // CONSIGNAR PROGRAMACION DEL CLIENTE (2026-10-01)
+  // ==========================================================================
+  {
+    modulo: "Consignar programación del cliente",
+    resumen: "El coordinador consigna los vehiculos que el cliente programa para manana y ve cuanto se cumplio cada dia.",
+    proposito:
+      "El cliente envia un dia antes su programacion de vehiculos para manana (cuantos, de que tipo, a que destino o ruta). El coordinador LIP es el responsable de consignarla en LIPgo antes de las 5:00 p. m. (el cliente tambien puede registrarla desde Pedidos y solicitudes si quiere; vale la ultima version). Con ella se planea la operacion y el personal, y se mide el cumplimiento del cliente: cuantos vehiculos programados llegaron de verdad a porteria, por tipo de vehiculo.",
+    puedes: [
+      "Consignar la programacion de manana (o de otra fecha) con lineas de cantidad, tipo de vehiculo del catalogo, destino o ruta y producto opcional.",
+      "Corregirla cuando el cliente cambie algo: cada envio queda como version nueva y la ultima es la vigente.",
+      "Ver si quedo a tiempo (antes de las 5:00 p. m. del dia anterior) o tarde, quien la consigno y el historial de versiones.",
+      "Consultar el cumplimiento por semana, quincena, mes o fechas libres, con el detalle de cada dia por tipo de vehiculo.",
+      "Llegar desde Operacion del dia: el chip 'Programacion del cliente' y el punto de cierre 'Programacion de manana recibida' abren esta pestana.",
+    ],
+    noPuedes: [
+      "Medir el cumplimiento por destino: porteria registra el tipo de vehiculo, no el destino; la medicion es por tipo.",
+      "Borrar una programacion consignada: queda el historial de versiones.",
+      "Registrar la llegada de vehiculos: eso lo hace porteria en Registrar Vehiculos; aqui solo se programa y se compara.",
+    ],
+    funcionalidades: [
+      {
+        nombre: "Programacion del dia elegido",
+        descripcion:
+          "Botones Manana y Hoy o fecha libre. Estado (sin programacion, a tiempo o tarde, version, total de vehiculos), lineas vigentes y boton para modificar creando una version nueva.",
+      },
+      {
+        nombre: "Formulario de lineas",
+        descripcion:
+          "Cantidad, tipo de vehiculo (catalogo Tipos de Vehiculos con capacidad), destino o ruta con sugerencias, producto opcional y observacion. Al enviar queda la hora, quien la consigno y si fue a tiempo.",
+      },
+      {
+        nombre: "Cumplimiento",
+        descripcion:
+          "Programado vs. llegado a porteria por dia y por tipo de vehiculo: porcentaje, no llegaron, fuera de programacion, enviadas a tiempo, dias operados sin programacion y grafico del rango.",
+      },
+    ],
+    consejos: [
+      "Consignala apenas llegue el WhatsApp o el Excel del cliente: despues de las 5:00 p. m. queda marcada como tarde.",
+      "Si el cliente escribe 'Doble troque' y el catalogo dice 'Dobletroque', el cruce igual los reconoce como el mismo tipo.",
+    ],
+  },
+  // ==========================================================================
   // OPERACION LIP · Cargue / Descargue
   // ==========================================================================
   {

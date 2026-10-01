@@ -255,6 +255,11 @@ export const groups: Group[] = [
           // todo de la empresa seleccionada. No calcula nada por su cuenta:
           // reune las cifras de los modulos que ya las producen.
           { name: "Operación del día", icon: LayoutDashboard },
+          // El coordinador LIP consigna la programación de vehículos que el cliente
+          // envía para mañana (el cliente también puede, desde Pedidos y solicitudes).
+          // Permiso `programacion_cliente_lip` (SQL 212). Misma pantalla que
+          // "Programación del cliente" y que "Proyecciones" (Torre de Control).
+          { name: "Consignar programación del cliente", icon: CalendarClock, label: "Programación de mañana" },
           { name: "Panel LIP Operación", icon: BarChart3, label: "Tablero del Coordinador" },
           { name: "Dashboard Operaciones LIP", icon: LayoutDashboard },
           // Modulo "Bitácora": registro diario de novedades/observaciones

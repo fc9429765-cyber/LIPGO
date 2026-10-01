@@ -454,9 +454,9 @@ export function OperacionDelDia() {
               <ItemCierre
                 ok={d.cierre.programacionManana.recibida}
                 texto={`Programación del cliente para mañana recibida (${d.cierre.programacionManana.programados} vehículo${d.cierre.programacionManana.programados === 1 ? "" : "s"}${d.cierre.programacionManana.aTiempo === false ? ", tarde" : ""})`}
-                pendiente="Aún no llega la programación de mañana: pídesela al cliente o regístrala por él"
-                modulo="Proyecciones"
-                boton="Programación del cliente"
+                pendiente="Aún no llega la programación de mañana: pídesela al cliente y consígnala"
+                modulo="Consignar programación del cliente"
+                boton="Consignar programación"
               />
             )}
             <ItemCierre ok={d.cierre.bitacoraHoy} texto="Bitácora del día escrita" pendiente="Aún no hay anotación de hoy">
@@ -637,7 +637,7 @@ export function OperacionDelDia() {
                   {d.operacionHoy.programacion.usa && (
                     <button
                       type="button"
-                      onClick={() => irAModulo("Proyecciones")}
+                      onClick={() => irAModulo("Consignar programación del cliente")}
                       className={`mt-2 inline-flex flex-wrap items-center gap-x-2 rounded-md border px-2 py-1 text-left text-[11px] transition-colors ${
                         d.operacionHoy.programacion.tiene ? "border-sky-200 bg-sky-50 text-sky-900 hover:bg-sky-100" : "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
                       }`}

@@ -420,6 +420,10 @@ export function MainContent({
             </PermissionGuard>
           ) : name === "Proyecciones" ? (
             <PermissionGuard moduleName="Proyecciones">
+              <ProgramacionCliente modo="gerencia" />
+            </PermissionGuard>
+          ) : name === "Consignar programación del cliente" ? (
+            <PermissionGuard moduleName="Consignar programación del cliente">
               <ProgramacionCliente modo="lip" />
             </PermissionGuard>
           ) : name === "Programación del cliente" ? (

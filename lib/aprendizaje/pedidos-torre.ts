@@ -8,9 +8,9 @@ export const APRENDIZAJE_PEDIDOS: ContenidoAprendizaje[] = [
   // ==========================================================================
   {
     modulo: "Programación del cliente",
-    resumen: "El cliente envia antes de las 5:00 p. m. los vehiculos que llegaran manana y ve cuanto se cumplio cada dia.",
+    resumen: "Si el cliente quiere, registra aqui los vehiculos que llegaran manana (el coordinador LIP la consigna si no) y ve cuanto se cumplio cada dia.",
     proposito:
-      "Es la programacion para manana que el cliente entrega un dia antes: cuantos vehiculos, de que tipo y a que destino o ruta. Con ella LIP planea la operacion y el personal, y ambos miden el cumplimiento: cuantos de los vehiculos programados llegaron de verdad a porteria, por tipo de vehiculo. Si el cliente no puede registrarla, el coordinador LIP la registra por el desde Torre de Control.",
+      "Es la programacion para manana que el cliente entrega un dia antes: cuantos vehiculos, de que tipo y a que destino o ruta. El responsable de consignarla en LIPgo es el coordinador LIP (Operacion del dia > Programacion de manana), pero el cliente puede registrarla directamente aqui si lo prefiere; cualquiera de los dos, y vale la ultima version. Con ella LIP planea la operacion y el personal, y ambos miden el cumplimiento: cuantos de los vehiculos programados llegaron de verdad a porteria, por tipo de vehiculo.",
     puedes: [
       "Registrar la programacion de manana (o de otra fecha) con lineas de cantidad, tipo de vehiculo, destino o ruta y producto opcional.",
       "Corregirla las veces que haga falta: cada envio queda como version nueva y la ultima es la vigente.",

@@ -405,7 +405,7 @@ export const APRENDIZAJE_RRHH_B: ContenidoAprendizaje[] = [
     modulo: "Proyecciones",
     resumen: "Programacion de vehiculos que el cliente entrega para manana y cuanto la cumple cada dia (vista LIP, Torre de Control).",
     proposito:
-      "El cliente entrega un dia antes la programacion de los vehiculos de manana (cantidad, tipo de vehiculo, destino o ruta). Con eso el coordinador planea la operacion y el personal, y LIP mide el cumplimiento del cliente: cuantos vehiculos programados llegaron de verdad a porteria, por tipo de vehiculo, dia a dia. Si la programacion llega por WhatsApp o Excel, el coordinador la registra aqui por el cliente. Es la misma pantalla que el cliente ve en Pedidos y solicitudes > Programacion de manana.",
+      "El cliente entrega un dia antes la programacion de los vehiculos de manana (cantidad, tipo de vehiculo, destino o ruta). El coordinador LIP la consigna en Operacion del dia > Programacion de manana (el cliente tambien puede, desde Pedidos y solicitudes). Aqui gerencia ve el cumplimiento primero: cuantos vehiculos programados llegaron de verdad a porteria, por tipo de vehiculo, dia a dia; y tambien puede consignar o corregir una programacion. Es la misma pantalla en las tres entradas.",
     puedes: [
       "Registrar o corregir la programacion de cualquier dia (por defecto manana): cantidad, tipo de vehiculo del catalogo, destino o ruta y producto opcional.",
       "Ver si la programacion de un dia llego a tiempo (antes de las 5:00 p. m. del dia anterior) o tarde, quien la envio y cuantas versiones tuvo.",

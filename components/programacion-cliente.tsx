@@ -82,7 +82,15 @@ function Cifra({ label, valor, sub, color }: { label: string; valor: string | nu
   )
 }
 
-export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" }) {
+/**
+ * modo:
+ *   "lip"      → Operación LIP › Operación del día › Programación de mañana: el
+ *                coordinador CONSIGNA lo que envía el cliente (responsable).
+ *   "cliente"  → Pedidos y solicitudes › Programación de mañana: el cliente la
+ *                registra si quiere (opcional). Misma pantalla.
+ *   "gerencia" → Torre de Control: cumplimiento primero; también puede consignar.
+ */
+export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" | "gerencia" }) {
   const { selectedEmpresaId, selectedEmpresaNombre } = useAuth()
   const { toast } = useToast()
   const hoy = hoyBogota()
@@ -218,7 +226,7 @@ export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" }) {
   }
 
   return (
-    <div className="space-y-4 p-2 sm:p-4">
+    <div className="flex flex-col gap-4 p-2 sm:p-4">
       {/* Cabecera */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
@@ -226,11 +234,15 @@ export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" }) {
             <CalendarClock className="h-5 w-5" />
           </span>
           <div>
-            <h1 className="text-lg font-semibold leading-tight">{esCliente ? "Programación de mañana" : "Programación del cliente · cumplimiento"}</h1>
+            <h1 className="text-lg font-semibold leading-tight">
+              {modo === "gerencia" ? "Programación del cliente · cumplimiento" : modo === "lip" ? "Programación del cliente para mañana" : "Programación de mañana"}
+            </h1>
             <p className="text-xs text-muted-foreground">
-              {esCliente
-                ? `Envía antes de las ${HORA_LIMITE_TEXTO} los vehículos que llegarán mañana a ${selectedEmpresaNombre || "la planta"}. Aquí también ves cuánto se cumplió cada día.`
-                : `Lo que ${selectedEmpresaNombre || "el cliente"} programó para cada día y cuánto se cumplió en portería. Si la programación llega por WhatsApp o Excel, regístrala aquí por él.`}
+              {modo === "lip"
+                ? `Consigna aquí la programación de vehículos que ${selectedEmpresaNombre || "el cliente"} envía para mañana (hora límite ${HORA_LIMITE_TEXTO}). El cliente también puede registrarla desde Pedidos y solicitudes; vale la última versión.`
+                : esCliente
+                  ? `Si quieres, registra aquí los vehículos que llegarán mañana a ${selectedEmpresaNombre || "la planta"} en vez de enviárselos al coordinador (hora límite ${HORA_LIMITE_TEXTO}). Aquí también ves cuánto se cumplió cada día.`
+                  : `Lo que ${selectedEmpresaNombre || "el cliente"} programó para cada día y cuánto se cumplió en portería. También puedes consignar o corregir una programación.`}
             </p>
           </div>
         </div>
@@ -253,8 +265,8 @@ export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" }) {
         </div>
       )}
 
-      {/* Estado del día elegido */}
-      <section className="rounded-xl border border-border bg-card">
+      {/* Estado del día elegido (en gerencia va después del cumplimiento) */}
+      <section className={cn("rounded-xl border border-border bg-card", modo === "gerencia" && "order-2")}>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
           <div>
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Programación para</p>
@@ -427,8 +439,8 @@ export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" }) {
         )}
       </section>
 
-      {/* Cumplimiento */}
-      <section className="rounded-xl border border-border bg-card">
+      {/* Cumplimiento (en gerencia va primero) */}
+      <section className={cn("rounded-xl border border-border bg-card", modo === "gerencia" && "order-1")}>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
           <div>
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Programado vs. llegó a portería · por tipo de vehículo</p>

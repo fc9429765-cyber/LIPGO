@@ -60,6 +60,9 @@ export interface UserPermissions {
   // "Programación del cliente" (Pedidos y solicitudes): el cliente registra la
   // programación de vehículos de mañana y ve su cumplimiento. SQL 211.
   programacion_cliente: boolean
+  // "Consignar programación del cliente" (Operación LIP › Operación del día): el
+  // coordinador LIP consigna la programación que envía el cliente. SQL 212.
+  programacion_cliente_lip: boolean
   ver_ingresos_produccion: boolean
   aprobacion_produccion: boolean
   liquidacion_tolva: boolean
@@ -317,6 +320,7 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   "Ver Tolva": "ver_tolva",
   Proyecciones: "proyecciones",
   "Programación del cliente": "programacion_cliente",
+  "Consignar programación del cliente": "programacion_cliente_lip",
   "Ver ingresos de producción": "ver_ingresos_produccion",
   "Aprobación de ingreso de producción": "aprobacion_produccion",
   "Liquidación Tolva del día": "liquidacion_tolva",
