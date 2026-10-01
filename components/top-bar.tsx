@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
- import { Bell, User, LogOut, MessageCircle, Building2, ChevronDown, Clock, Users, Calendar, AlertTriangle, Truck, Timer, DollarSign, Package, ClipboardList, ClipboardCheck, Wrench, ShieldAlert, KeyRound } from "lucide-react"
+ import { Bell, User, LogOut, MessageCircle, Building2, ChevronDown, Clock, Users, Calendar, AlertTriangle, Truck, Timer, DollarSign, Package, ClipboardList, ClipboardCheck, Wrench, ShieldAlert, KeyRound, Search } from "lucide-react"
 import { ColombiaClock } from "./colombia-clock"
 import { useAuth } from "@/components/auth-provider"
 import { MiClaveAutorizacionDialog } from "@/components/mi-clave-autorizacion"
@@ -199,7 +199,28 @@ export function TopBar() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4">
-            <button 
+            {/* Buscador global "Buscar o ir a…" (Ctrl/⌘+K). Dispara el evento
+                que escucha components/buscador-global.tsx (montado en app/page.tsx). */}
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent("lipgo:open-palette"))}
+              className="hidden items-center gap-2 rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground md:inline-flex"
+              title="Buscar o ir a… (Ctrl+K)"
+            >
+              <Search className="h-3.5 w-3.5" />
+              Buscar o ir a…
+              <kbd className="rounded border border-border bg-background px-1 font-sans text-[10px] text-muted-foreground">Ctrl K</kbd>
+            </button>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent("lipgo:open-palette"))}
+              className="rounded-lg p-1 transition-colors hover:bg-accent md:hidden sm:p-2"
+              title="Buscar o ir a…"
+              aria-label="Buscar o ir a"
+            >
+              <Search className="h-4 w-4 text-muted-foreground sm:h-5 sm:w-5" />
+            </button>
+            <button
               onClick={handleChatClick}
               className="relative p-1 sm:p-2 rounded-lg hover:bg-accent transition-colors"
               title="Chat"

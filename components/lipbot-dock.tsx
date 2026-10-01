@@ -35,10 +35,11 @@ export function LipbotDock({
   const [preguntaInicial, setPreguntaInicial] = useState<string | null>(null)
   const nAlertas = alertas?.length ?? 0
 
-  // Atajo de teclado: Ctrl/⌘+K abre/cierra; Esc cierra.
+  // Atajo de teclado: Ctrl/⌘+J abre/cierra; Esc cierra. (Ctrl/⌘+K es del
+  // buscador global desde 2026-09-30, estándar "buscar o ir a".)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j") {
         e.preventDefault()
         setOpen((o) => !o)
       } else if (e.key === "Escape") {
@@ -129,14 +130,14 @@ export function LipbotDock({
         <button
           className={`lipbot-fab${oculto ? " oculto" : ""}`}
           onClick={() => setOpen(true)}
-          aria-label="Abrir LIPbot (Ctrl+K)"
-          title="LIPbot · Ctrl+K"
+          aria-label="Abrir LIPbot (Ctrl+J)"
+          title="LIPbot · Ctrl+J"
           aria-hidden={oculto}
           tabIndex={oculto ? -1 : 0}
         >
           <span className="em" aria-hidden="true">💬</span>
           <span className="txt">LIPbot</span>
-          <span className="kbd">⌘K</span>
+          <span className="kbd">⌘J</span>
           {nAlertas > 0 && <span className="lipbot-badge" aria-label={`${nAlertas} pendientes`}>{nAlertas}</span>}
         </button>
       ) : (

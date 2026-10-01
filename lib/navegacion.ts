@@ -31,6 +31,8 @@ export interface Hub {
   icon: LucideIcon
   /** Color propio de la pantalla (barra de pestañas, tarjeta, ícono). Si falta, se asigna de la paleta. */
   color?: string
+  /** Una frase: para qué sirve la pantalla (portal de área y buscador). */
+  descripcion?: string
   /** Todas las pestañas deben pertenecer a UN mismo subgrupo (o a la lista directa) de `group`. */
   tabs: HubTab[]
 }
@@ -52,6 +54,7 @@ export const HUBS: Hub[] = [
     title: "Operación del día",
     icon: LayoutDashboard,
     color: "#0d9488",
+    descripcion: "Cómo va el día en la planta: personal, pendientes, vehículos, toneladas y cierre.",
     tabs: [
       { module: "Operación del día", label: "Resumen del día" },
       { module: "Panel LIP Operación", label: "Tablero del coordinador" },
@@ -65,6 +68,7 @@ export const HUBS: Hub[] = [
     title: "Centro de Coordinación",
     icon: LayoutGrid,
     color: "#2563eb",
+    descripcion: "Muelles en vivo, asignar personal e iniciar y cerrar cada vehículo.",
     tabs: [
       { module: "Centro de Coordinación", label: "Muelles y órdenes" },
       { module: "Picking", label: "Picking" },
@@ -79,6 +83,7 @@ export const HUBS: Hub[] = [
     title: "Personal del día",
     icon: Users,
     color: "#db2777",
+    descripcion: "Programar turnos, registrar asistencia, aprobar turnos y pedir personal.",
     tabs: [
       { module: "Programación de turnos", label: "Programación" },
       { module: "Registro de asistencia", label: "Registro de asistencia" },
@@ -93,6 +98,7 @@ export const HUBS: Hub[] = [
     title: "Toneladas y productividad",
     icon: Scale,
     color: "#d97706",
+    descripcion: "Quién carga de verdad: toneladas por auxiliar, ranking y real contra pagado.",
     tabs: [
       { module: "Control de Toneladas", label: "Control de toneladas" },
       { module: "Productividad de Auxiliares", label: "Productividad de auxiliares" },
@@ -104,6 +110,7 @@ export const HUBS: Hub[] = [
     title: "Estibas QR",
     icon: QrCode,
     color: "#7c3aed",
+    descripcion: "Etiquetar, leer y consultar estibas por código QR.",
     tabs: [
       { module: "Registro de QR estibas", label: "Registrar" },
       { module: "Lectura de QR estibas", label: "Leer" },
@@ -117,6 +124,7 @@ export const HUBS: Hub[] = [
     title: "Órdenes",
     icon: Truck,
     color: "#2563eb",
+    descripcion: "Crear órdenes de cargue, descargue y distribución, y gestionarlas.",
     tabs: [
       { module: "Generar Órdenes de Cargue", label: "Cargue" },
       { module: "Generar Órdenes de Descargue", label: "Descargue" },
@@ -130,6 +138,7 @@ export const HUBS: Hub[] = [
     title: "Portería y vehículos",
     icon: ClipboardCheck,
     color: "#059669",
+    descripcion: "Citas y llegada de vehículos, inspección sanitaria y su historial.",
     tabs: [
       { module: "Registrar Vehículos", label: "Registrar" },
       { module: "Ver Vehículos", label: "Ver vehículos" },
@@ -143,6 +152,7 @@ export const HUBS: Hub[] = [
     title: "Báscula",
     icon: Scale,
     color: "#d97706",
+    descripcion: "Pesar vehículos y revisar el historial de pesajes.",
     tabs: [
       { module: "Báscula", label: "Pesar" },
       { module: "Historial Báscula", label: "Historial" },

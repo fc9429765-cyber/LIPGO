@@ -28,6 +28,7 @@ import { ClaveFinancieraGuard } from "@/components/clave-financiera-guard"
 import { ModuleKpiHeader } from "@/components/module-kpi-header"
 import { ModuleHub } from "@/components/module-hub"
 import { MigaNavegacion } from "@/components/miga-navegacion"
+import { ContinuarReciente } from "@/components/continuar-reciente"
 import { hubDe } from "@/lib/navegacion"
 import { GroupKey } from "@/lib/dashboard-data"
 import dynamic from "next/dynamic"
@@ -1235,6 +1236,9 @@ export function MainContent({
                   </div>
                 )}
               </section>
+
+              {/* Continuar donde ibas: recientes y favoritos del usuario */}
+              <ContinuarReciente onNavigate={onNavigateModule} />
 
               {/* Aplicaciones — el otro pilar del Inicio */}
               <ModuleCards onSelectGroup={onSelectGroup} onSelectModule={onSelectModule} />

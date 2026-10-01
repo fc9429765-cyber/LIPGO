@@ -6,6 +6,8 @@ import { MainContent } from "@/components/main-content"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { SplashScreen } from "@/components/splash-screen"
 import { LipbotDock } from "@/components/lipbot-dock"
+import { BuscadorGlobal } from "@/components/buscador-global"
+import { useNavegacionPersonal } from "@/hooks/use-navegacion-personal"
 import { groups, type GroupKey } from "@/lib/dashboard-data"
 import { HUB_POR_KEY, esHubKey, resolverAlias } from "@/lib/navegacion"
 import { escribirUrl, leerEstadoDeUrl } from "@/lib/navegacion-url"
@@ -111,6 +113,12 @@ export default function DashboardPage() {
     escribirUrl({ group: selectedGroup, module: selectedModule }, huboNavegacionRef.current ? "push" : "replace")
     huboNavegacionRef.current = true
   }, [user, selectedGroup, selectedModule])
+
+  // Recientes ("Continuar donde ibas" y buscador): cada módulo abierto se registra.
+  const { registrarVisita } = useNavegacionPersonal()
+  useEffect(() => {
+    if (selectedModule) registrarVisita(selectedModule)
+  }, [selectedModule, registrarVisita])
 
   // 3) Botón atrás/adelante del navegador.
   useEffect(() => {
@@ -236,6 +244,18 @@ export default function DashboardPage() {
           onOpenGroup={openGroup}
         />
       )}
+
+      {/* Buscador global "Buscar o ir a…" (Ctrl/⌘+K): siempre montado, también en Inicio. */}
+      <BuscadorGlobal
+        onNavigate={navigateToModule}
+        onOpenGroup={openGroup}
+        onInicio={() => {
+          setSelectedGroup(null)
+          setSelectedModule(null)
+        }}
+        moduloActual={selectedModule}
+        lipbotMontado={selectedModule !== "Asistente IA" && !!(selectedGroup || selectedModule)}
+      />
 
       {/* Background Watermark */}
       <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">

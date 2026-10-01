@@ -92,7 +92,7 @@ export function LipAiAssistant({ contextLabel, empresaLabel, onOpen, alertas, on
   useEffect(() => {
     if (!isBar) return
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j") {
         e.preventDefault()
         setFocused(true)
         taRef.current?.focus()
@@ -481,7 +481,7 @@ export function LipAiAssistant({ contextLabel, empresaLabel, onOpen, alertas, on
             }}
           />
 
-          <span className="lipai-kbd" aria-hidden="true">⌘K</span>
+          <span className="lipai-kbd" aria-hidden="true">⌘J</span>
 
           {/* Micrófono (dictado por voz) */}
           <button
