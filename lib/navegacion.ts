@@ -14,7 +14,23 @@
 // funcionando sin cambios.
 
 import { groups, type GroupKey, type Module } from "@/lib/dashboard-data"
-import { ClipboardCheck, LayoutDashboard, LayoutGrid, QrCode, Scale, Truck, Users, type LucideIcon } from "lucide-react"
+import {
+  Activity,
+  ArrowRightLeft,
+  BarChart3,
+  ClipboardCheck,
+  FileCheck,
+  LayoutDashboard,
+  LayoutGrid,
+  Package,
+  PackagePlus,
+  QrCode,
+  Scale,
+  Truck,
+  Users,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react"
 
 export interface HubTab {
   /** `name` EXACTO de un módulo existente (clave de ruteo/permiso/KPI/guía). Nunca se renombra. */
@@ -158,12 +174,118 @@ export const HUBS: Hub[] = [
       { module: "Historial Báscula", label: "Historial" },
     ],
   },
+  // ===== Pedidos y solicitudes (Fase 4) =====
+  {
+    key: "ped_pedidos",
+    group: "pedidos",
+    title: "Pedidos",
+    icon: PackagePlus,
+    color: "#2563eb",
+    descripcion: "Registrar los pedidos del cliente, gestionarlos y ver su cumplimiento.",
+    tabs: [
+      { module: "Entrada de pedidos", label: "Entrada" },
+      { module: "Gestionar pedidos", label: "Gestionar" },
+      { module: "Dashboard Pedidos", label: "Dashboard" },
+    ],
+  },
+  // ===== Almacenamiento (Fase 4) =====
+  {
+    key: "inv_movimientos",
+    group: "inventarios",
+    title: "Movimientos",
+    icon: ArrowRightLeft,
+    color: "#0d9488",
+    descripcion: "Entradas, salidas, traslados y correcciones de inventario por código.",
+    tabs: [
+      { module: "Transacciones de Inventario", label: "Transacciones" },
+      { module: "Gestión de transacciones", label: "Gestión" },
+      { module: "Traslados de producto", label: "Traslados" },
+    ],
+  },
+  {
+    key: "inv_saldos",
+    group: "inventarios",
+    title: "Saldos",
+    icon: BarChart3,
+    color: "#2563eb",
+    descripcion: "Qué hay en bodega: por lote, por producto y ocupación de las localizaciones.",
+    tabs: [
+      { module: "Saldos de inventario", label: "Por lote" },
+      { module: "Saldos por producto", label: "Por producto" },
+      { module: "Capacidad Bodega", label: "Capacidad de bodega" },
+    ],
+  },
+  {
+    key: "inv_exactitud",
+    group: "inventarios",
+    title: "Exactitud y cierre",
+    icon: ClipboardCheck,
+    color: "#d97706",
+    descripcion: "Exactitud del inventario, cuadre de cierre mensual y auditoría.",
+    tabs: [
+      { module: "Panel LIP Inventario", label: "Exactitud" },
+      { module: "Cuadre de Inventario", label: "Cuadre mensual" },
+      { module: "Auditoría de Inventario", label: "Auditoría" },
+    ],
+  },
+  {
+    key: "inv_lotes",
+    group: "inventarios",
+    title: "Lotes",
+    icon: FileCheck,
+    color: "#7c3aed",
+    descripcion: "Asignar lotes a las órdenes de cargue y consultar el historial.",
+    tabs: [
+      { module: "Asignación de Lotes", label: "Asignar" },
+      { module: "Historial de lotes", label: "Historial" },
+    ],
+  },
+  // ===== Producción (Fase 4) =====
+  {
+    key: "prod_ingresos",
+    group: "produccion",
+    title: "Ingresos de producción",
+    icon: PackagePlus,
+    color: "#059669",
+    descripcion: "Registrar lo producido, revisarlo, aprobarlo y ver el historial.",
+    tabs: [
+      { module: "Ingreso de Producción", label: "Registrar" },
+      { module: "Ver ingresos de producción", label: "Ver ingresos" },
+      { module: "Aprobación de ingreso de producción", label: "Aprobar" },
+      { module: "Historial Aprobaciones", label: "Historial" },
+    ],
+  },
+  {
+    key: "prod_tolva",
+    group: "produccion",
+    title: "Tolva",
+    icon: Wallet,
+    color: "#d97706",
+    descripcion: "Liquidar la tolva del día y consultar sus órdenes.",
+    tabs: [
+      { module: "Liquidación Tolva del día", label: "Liquidación del día" },
+      { module: "Tolva", label: "Orden de tolva" },
+      { module: "Ver Tolva", label: "Ver tolva" },
+    ],
+  },
+  {
+    key: "prod_piso",
+    group: "produccion",
+    title: "Control de piso",
+    icon: Activity,
+    color: "#dc2626",
+    descripcion: "Ritmo de producción en vivo y registro de paros.",
+    tabs: [
+      { module: "Dashboard de Producción", label: "Dashboard" },
+      { module: "Reporte de Paros", label: "Paros" },
+    ],
+  },
 ]
 
 /** Etiqueta corta del área para barra lateral, miga de pan y buscador. */
 export const ETIQUETA_GRUPO: Record<GroupKey, string> = {
   integral: "Torre de Control",
-  pedidos: "Pedidos",
+  pedidos: "Pedidos y solicitudes",
   despachos: "Recepción y Despacho",
   inventarios: "Almacenamiento",
   mrp: "MRP · Materiales",

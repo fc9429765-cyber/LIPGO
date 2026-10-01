@@ -98,17 +98,27 @@ export const groups: Group[] = [
     ],
   },
   {
+    // REORG navegación (2026-09-30): "Pedidos y solicitudes" = lo que el CLIENTE
+    // le pide a LIP (pedidos y servicios adicionales). "Gestión integral de
+    // pedidos" salió del menú porque ya no se usa (gerencia); su permiso
+    // (`gestion_integral_pedidos`) y su rama en main-content se conservan hasta
+    // la limpieza final aprobada.
     key: "pedidos",
-    title: "Gestión de Pedidos",
+    title: "Pedidos y solicitudes",
     icon: Package,
     modules: [
+      // — Hub "Pedidos" —
       { name: "Entrada de pedidos", icon: PackagePlus },
       { name: "Gestionar pedidos", icon: FileText },
-      { name: "Gestión integral de pedidos", icon: FileText },
       // Modulo nuevo: vista de indicadores de pedidos. Su visibilidad
       // queda gobernada por el permiso `dashboardpedidos` (mapeado en
       // `lib/permissions-map.ts`).
       { name: "Dashboard Pedidos", icon: LayoutDashboard },
+      // — Pantalla sola —
+      // Viene de Producción (2026-09-30): es una SOLICITUD DEL CLIENTE (turnos u
+      // horas adicionales), como los pedidos. La aprobación sigue en Operación
+      // LIP › Personal del día › Aprobar Turnos. Conserva nombre y permiso.
+      { name: "Servicios Adicionales", icon: Clock },
     ],
   },
   {
@@ -119,22 +129,29 @@ export const groups: Group[] = [
     subgroups: [
       {
         title: "Gestión inventario",
+        // REORG navegación (2026-09-30): el orden define los hubs de
+        // lib/navegacion.ts (Movimientos · Saldos · Exactitud y cierre). Los
+        // `name` y permisos no cambian.
         modules: [
+          // — Hub "Movimientos" —
           { name: "Transacciones de Inventario", icon: ArrowRightLeft },
+          { name: "Gestión de transacciones", icon: FileText },
+          { name: "Traslados de producto", icon: ArrowRightLeft },
+          // — Hub "Saldos" —
           { name: "Saldos de inventario", icon: BarChart3 },
           { name: "Saldos por producto", icon: Package2 },
-          { name: "Traslados de producto", icon: ArrowRightLeft },
-          { name: "Gestión de transacciones", icon: FileText },
           { name: "Capacidad Bodega", icon: Gauge },
-          // Registro diario de disponibilidad de montacargas y conteo
-          // del personal de operación. CRUD sobre `montacargasdia`,
-          // protegido por el permiso `montacargasdia`.
-          { name: "Montacargas y personal día", icon: Truck },
+          // — Hub "Exactitud y cierre" —
           { name: "Panel LIP Inventario", icon: BarChart3, label: "Panel de Inventario (Exactitud y movimientos)" },
           { name: "Cuadre de Inventario", icon: ClipboardCheck, label: "Cuadre y Correcciones (Cierre mensual)" },
           // REORG (2026-07-03): "Auditoría de Inventario" se movió aquí desde su
           // antiguo grupo propio "Auditoría". Conserva su `name`/permiso.
           { name: "Auditoría de Inventario", icon: Search },
+          // — Pantalla sola —
+          // Registro diario de disponibilidad de montacargas y conteo
+          // del personal de operación. CRUD sobre `montacargasdia`,
+          // protegido por el permiso `montacargasdia`.
+          { name: "Montacargas y personal día", icon: Truck },
         ],
       },
       {
@@ -150,21 +167,28 @@ export const groups: Group[] = [
     key: "produccion",
     title: "Producción",
     icon: Package2,
+    // REORG navegación (2026-09-30): el orden define los hubs de
+    // lib/navegacion.ts (Ingresos de producción · Tolva · Control de piso).
+    // "Servicios Adicionales" pasó a "Pedidos y solicitudes" (es una solicitud
+    // del cliente). Los `name` y permisos no cambian.
     modules: [
+      // — Hub "Ingresos de producción" —
       { name: "Ingreso de Producción", icon: PackagePlus },
-      { name: "Tolva", icon: Package },
-      { name: "Ver Tolva", icon: Eye },
       { name: "Ver ingresos de producción", icon: Eye },
       { name: "Aprobación de ingreso de producción", icon: CheckCircle },
+      { name: "Historial Aprobaciones", icon: History },
+      // — Hub "Tolva" —
       // Toma las toneladas APROBADAS del día por Turno 1/Turno 2 (ventana
       // horaria programada en RRHH > Programación de turnos, Auxiliar Mixto)
       // y genera la orden de Tolva/Tolva f en cabeceraoc con un click.
       { name: "Liquidación Tolva del día", icon: Wallet },
+      { name: "Tolva", icon: Package },
+      { name: "Ver Tolva", icon: Eye },
+      // — Hub "Control de piso" —
       { name: "Dashboard de Producción", icon: Activity },
       { name: "Reporte de Paros", icon: AlertTriangle },
-      { name: "Historial Aprobaciones", icon: History },
+      // — Pantalla sola —
       { name: "Reprocesos", icon: ArrowRightLeft },
-      { name: "Servicios Adicionales", icon: Clock },
     ],
   },
   {

@@ -337,7 +337,7 @@ export function Sidebar({
   const allMenuItems = [
     { key: null, label: "Inicio", icon: Home },
     { key: "integral" as GroupKey, label: "Torre de Control", icon: LayoutDashboard },
-    { key: "pedidos" as GroupKey, label: "Pedidos", icon: FileText },
+    { key: "pedidos" as GroupKey, label: "Pedidos y solicitudes", icon: FileText },
     { key: "despachos" as GroupKey, label: "Recepción y Despacho", icon: Truck },
     { key: "inventarios" as GroupKey, label: "Almacenamiento", icon: Package },
     { key: "mrp" as GroupKey, label: "MRP · Materiales", icon: Layers },
