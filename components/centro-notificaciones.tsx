@@ -478,6 +478,17 @@ export function CentroNotificaciones({ empresaId, userId }: { empresaId: number 
     setOpen(false)
     window.dispatchEvent(new CustomEvent("lipgo:navigate-module", { detail: modulo }))
   }
+  // Abrir la pantalla donde se gestiona la sección. Donde existe un salto con
+  // filtro (Gestión de Facturas ya filtrada en "pendiente", mismo evento que usa
+  // Ciclo de Facturación) se usa; si no, se abre el módulo.
+  const abrirSeccion = (s: Seccion) => {
+    if (s.key === "facturas") {
+      setOpen(false)
+      window.dispatchEvent(new CustomEvent("lipgo:ir-a-gestionar-facturas", { detail: { estado: "pendiente" } }))
+      return
+    }
+    irA(s.modulo)
+  }
 
   return (
     <Popover
@@ -542,59 +553,71 @@ export function CentroNotificaciones({ empresaId, userId }: { empresaId: number 
             </div>
           ) : (
             visibles.map((s, i) => {
-              const abierta = abiertas[s.key] ?? i === 0
+              // Pocas secciones: todas abiertas; muchas: solo la más grave.
+              const abierta = abiertas[s.key] ?? (i === 0 || visibles.length <= 3)
+              const toggle = () => setAbiertas((prev) => ({ ...prev, [s.key]: !abierta }))
               const Icono = s.icono
               const tono = HUE[s.hue]
               return (
                 <div key={s.key} className="border-b last:border-b-0">
-                  <button
-                    type="button"
-                    onClick={() => setAbiertas((prev) => ({ ...prev, [s.key]: !abierta }))}
-                    className={cn("flex w-full items-start gap-3 px-4 py-3 text-left transition-colors", tono.hover)}
-                    aria-expanded={abierta}
-                  >
-                    <span className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", tono.icono)}>
-                      <Icono className="h-4 w-4" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2">
-                        <span className="truncate text-sm font-semibold">{s.titulo}</span>
-                        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", NIVEL[s.nivel].punto)} title={NIVEL[s.nivel].etiqueta} />
+                  {/* Cabecera: el texto despliega el detalle; "Abrir" lleva a la pantalla
+                      donde se gestiona (siempre visible, sin tener que desplegar). */}
+                  <div className={cn("flex items-center gap-2 px-3 py-2.5 transition-colors sm:px-4", tono.hover)}>
+                    <button type="button" onClick={toggle} className="flex min-w-0 flex-1 items-start gap-3 text-left" aria-expanded={abierta}>
+                      <span className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", tono.icono)}>
+                        <Icono className="h-4 w-4" />
                       </span>
-                      <span className="block truncate text-xs text-muted-foreground">{s.descripcion}</span>
-                    </span>
-                    <span className="flex shrink-0 items-center gap-1.5">
-                      <Badge variant="secondary" className={cn("px-1.5 text-xs", tono.chip)}>{s.cantidad}</Badge>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="truncate text-sm font-semibold">{s.titulo}</span>
+                          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", NIVEL[s.nivel].punto)} title={NIVEL[s.nivel].etiqueta} />
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">{s.descripcion}</span>
+                      </span>
+                    </button>
+                    <Badge variant="secondary" className={cn("shrink-0 px-1.5 text-xs", tono.chip)}>{s.cantidad}</Badge>
+                    <button
+                      type="button"
+                      onClick={() => abrirSeccion(s)}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-semibold text-foreground shadow-sm transition-colors hover:bg-accent"
+                      title={`Abrir ${s.destino}`}
+                    >
+                      Abrir
+                      <ArrowUpRight className="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" onClick={toggle} className="shrink-0 rounded p-1 hover:bg-background" aria-label={abierta ? "Ocultar detalle" : "Ver detalle"}>
                       <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", abierta && "rotate-180")} />
-                    </span>
-                  </button>
+                    </button>
+                  </div>
                   {abierta && (
-                    <div className="bg-muted/20 pb-2">
+                    <div className="bg-muted/20 pb-1">
                       <div className="divide-y border-t">
+                        {/* Cada fila también abre la pantalla de gestión. */}
                         {s.items.slice(0, MAX_ITEMS).map((it) => (
-                          <div key={it.key} className="px-4 py-2">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-medium">{it.titulo}</p>
-                                {it.detalle && <div className="mt-0.5 text-xs text-muted-foreground">{it.detalle}</div>}
-                              </div>
-                              {it.etiqueta && (
-                                <Badge variant="outline" className={cn("shrink-0 text-[11px]", tono.borde)}>{it.etiqueta}</Badge>
-                              )}
-                            </div>
-                          </div>
+                          <button
+                            key={it.key}
+                            type="button"
+                            onClick={() => abrirSeccion(s)}
+                            title={`Abrir ${s.destino}`}
+                            className="group flex w-full items-start justify-between gap-2 px-3 py-2 text-left transition-colors hover:bg-background sm:px-4"
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium">{it.titulo}</span>
+                              {it.detalle && <span className="mt-0.5 block text-xs text-muted-foreground">{it.detalle}</span>}
+                            </span>
+                            {it.etiqueta && (
+                              <Badge variant="outline" className={cn("shrink-0 text-[11px]", tono.borde)}>{it.etiqueta}</Badge>
+                            )}
+                            <ArrowUpRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-40 transition-opacity group-hover:opacity-100" />
+                          </button>
                         ))}
                       </div>
-                      <div className="flex items-center justify-between gap-2 border-t px-4 pt-2">
+                      <div className="flex items-center justify-between gap-2 border-t px-3 py-1.5 sm:px-4">
                         <span className="truncate text-[11px] text-muted-foreground">
-                          {s.cantidad > MAX_ITEMS ? `y ${s.cantidad - MAX_ITEMS} más en ${s.destino}` : NIVEL[s.nivel].etiqueta}
+                          {s.cantidad > MAX_ITEMS ? `y ${s.cantidad - MAX_ITEMS} más` : NIVEL[s.nivel].etiqueta}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => irA(s.modulo)}
-                          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium transition-colors hover:bg-accent"
-                        >
-                          Abrir {s.destino}
+                        <button type="button" onClick={() => abrirSeccion(s)} className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-primary hover:underline">
+                          Ver todo en {s.destino}
                           <ArrowUpRight className="h-3 w-3" />
                         </button>
                       </div>
