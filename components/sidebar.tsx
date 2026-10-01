@@ -24,6 +24,7 @@ import type { GroupKey, Module, Subgroup } from "@/lib/dashboard-data"
 import { groups } from "@/lib/dashboard-data"
 import { colorDeEntrada, hubDe, plegarEnHubs, type EntradaMenu } from "@/lib/navegacion"
 import { useState, useEffect, useMemo, type CSSProperties } from "react"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 
 interface SidebarProps {
   selectedGroup: GroupKey | null
@@ -172,6 +173,11 @@ export function Sidebar({
   const [expandedSubgroups, setExpandedSubgroups] = useState<Set<string>>(new Set())
   // Texto del buscador de modulos del menu lateral.
   const [moduleSearch, setModuleSearch] = useState("")
+  // Cajón móvil (Fase 3): se cierra solo al navegar.
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  useEffect(() => {
+    setDrawerOpen(false)
+  }, [selectedGroup, selectedModule])
 
   // Permisos del usuario para filtrar el menu. Se cargan una sola vez al
   // montar el sidebar y se mantienen en memoria. Hasta que se reciba la
@@ -482,6 +488,182 @@ export function Sidebar({
     )
   }
 
+  // Árbol del menú (áreas → subgrupos → pantallas). Lo usan la barra lateral de
+  // escritorio (colapsable) y el cajón móvil (siempre expandido). Un solo
+  // render para que nunca diverjan.
+  const renderArbol = (colapsado: boolean) => (
+    <>
+          {/* Resultados del buscador: lista plana de modulos coincidentes */}
+          {!colapsado && normalizedSearch.length > 0 ? (
+            searchResults.length > 0 ? (
+              searchResults.map((m) => {
+                const ModuleIcon = m.icon
+                const isModuleActive = selectedModule === m.name && selectedGroup === m.groupKey
+                return (
+                  <button
+                    key={`${m.groupKey}-${m.name}`}
+                    onClick={() => handleSelectFromSearch(m.groupKey, m.name)}
+                    className={`
+                      flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-xs
+                      transition-all duration-200
+                      ${
+                        isModuleActive
+                          ? "text-foreground bg-accent/70 font-medium"
+                          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                      }
+                    `}
+                  >
+                    <span className="flex items-center gap-2">
+                      <ModuleIcon className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span className="text-left">{m.label}</span>
+                    </span>
+                    <span className="pl-5 text-[10px] text-muted-foreground/70">
+                      {m.groupLabel}
+                      {m.subgroupTitle ? ` · ${m.subgroupTitle}` : ""}
+                    </span>
+                  </button>
+                )
+              })
+            ) : (
+              <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+                No se encontraron módulos
+              </p>
+            )
+          ) : (
+            menuItems.map((item) => {
+            const Icon = item.icon
+            const isGroupActive = selectedGroup === item.key
+            const isExpanded = item.key ? expandedGroups.has(item.key) : false
+            const group = item.key ? visibleGroups.find((g) => g.key === item.key) : null
+
+            // Inicio button (no accordion)
+            if (!item.key) {
+              return (
+                <button
+                  key={item.label}
+                  onClick={() => {
+                    onSelectGroup(null)
+                    onSelectModule(null)
+                  }}
+                  className={`
+                    flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium
+                    transition-all duration-200 relative
+                    ${
+                      isGroupActive
+                        ? "text-foreground bg-accent"
+                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                    }
+                    ${colapsado ? "justify-center" : ""}
+                  `}
+                  title={colapsado ? item.label : undefined}
+                >
+                  {isGroupActive && (
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
+                  )}
+                  <span className="lipgo-tile" style={{ color: "#9fb6cc" }}>
+                    <Icon className="h-[15px] w-[15px]" />
+                  </span>
+                  {!colapsado && <span className="whitespace-nowrap">{item.label}</span>}
+                </button>
+              )
+            }
+
+            // Group accordion buttons
+            return (
+              <div key={item.label} className="space-y-1">
+                <button
+                  onClick={() => {
+                    if (!colapsado) {
+                      onSelectGroup(item.key!)
+                      onSelectModule(null)
+                      toggleGroup(item.key!)
+                    }
+                  }}
+                  className={`
+                    flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium
+                    transition-all duration-200 relative
+                    ${
+                      isGroupActive
+                        ? "text-foreground bg-accent"
+                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                    }
+                    ${colapsado ? "justify-center" : "justify-between"}
+                  `}
+                  title={colapsado ? item.label : undefined}
+                >
+                  <div className="flex items-center gap-3">
+                    {isGroupActive && (
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
+                    )}
+                    <span className="lipgo-tile" style={{ color: GROUP_TINT[item.key!] ?? "#9fb6cc" }}>
+                      <Icon className="h-[15px] w-[15px]" />
+                    </span>
+                    {!colapsado && <span className="whitespace-nowrap">{item.label}</span>}
+                  </div>
+                  {!colapsado && (
+                    <ChevronDown
+                      className={`h-4 w-4 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
+                    />
+                  )}
+                </button>
+
+                {/* Module/Subgroup list - shown when expanded */}
+                <div
+                  className={`
+                    ml-4 space-y-1 border-l border-border pl-2
+                    overflow-hidden transition-all duration-300 ease-in-out
+                    ${!colapsado && isExpanded ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0"}
+                  `}
+                >
+                  {!colapsado && group && (
+                    <>
+                      {group.subgroups
+                        ? // Render subgroups
+                          group.subgroups.map((subgroup) => {
+                            const subgroupKey = `${item.key}-${subgroup.title}`
+                            const isSubgroupExpanded = expandedSubgroups.has(subgroupKey)
+
+                            return (
+                              <div key={subgroup.title} className="space-y-1">
+                                <button
+                                  onClick={() => toggleSubgroup(item.key!, subgroup.title)}
+                                  className={`
+                                  flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium
+                                  transition-all duration-200 justify-between
+                                  text-muted-foreground hover:bg-accent/50 hover:text-foreground
+                                `}
+                                >
+                                  <span className="text-left whitespace-nowrap">{subgroup.title}</span>
+                                  <ChevronDown
+                                    className={`h-3 w-3 transition-transform duration-200 flex-shrink-0 ${isSubgroupExpanded ? "rotate-180" : ""}`}
+                                  />
+                                </button>
+
+                                {/* Subgroup modules */}
+                                <div
+                                  className={`
+                                  ml-3 space-y-1 border-l border-border pl-2
+                                  overflow-hidden transition-all duration-300 ease-in-out
+                                  ${isSubgroupExpanded ? "max-h-96 opacity-100" : "max-h-0 opacity-0"}
+                                `}
+                                >
+                                  {plegarEnHubs(item.key!, subgroup.modules).map((e) => renderEntrada(e, item.key!))}
+                                </div>
+                              </div>
+                            )
+                          })
+                        : // Render direct modules (for groups without subgroups)
+                          plegarEnHubs(item.key!, group.modules ?? []).map((e) => renderEntrada(e, item.key!))}
+                    </>
+                  )}
+                </div>
+              </div>
+            )
+            })
+          )}
+    </>
+  )
+
   return (
     <>
       {/* Rediseño "Torre de Control" (2026-07-03): re-skin OSCURO premium del
@@ -623,181 +805,63 @@ export function Sidebar({
 
         {/* Module/Subgroup list - shown when expanded */}
         <nav className="flex-1 space-y-0.5 lg:space-y-1 p-2 lg:p-4 overflow-y-auto overflow-x-hidden">
-          {/* Resultados del buscador: lista plana de modulos coincidentes */}
-          {!collapsed && normalizedSearch.length > 0 ? (
-            searchResults.length > 0 ? (
-              searchResults.map((m) => {
-                const ModuleIcon = m.icon
-                const isModuleActive = selectedModule === m.name && selectedGroup === m.groupKey
-                return (
-                  <button
-                    key={`${m.groupKey}-${m.name}`}
-                    onClick={() => handleSelectFromSearch(m.groupKey, m.name)}
-                    className={`
-                      flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-xs
-                      transition-all duration-200
-                      ${
-                        isModuleActive
-                          ? "text-foreground bg-accent/70 font-medium"
-                          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                      }
-                    `}
-                  >
-                    <span className="flex items-center gap-2">
-                      <ModuleIcon className="h-3.5 w-3.5 flex-shrink-0" />
-                      <span className="text-left">{m.label}</span>
-                    </span>
-                    <span className="pl-5 text-[10px] text-muted-foreground/70">
-                      {m.groupLabel}
-                      {m.subgroupTitle ? ` · ${m.subgroupTitle}` : ""}
-                    </span>
-                  </button>
-                )
-              })
-            ) : (
-              <p className="px-3 py-4 text-center text-xs text-muted-foreground">
-                No se encontraron módulos
-              </p>
-            )
-          ) : (
-            menuItems.map((item) => {
-            const Icon = item.icon
-            const isGroupActive = selectedGroup === item.key
-            const isExpanded = item.key ? expandedGroups.has(item.key) : false
-            const group = item.key ? visibleGroups.find((g) => g.key === item.key) : null
-
-            // Inicio button (no accordion)
-            if (!item.key) {
-              return (
-                <button
-                  key={item.label}
-                  onClick={() => {
-                    onSelectGroup(null)
-                    onSelectModule(null)
-                  }}
-                  className={`
-                    flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium
-                    transition-all duration-200 relative
-                    ${
-                      isGroupActive
-                        ? "text-foreground bg-accent"
-                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                    }
-                    ${collapsed ? "justify-center" : ""}
-                  `}
-                  title={collapsed ? item.label : undefined}
-                >
-                  {isGroupActive && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
-                  )}
-                  <span className="lipgo-tile" style={{ color: "#9fb6cc" }}>
-                    <Icon className="h-[15px] w-[15px]" />
-                  </span>
-                  {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
-                </button>
-              )
-            }
-
-            // Group accordion buttons
-            return (
-              <div key={item.label} className="space-y-1">
-                <button
-                  onClick={() => {
-                    if (!collapsed) {
-                      onSelectGroup(item.key!)
-                      onSelectModule(null)
-                      toggleGroup(item.key!)
-                    }
-                  }}
-                  className={`
-                    flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium
-                    transition-all duration-200 relative
-                    ${
-                      isGroupActive
-                        ? "text-foreground bg-accent"
-                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                    }
-                    ${collapsed ? "justify-center" : "justify-between"}
-                  `}
-                  title={collapsed ? item.label : undefined}
-                >
-                  <div className="flex items-center gap-3">
-                    {isGroupActive && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
-                    )}
-                    <span className="lipgo-tile" style={{ color: GROUP_TINT[item.key!] ?? "#9fb6cc" }}>
-                      <Icon className="h-[15px] w-[15px]" />
-                    </span>
-                    {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
-                  </div>
-                  {!collapsed && (
-                    <ChevronDown
-                      className={`h-4 w-4 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
-                    />
-                  )}
-                </button>
-
-                {/* Module/Subgroup list - shown when expanded */}
-                <div
-                  className={`
-                    ml-4 space-y-1 border-l border-border pl-2
-                    overflow-hidden transition-all duration-300 ease-in-out
-                    ${!collapsed && isExpanded ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0"}
-                  `}
-                >
-                  {!collapsed && group && (
-                    <>
-                      {group.subgroups
-                        ? // Render subgroups
-                          group.subgroups.map((subgroup) => {
-                            const subgroupKey = `${item.key}-${subgroup.title}`
-                            const isSubgroupExpanded = expandedSubgroups.has(subgroupKey)
-
-                            return (
-                              <div key={subgroup.title} className="space-y-1">
-                                <button
-                                  onClick={() => toggleSubgroup(item.key!, subgroup.title)}
-                                  className={`
-                                  flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium
-                                  transition-all duration-200 justify-between
-                                  text-muted-foreground hover:bg-accent/50 hover:text-foreground
-                                `}
-                                >
-                                  <span className="text-left whitespace-nowrap">{subgroup.title}</span>
-                                  <ChevronDown
-                                    className={`h-3 w-3 transition-transform duration-200 flex-shrink-0 ${isSubgroupExpanded ? "rotate-180" : ""}`}
-                                  />
-                                </button>
-
-                                {/* Subgroup modules */}
-                                <div
-                                  className={`
-                                  ml-3 space-y-1 border-l border-border pl-2
-                                  overflow-hidden transition-all duration-300 ease-in-out
-                                  ${isSubgroupExpanded ? "max-h-96 opacity-100" : "max-h-0 opacity-0"}
-                                `}
-                                >
-                                  {plegarEnHubs(item.key!, subgroup.modules).map((e) => renderEntrada(e, item.key!))}
-                                </div>
-                              </div>
-                            )
-                          })
-                        : // Render direct modules (for groups without subgroups)
-                          plegarEnHubs(item.key!, group.modules ?? []).map((e) => renderEntrada(e, item.key!))}
-                    </>
-                  )}
-                </div>
-              </div>
-            )
-            })
-          )}
+          {renderArbol(collapsed)}
         </nav>
       </aside>
+
+      {/* Cajón móvil (Fase 3, 2026-09-30): el menú COMPLETO en celular, con el
+          buscador global arriba. Antes la barra inferior solo llegaba a 5 áreas
+          y las pantallas eran inalcanzables desde el teléfono. */}
+      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <SheetContent side="left" className="lipgo-sb z-[70] w-[86vw] max-w-sm gap-0 p-0 md:hidden [&>button]:text-white/70">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Menú</SheetTitle>
+          </SheetHeader>
+          <div className="flex h-full flex-col">
+            <div className="flex items-center border-b border-border px-3 py-3 pr-12">
+              <button
+                type="button"
+                onClick={() => {
+                  setDrawerOpen(false)
+                  onSelectGroup(null)
+                  onSelectModule(null)
+                }}
+                className="flex items-center gap-2 text-left"
+              >
+                <span className="lipgo-logo-mark">L</span>
+                <span className="lipgo-word">LIPgo</span>
+              </button>
+            </div>
+            <div className="px-3 pt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setDrawerOpen(false)
+                  setTimeout(() => window.dispatchEvent(new CustomEvent("lipgo:open-palette")), 150)
+                }}
+                className="flex w-full items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm text-muted-foreground"
+              >
+                <Search className="h-4 w-4" /> Buscar o ir a…
+              </button>
+            </div>
+            <nav className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden p-3">{renderArbol(false)}</nav>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Mobile Bottom Navigation */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 safe-area-pb">
         <nav className="flex items-center justify-around px-1 py-1.5">
-          {menuItems.slice(0, 5).map((item) => {
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            className="flex min-w-0 flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 text-muted-foreground transition-colors"
+            aria-label="Abrir menú"
+          >
+            <Menu className="h-4 w-4 flex-shrink-0 sm:h-5 sm:w-5" />
+            <span className="max-w-[60px] truncate text-[9px] font-medium sm:text-[10px]">Menú</span>
+          </button>
+          {menuItems.slice(0, 4).map((item) => {
             const Icon = item.icon
             const isActive = selectedGroup === item.key
 
