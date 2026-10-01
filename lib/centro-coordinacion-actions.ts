@@ -16,6 +16,7 @@ import { getColombiaDateTime, getColombiaTime } from "@/lib/date-utils"
 import { pesoBaseCalculo, excluirAvimolDistribucion } from "@/lib/nomina-calculo-utils"
 import { getSlaCargueMin, esNombreSubproducto, esModoCargaRequerido, type TipologiaProducto } from "@/lib/sla-acordados"
 import { esProductoPorUnidad } from "@/lib/facturacion-billed-party"
+import { idsOrdenPorUnidad } from "@/lib/ordenes-por-unidad"
 import { reportarInterno } from "@/lib/reporte-interno-actions"
 import {
   TON_MES_CARGUE_DESCARGUE,
@@ -433,12 +434,17 @@ export async function getCentroCoordinacion(
     const ordenesPausadas = new Set(await getOrdenesPausadas())
 
     // 7) Armar OrdenOperativa por cada orden activa.
+    // Huevos / Empaque MP (por unidad) también fuera de "cargado hoy": su peso
+    // son unidades (regla compartida en lib/ordenes-por-unidad.ts). El set de
+    // activas (`esPorUnidadPorOrden`) no cubre las ya cerradas de hoy.
+    const porUnidadCerradas = await idsOrdenPorUnidad(admin, todasOrdenes.filter((o: any) => o.fincargue).map((o: any) => o.id))
     let cargadoHoyTon = 0
     for (const o of todasOrdenes) {
       if (!o.fincargue) continue
       const tipo = String(o.tipooperacion || "").trim()
       if (tipo === "proyeccion") continue // residuo de un módulo manual descontinuado en jul-2026, nunca tonelaje real
       if (excluirAvimolDistribucion(idempresa, tipo)) continue
+      if (porUnidadCerradas.has(Number(o.id)) || esPorUnidadPorOrden.has(o.id)) continue
       const { peso } = pesoBaseCalculo(idempresa, tipo, num(o.pesovascula), num(o.pesoorden))
       if (peso > 0) cargadoHoyTon += peso
     }

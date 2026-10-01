@@ -23,6 +23,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getHorarioTolva } from "@/lib/horario-tolva-actions"
 import { getDespachoKpis, getVehiculosNoProcesados } from "@/lib/pedidos-kpis-actions"
 import { getControlToneladas } from "@/lib/control-toneladas-actions"
+import { codigosOrdenPorUnidad } from "@/lib/ordenes-por-unidad"
 import { TON_MES_CARGUE_DESCARGUE, DIAS_OPERACION_MES } from "@/lib/meta-productividad-utils"
 import type {
   CoberturaTurno,
@@ -445,15 +446,25 @@ export async function getOperacionDia(
       metaTonDia: Math.round(((TON_MES_CARGUE_DESCARGUE[empresaId] || 0) / DIAS_OPERACION_MES) * 10) / 10,
       tiempoPromMin: null,
       auxiliares: [],
+      porUnidad: { ordenes: 0, unidades: 0 },
       disponible: false,
       mensaje: null,
     }
     try {
-      const [kpis, patio, ton] = await Promise.all([
+      const [kpis, patio, ton, hoyRaw] = await Promise.all([
         getDespachoKpis(empresaId),
         getVehiculosNoProcesados(empresaId),
         getControlToneladas(empresaId, fecha, fecha),
+        sb.from("cabeceraoc").select("ordendecargue, pesovascula, pesoorden").eq("idempresa", empresaId).eq("fechacargue", fecha).not("fincargue", "is", null).limit(500),
       ])
+      // Huevos / Empaque MP de hoy: por unidad, aparte de las toneladas.
+      const hoyOrds: any[] = hoyRaw?.data ?? []
+      const setUnidad = await codigosOrdenPorUnidad(sb, hoyOrds.map((o) => o.ordendecargue))
+      for (const o of hoyOrds) {
+        if (!setUnidad.has(String(o.ordendecargue ?? "").trim())) continue
+        operacionHoy.porUnidad.ordenes++
+        operacionHoy.porUnidad.unidades += Number(o.pesovascula) || Number(o.pesoorden) || 0
+      }
       operacionHoy.ordenesHoy = kpis.ordenesHoy
       operacionHoy.finalizadas = kpis.finalizadasHoy
       operacionHoy.sinCerrar = kpis.sinCerrar

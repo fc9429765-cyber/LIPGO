@@ -23,6 +23,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { pesoBaseCalculo, excluirAvimolDistribucion, liquidable } from "@/lib/nomina-calculo-utils"
+import { codigosOrdenPorUnidad } from "@/lib/ordenes-por-unidad"
 
 const num = (v: any) => Number(v || 0)
 const r3 = (v: number) => Math.round(v * 1000) / 1000
@@ -180,10 +181,20 @@ export async function getProductividadAuxiliares(
     let operacionesTolva = 0
     let tonTolva = 0
 
+    // Órdenes por unidad (Huevos / Empaque MP): su "peso" son unidades. Fuera
+    // de las toneladas; se informan aparte.
+    const porUnidadSet = await codigosOrdenPorUnidad(admin, ordenes.map((o: any) => o.ordendecargue))
+    const porUnidad = { ordenes: 0, unidades: 0 }
+
     for (const o of ordenes) {
       const planta = Number(o.idempresa)
       const tipoTxt = String(o.tipooperacion || "").trim()
       if (excluirAvimolDistribucion(planta, tipoTxt)) continue
+      if (porUnidadSet.has(String(o.ordendecargue ?? "").trim())) {
+        porUnidad.ordenes++
+        porUnidad.unidades += num(o.pesovascula) || num(o.pesoorden)
+        continue
+      }
       const { peso } = pesoBaseCalculo(planta, tipoTxt, num(o.pesovascula), num(o.pesoorden))
       if (peso <= 0) continue
       const tipo = clasificarOperacion(tipoTxt)
@@ -383,6 +394,7 @@ export async function getProductividadAuxiliares(
         desde,
         hasta,
         plantas: emps,
+        porUnidad: { ordenes: porUnidad.ordenes, unidades: Math.round(porUnidad.unidades) },
         totalOrdenes,
         ordenesConReal,
         coberturaReal: totalOrdenes ? r1((ordenesConReal / totalOrdenes) * 100) : 0,

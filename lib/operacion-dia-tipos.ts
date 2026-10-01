@@ -100,6 +100,8 @@ export interface OperacionHoy {
   tiempoPromMin: number | null
   /** Auxiliares con tonelaje hoy, de mayor a menor. */
   auxiliares: { persona: string; ton: number }[]
+  /** Descargues POR UNIDAD de hoy (Huevos / Empaque MP): aparte de las toneladas. */
+  porUnidad: { ordenes: number; unidades: number }
   disponible: boolean
   mensaje: string | null
 }

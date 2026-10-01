@@ -5,6 +5,27 @@ import {
   rewriteMetaDiaRows,
   buildSyntheticMetaRow,
 } from "@/lib/empresa-meta-dia"
+import { esProductoPorUnidad } from "@/lib/facturacion-billed-party"
+
+// Huevos / Empaque MP (Avimol) se facturan y pagan POR UNIDAD: lo que las
+// vistas traen como "toneladas" para ese "Tipo de Producto" son unidades (una
+// orden del 30-sep-2026 traía 102.000). Se sacan de TODO el tonelaje del
+// dashboard y se devuelven aparte en `porUnidad` para una tarjeta pequeña.
+const esFilaPorUnidad = (r: any) => esProductoPorUnidad(r?.["Tipo de Producto"] ?? r?.tipo_producto)
+const sinUnidad = (rows: any[] | null | undefined) => (rows ?? []).filter((r) => !esFilaPorUnidad(r))
+function resumenPorUnidad(metaRows: any[] | null | undefined) {
+  let viajes = 0
+  let unidades = 0
+  const productos = new Set<string>()
+  for (const r of metaRows ?? []) {
+    if (!esFilaPorUnidad(r)) continue
+    viajes += Number(r["Total Viajes/Tickets"] ?? r.total_viajes ?? 0) || 0
+    unidades += Number(r["Total Toneladas Procesadas"] ?? r.total_toneladas ?? 0) || 0
+    const p = String(r["Tipo de Producto"] ?? r.tipo_producto ?? "").trim()
+    if (p) productos.add(p)
+  }
+  return { viajes, unidades: Math.round(unidades), productos: Array.from(productos) }
+}
 
 export async function GET(request: Request) {
   try {
@@ -104,22 +125,26 @@ export async function GET(request: Request) {
       // emitimos una fila sintetica con la meta para que el
       // dashboard pueda mostrar la barra "objetivo" aunque aun
       // no haya operaciones registradas.
+      const metaHoy = sinUnidad(metaRes.data)
+      const metaPrev = sinUnidad(metaPrevRes.data)
       const metaDiaRows =
-        metaRes.data && metaRes.data.length > 0
-          ? rewriteMetaDiaRows(metaRes.data, metaDiaTon)
+        metaHoy.length > 0
+          ? rewriteMetaDiaRows(metaHoy, metaDiaTon)
           : [buildSyntheticMetaRow(empresaIdNum, colombiaDate, metaDiaTon)]
       const metaDiaPrevRows =
-        metaPrevRes.data && metaPrevRes.data.length > 0
-          ? rewriteMetaDiaRows(metaPrevRes.data, metaDiaTon)
+        metaPrev.length > 0
+          ? rewriteMetaDiaRows(metaPrev, metaDiaTon)
           : [buildSyntheticMetaRow(empresaIdNum, prevDate, metaDiaTon)]
-      const last7MetaRows = rewriteMetaDiaRows(meta7Res.data, metaDiaTon)
+      const last7MetaRows = rewriteMetaDiaRows(sinUnidad(meta7Res.data), metaDiaTon)
 
       return NextResponse.json({
         metaDia: metaDiaRows,
         metaDiaPrev: metaDiaPrevRows,
-        toneladasDia: tonRes.data || [],
-        toneladasDiaPrev: tonPrevRes.data || [],
+        toneladasDia: sinUnidad(tonRes.data),
+        toneladasDiaPrev: sinUnidad(tonPrevRes.data),
         last7Meta: last7MetaRows,
+        porUnidad: resumenPorUnidad(metaRes.data),
+        porUnidadPrev: resumenPorUnidad(metaPrevRes.data),
         date: colombiaDate,
         prevDate,
       })
@@ -188,14 +213,16 @@ export async function GET(request: Request) {
       // distinta del array recibe la constante de empresa
       // distribuida proporcionalmente entre sus filas.
       const metaDiaTonMonthly = getMetaDiaForEmpresa(Number(empresaId))
-      const metaRowsMonthly = rewriteMetaDiaRows(metaRes.data, metaDiaTonMonthly)
-      const metaPrevRowsMonthly = rewriteMetaDiaRows(metaPrevRes.data, metaDiaTonMonthly)
+      const metaRowsMonthly = rewriteMetaDiaRows(sinUnidad(metaRes.data), metaDiaTonMonthly)
+      const metaPrevRowsMonthly = rewriteMetaDiaRows(sinUnidad(metaPrevRes.data), metaDiaTonMonthly)
 
       return NextResponse.json({
         metaDia: metaRowsMonthly,
         metaDiaPrev: metaPrevRowsMonthly,
-        toneladasDia: tonRes.data || [],
-        toneladasDiaPrev: tonPrevRes.data || [],
+        toneladasDia: sinUnidad(tonRes.data),
+        toneladasDiaPrev: sinUnidad(tonPrevRes.data),
+        porUnidad: resumenPorUnidad(metaRes.data),
+        porUnidadPrev: resumenPorUnidad(metaPrevRes.data),
         month: targetMonth,
         startDate,
         endDate,

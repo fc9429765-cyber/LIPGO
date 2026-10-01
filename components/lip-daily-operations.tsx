@@ -61,6 +61,8 @@ export function LipDailyOperations() {
   const [tonDia, setTonDia] = useState<ToneladaDiaRecord[]>([])
   const [tonPrev, setTonPrev] = useState<ToneladaDiaRecord[]>([])
   const [last7, setLast7] = useState<Last7Record[]>([])
+  // Huevos / Empaque MP: por unidad, aparte de las toneladas (tarjeta pequeña).
+  const [porUnidad, setPorUnidad] = useState<{ viajes: number; unidades: number; productos: string[] }>({ viajes: 0, unidades: 0, productos: [] })
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState("")
   const [currentDate, setCurrentDate] = useState("")
@@ -114,6 +116,7 @@ export function LipDailyOperations() {
       setTonDia(normalizeTon(json.toneladasDia))
       setTonPrev(normalizeTon(json.toneladasDiaPrev))
       setLast7(normalizeLast7(json.last7Meta))
+      setPorUnidad(json.porUnidad ?? { viajes: 0, unidades: 0, productos: [] })
       setCurrentDate(json.date || "")
     } catch (e) {
       console.error("[v0] LIP daily error:", e)
@@ -319,6 +322,17 @@ export function LipDailyOperations() {
           </Card>
         ))}
       </div>
+
+      {/* Por unidad (Huevos / Empaque MP): no son el core del ID y no son
+          toneladas. Tarjeta pequeña, aparte, para que no contaminen nada. */}
+      {porUnidad.viajes > 0 && (
+        <div className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+          <span className="font-semibold">{porUnidad.productos.join(" / ") || "Por unidad"}</span>
+          <span>{porUnidad.viajes} descargue{porUnidad.viajes === 1 ? "" : "s"}</span>
+          <span>{porUnidad.unidades.toLocaleString("es-CO")} unidades</span>
+          <span className="text-amber-700/80 dark:text-amber-300/80">se cobran y pagan por unidad · no suman toneladas</span>
+        </div>
+      )}
 
       {/* Sparkline + Alerts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

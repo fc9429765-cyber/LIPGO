@@ -281,6 +281,17 @@ export default function ProductividadAuxiliares() {
             )}
           </div>
 
+          {/* Por unidad (Huevos / Empaque MP en Avimol): se pagan y facturan por
+              unidad; NO entran a las toneladas. Tarjeta pequeña, aparte. */}
+          {data.porUnidad.ordenes > 0 && (
+            <div className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
+              <span className="font-semibold">Huevos y empaque por unidad</span>
+              <span>{data.porUnidad.ordenes} orden{data.porUnidad.ordenes === 1 ? "" : "es"}</span>
+              <span>{data.porUnidad.unidades.toLocaleString("es-CO")} unidades</span>
+              <span className="text-amber-700/80">se pagan por unidad · no suman toneladas ni entran al ranking</span>
+            </div>
+          )}
+
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="flex-wrap">
               <TabsTrigger value="ranking">Ranking</TabsTrigger>

@@ -613,6 +613,17 @@ export function OperacionDelDia() {
                     </div>
                   )}
 
+                  {d.operacionHoy.porUnidad.ordenes > 0 && (
+                    <p className="mt-2 inline-flex flex-wrap items-center gap-x-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-900">
+                      <span className="font-semibold">Huevos por unidad:</span>
+                      <span>
+                        {d.operacionHoy.porUnidad.ordenes} descargue{d.operacionHoy.porUnidad.ordenes === 1 ? "" : "s"} ·{" "}
+                        {NUM.format(d.operacionHoy.porUnidad.unidades)} unidades
+                      </span>
+                      <span className="text-amber-700/80">aparte, no suman toneladas</span>
+                    </p>
+                  )}
+
                   {d.operacionHoy.auxiliares.length > 0 && (
                     <div className="mt-3 grid grid-cols-2 gap-3 text-[11px]">
                       <div>

@@ -144,6 +144,11 @@ export interface ProductividadData {
   auxiliaresTolva: number
   totalAuxiliares: number
   promedioTonAuxiliarDia: number
+  /**
+   * Órdenes POR UNIDAD (Huevos / Empaque MP en Avimol): se pagan y facturan por
+   * unidad, NO entran a las toneladas. Se informan aparte (tarjeta pequeña).
+   */
+  porUnidad: { ordenes: number; unidades: number }
   auxiliares: AuxiliarProductividad[]
   dias: DiaProductividad[]
   vehiculos: VehiculoProductividad[]
