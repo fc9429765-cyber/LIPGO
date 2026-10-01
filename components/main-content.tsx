@@ -30,6 +30,7 @@ import { ModuleHub } from "@/components/module-hub"
 import { MigaNavegacion } from "@/components/miga-navegacion"
 import { ContinuarReciente } from "@/components/continuar-reciente"
 import { hubDe } from "@/lib/navegacion"
+import type { RegistroEncontrado } from "@/lib/buscar-registros-actions"
 import { GroupKey } from "@/lib/dashboard-data"
 import dynamic from "next/dynamic"
 import { ModuleLoading } from "@/components/module-loading"
@@ -236,6 +237,10 @@ export function MainContent({
     fechaDesde?: string
     fechaHasta?: string
   } | null>(null)
+  // Salto desde el buscador global (Ctrl+K › Registros): abre Gestión de
+  // Ordenes filtrado por número de orden, o Head Count por cédula. El módulo
+  // avisa cuando lo aplicó y aquí se limpia (si no, reaparecería al volver).
+  const [registroInicial, setRegistroInicial] = React.useState<RegistroEncontrado | null>(null)
 
   // Saludo del hero: personalizado por hora del día + nombre + empresa. Se
   // calcula en useEffect para no romper la hidratación (hora del server ≠ cliente).
@@ -373,16 +378,25 @@ export function MainContent({
       onSelectModule("Gestión de Facturas")
     }
 
+    const handleAbrirRegistro = (event: Event) => {
+      const d = (event as CustomEvent<RegistroEncontrado>).detail
+      if (!d?.modulo || !d.busqueda) return
+      setRegistroInicial(d)
+      onSelectModule(d.modulo)
+    }
+
     window.addEventListener("navigate-to-bascula", handleNavigateToBascula)
     window.addEventListener("navigate-to-sanitary-registry", handleNavigateToSanitaryRegistry)
     window.addEventListener("lipgo:ver-ausentismos-persona", handleVerAusentismosPersona)
     window.addEventListener("lipgo:ir-a-gestionar-facturas", handleIrAGestionarFacturas)
+    window.addEventListener("lipgo:abrir-registro", handleAbrirRegistro)
 
     return () => {
       window.removeEventListener("navigate-to-bascula", handleNavigateToBascula)
       window.removeEventListener("navigate-to-sanitary-registry", handleNavigateToSanitaryRegistry)
       window.removeEventListener("lipgo:ver-ausentismos-persona", handleVerAusentismosPersona)
       window.removeEventListener("lipgo:ir-a-gestionar-facturas", handleIrAGestionarFacturas)
+      window.removeEventListener("lipgo:abrir-registro", handleAbrirRegistro)
     }
   }, [onSelectModule, setSelectedEmpresaId])
 
@@ -425,7 +439,10 @@ export function MainContent({
             </PermissionGuard>
           ) : name === "Gestión de Ordenes" ? (
             <PermissionGuard moduleName="Gestión de Ordenes">
-              <LoadOrdersManagement />
+              <LoadOrdersManagement
+                initialSearch={registroInicial?.modulo === "Gestión de Ordenes" ? { orden: registroInicial.busqueda, periodo: registroInicial.periodo } : null}
+                onInitialSearchApplied={() => setRegistroInicial(null)}
+              />
             </PermissionGuard>
           ) : name === "Dashboard Despachos/Recepción" ? (
             <PermissionGuard moduleName="Dashboard Despachos/Recepción">
@@ -720,7 +737,10 @@ export function MainContent({
             </PermissionGuard>
           ) : name === "Head Count" ? (
             <PermissionGuard moduleName="Head Count">
-              <HeadcountManagement />
+              <HeadcountManagement
+                initialSearch={registroInicial?.modulo === "Head Count" ? { identificacion: registroInicial.busqueda, tab: registroInicial.tab } : null}
+                onInitialSearchApplied={() => setRegistroInicial(null)}
+              />
             </PermissionGuard>
           ) : name === "Nominapersonal" ? (
             <PermissionGuard moduleName="Nominapersonal">

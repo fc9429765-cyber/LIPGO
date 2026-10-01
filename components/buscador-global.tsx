@@ -21,7 +21,15 @@ import { useNavegacionPersonal } from "@/hooks/use-navegacion-personal"
 import { filterGroupsByPermissions, type GroupKey, type Module } from "@/lib/dashboard-data"
 import { ALIAS_MODULO, TINT_GRUPO, colorDeEntrada, etiquetaDeGrupo, etiquetaDeTab, grupoDeModulo, hubDe, plegarEnHubs, type Hub } from "@/lib/navegacion"
 import { APRENDIZAJE_POR_MODULO } from "@/lib/aprendizaje-content"
-import { Building2, Clock, Home, LogOut, Sparkles, Star, StarOff, type LucideIcon } from "lucide-react"
+import { buscarRegistros, type RegistroEncontrado, type TipoRegistro } from "@/lib/buscar-registros-actions"
+import { Building2, Clock, Home, LogOut, Sparkles, Star, StarOff, Truck, UserRound, type LucideIcon } from "lucide-react"
+
+/** Módulo hoja que abre cada tipo de registro; solo se busca si el usuario lo ve. */
+const MODULO_POR_TIPO: Record<TipoRegistro, string> = { orden: "Gestión de Ordenes", persona: "Head Count" }
+const ESTILO_REGISTRO: Record<TipoRegistro, { icon: LucideIcon; color: string; destino: string }> = {
+  orden: { icon: Truck, color: "#2563eb", destino: "Gestión de Órdenes" },
+  persona: { icon: UserRound, color: "#7c3aed", destino: "Head Count" },
+}
 
 const normalizar = (s: string) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
 
@@ -52,11 +60,15 @@ interface BuscadorGlobalProps {
 
 export function BuscadorGlobal({ onNavigate, onOpenGroup, onInicio, moduloActual, lipbotMontado }: BuscadorGlobalProps) {
   const router = useRouter()
-  const { accessibleEmpresas, selectedEmpresaId, setSelectedEmpresaId, signOut } = useAuth()
+  const { accessibleEmpresas, selectedEmpresaId, selectedEmpresaNombre, setSelectedEmpresaId, signOut } = useAuth()
   const { loaded, allowedModules, isModuleVisible } = useModulePermissions()
   const { favoritos, recientes, esFavorito, toggleFavorito } = useNavegacionPersonal()
   const [abierto, setAbierto] = useState(false)
   const [q, setQ] = useState("")
+  // Registros (órdenes por número/placa, personas por nombre/cédula) del
+  // proyecto activo: se consultan al servidor con retardo de 250 ms.
+  const [registros, setRegistros] = useState<RegistroEncontrado[]>([])
+  const [buscandoRegistros, setBuscandoRegistros] = useState(false)
 
   // Abrir/cerrar: Ctrl/⌘+K y evento global.
   useEffect(() => {
@@ -228,6 +240,48 @@ export function BuscadorGlobal({ onNavigate, onOpenGroup, onInicio, moduloActual
     for (const it of indice) if (it.tipo === "modulo" && it.modulo && !m.has(it.modulo)) m.set(it.modulo, it)
     return m
   }, [indice])
+
+  // ---- Registros: órdenes y personas ---------------------------------------
+  // Solo los tipos cuyo módulo destino puede ver el usuario; se dispara con 3+
+  // caracteres (o 2+ dígitos: número de orden) para no consultar por cada tecla.
+  const tiposVisibles = useMemo<TipoRegistro[]>(
+    () => (loaded ? (Object.keys(MODULO_POR_TIPO) as TipoRegistro[]).filter((t) => isModuleVisible(MODULO_POR_TIPO[t])) : []),
+    [loaded, isModuleVisible],
+  )
+  // Clave de texto: `isModuleVisible` cambia de identidad en cada render y un
+  // arreglo nuevo en las dependencias relanzaría la consulta en bucle.
+  const tiposClave = tiposVisibles.join(",")
+  const buscaRegistros = abierto && !!selectedEmpresaId && tiposClave.length > 0 && (nq.length >= 3 || /^\d{2,}$/.test(nq))
+  useEffect(() => {
+    if (!buscaRegistros) {
+      setRegistros([])
+      setBuscandoRegistros(false)
+      return
+    }
+    let vivo = true
+    const t = setTimeout(() => {
+      setBuscandoRegistros(true)
+      buscarRegistros(selectedEmpresaId, q.trim(), tiposClave.split(",").filter(Boolean) as TipoRegistro[])
+        .then((r) => {
+          if (vivo) setRegistros(r.success ? r.data : [])
+        })
+        .catch(() => {
+          if (vivo) setRegistros([])
+        })
+        .finally(() => {
+          if (vivo) setBuscandoRegistros(false)
+        })
+    }, 250)
+    return () => {
+      vivo = false
+      clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buscaRegistros, nq, selectedEmpresaId, tiposClave])
+
+  const abrirRegistro = (r: RegistroEncontrado) => {
+    cerrarY(() => window.dispatchEvent(new CustomEvent("lipgo:abrir-registro", { detail: r })))
+  }
   const itemsRecientes = tokens.length ? [] : recientes.map((r) => porModulo.get(r.modulo)).filter((x): x is ItemBusqueda => !!x).slice(0, 5)
   const itemsFavoritos = tokens.length ? [] : favoritos.map((f) => porModulo.get(f)).filter((x): x is ItemBusqueda => !!x).slice(0, 8)
 
@@ -270,13 +324,22 @@ export function BuscadorGlobal({ onNavigate, onOpenGroup, onInicio, moduloActual
           shouldFilter={false}
           className="flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground"
           onKeyDown={(e) => {
-            if (e.key === "Enter" && tokens.length > 0 && resultados.modulos.length === 0 && resultados.acciones.length === 0) {
+            if (e.key === "Enter" && tokens.length > 0 && resultados.modulos.length === 0 && resultados.acciones.length === 0 && registros.length === 0) {
               e.preventDefault()
               preguntarLipbot()
             }
           }}
         >
-          <CommandInput value={q} onValueChange={setQ} placeholder="Buscar pantalla, módulo o acción… (por ejemplo: báscula, turnos, cuarentena)" className="h-12 text-sm" />
+          <CommandInput
+            value={q}
+            onValueChange={setQ}
+            placeholder={
+              tiposVisibles.length > 0
+                ? "Buscar pantalla, orden, placa, persona o acción… (por ejemplo: báscula, 12345, ABC123, Pérez)"
+                : "Buscar pantalla, módulo o acción… (por ejemplo: báscula, turnos, cuarentena)"
+            }
+            className="h-12 text-sm"
+          />
           <CommandList className="max-h-[60vh]">
             <CommandEmpty>
               <div className="space-y-1 px-2">
@@ -306,6 +369,34 @@ export function BuscadorGlobal({ onNavigate, onOpenGroup, onInicio, moduloActual
                   <Fila key={it.id} it={it} />
                 ))}
               </CommandGroup>
+            )}
+            {registros.length > 0 && (
+              <CommandGroup heading={`Registros · ${selectedEmpresaNombre || `ID ${selectedEmpresaId}`}`}>
+                {registros.map((r) => {
+                  const est = ESTILO_REGISTRO[r.tipo]
+                  const Icon = est.icon
+                  return (
+                    <CommandItem key={r.id} value={`reg:${r.id}`} onSelect={() => abrirRegistro(r)} className="gap-3 py-2">
+                      <span
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                        style={{ background: `color-mix(in srgb, ${est.color} 14%, #fff)`, color: est.color, boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${est.color} 22%, transparent)` }}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-foreground">{r.titulo}</span>
+                        <span className="block truncate text-[11px] text-muted-foreground">
+                          {r.subtitulo} · abre {est.destino}
+                        </span>
+                      </span>
+                      <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{r.tipo === "orden" ? "orden" : "persona"}</span>
+                    </CommandItem>
+                  )
+                })}
+              </CommandGroup>
+            )}
+            {buscandoRegistros && registros.length === 0 && (
+              <div className="px-3 py-1.5 text-[11px] text-muted-foreground">Buscando órdenes y personas en el proyecto…</div>
             )}
             {tokens.length > 0 && (
               <CommandGroup heading="LIPbot">

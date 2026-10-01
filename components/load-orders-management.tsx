@@ -74,7 +74,14 @@ interface EmpresaInfo {
   logo: string | null
 }
 
-export function LoadOrdersManagement() {
+interface LoadOrdersManagementProps {
+  /** Salto desde el buscador global (Ctrl+K › Registros): abre ya filtrado por
+   *  número de orden, en el período donde está esa orden. No cambia nada más. */
+  initialSearch?: { orden: string; periodo?: PeriodoListado } | null
+  onInitialSearchApplied?: () => void
+}
+
+export function LoadOrdersManagement({ initialSearch, onInitialSearchApplied }: LoadOrdersManagementProps = {}) {
   const [orders, setOrders] = useState<LoadOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<"pendiente" | "finalizada" | "todas">("todas")
@@ -112,6 +119,17 @@ export function LoadOrdersManagement() {
   useEffect(() => {
     applyFilters()
   }, [orders, searchOrden, filterFechaOrden, filterFechaCargue, filterTipoOperacion, filterPlaca, filterEmpresa])
+
+  // Filtro inicial del buscador global: se aplica una vez y se avisa para que
+  // el padre lo limpie (si no, al volver al módulo reaparecería).
+  useEffect(() => {
+    if (!initialSearch?.orden) return
+    setStatusFilter("todas")
+    if (initialSearch.periodo) setPeriodo(initialSearch.periodo)
+    setSearchOrden(initialSearch.orden)
+    onInitialSearchApplied?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSearch])
 
   useEffect(() => {
     loadEmpresasData()
