@@ -114,7 +114,7 @@ function ResumenEjecutivo({ data }: { data: AnalisisData }) {
       <CardContent className="space-y-3 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            <div className="lg-eyebrow">
               Resumen ejecutivo del período
             </div>
             <div

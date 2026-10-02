@@ -1052,7 +1052,7 @@ function HeroPendientesTile({
         <Package className="h-5 w-5" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="lg-eyebrow">
           Toneladas pendientes
         </div>
         <div className="flex items-baseline gap-1.5 mt-0.5">
@@ -1240,7 +1240,7 @@ function DiaCard({
           >
             t
           </span>
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground ml-1">
+          <span className="lg-eyebrow ml-1">
             pendientes
           </span>
         </div>

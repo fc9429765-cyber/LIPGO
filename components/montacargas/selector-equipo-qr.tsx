@@ -106,7 +106,7 @@ export function SelectorEquipoQR({
 
       <div className="flex items-center gap-3">
         <span className="h-px flex-1 bg-border" />
-        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">o</span>
+        <span className="lg-eyebrow">o</span>
         <span className="h-px flex-1 bg-border" />
       </div>
 

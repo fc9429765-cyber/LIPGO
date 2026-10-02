@@ -467,7 +467,7 @@ export default function PrefacturaProduccion({ idempresaFija }: { idempresaFija?
                   </CardTitle>
                   <div className="text-right">
                     <div className="text-xs uppercase tracking-wide text-muted-foreground">Total a facturar</div>
-                    <div className="text-2xl font-extrabold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    <div className="lg-num text-2xl font-bold text-emerald-600 dark:text-emerald-400">
                       {money(totalSel)}
                     </div>
                   </div>

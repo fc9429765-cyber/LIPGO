@@ -121,7 +121,7 @@ function TarjetaEvento({ cfg, onGuardar }: { cfg: ConfigInterno; onGuardar: () =
   }
 
   return (
-    <section className="rounded-xl border border-border bg-card">
+    <section className="lg-card">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
         <div className="flex items-center gap-2.5">
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-semibold">
@@ -315,7 +315,7 @@ function Destinatarios({
   }
 
   return (
-    <section className="rounded-xl border border-border bg-card">
+    <section className="lg-card">
       <div className="border-b border-border px-4 py-3">
         <h3 className="flex items-center gap-2 text-sm font-semibold">
           <Users className="h-4 w-4" />
@@ -353,7 +353,7 @@ function Destinatarios({
                 {/* De qué empresas recibe. Sin marcar ninguna, recibe de
                     todas: es el caso de gerencia, y el más común. */}
                 <div className="mt-2">
-                  <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <p className="mb-1 lg-eyebrow">
                     Empresas
                   </p>
                   <div className="flex flex-wrap gap-1">
@@ -385,7 +385,7 @@ function Destinatarios({
 
                 {/* Sin marcar nada recibe todo: es lo más común y no obliga a
                     tocar cinco casillas para el caso normal. */}
-                <p className="mb-1 mt-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                <p className="mb-1 mt-2 lg-eyebrow">
                   Eventos
                 </p>
                 <div className="flex flex-wrap gap-1">
@@ -503,7 +503,7 @@ function Historial() {
   }, [cargar])
 
   return (
-    <section className="rounded-xl border border-border bg-card">
+    <section className="lg-card">
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
         <h3 className="text-sm font-semibold">Avisos enviados</h3>
         <Button variant="outline" size="sm" onClick={cargar} disabled={cargando} className="gap-1.5">
@@ -528,7 +528,7 @@ function Historial() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+              <tr className="border-b border-border text-left lg-eyebrow">
                 <th className="px-4 py-2 font-medium">Cuándo</th>
                 <th className="px-4 py-2 font-medium">Evento</th>
                 <th className="px-4 py-2 font-medium">Orden</th>

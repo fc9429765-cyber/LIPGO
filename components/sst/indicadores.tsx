@@ -473,10 +473,10 @@ function Grid({ children }: { children: React.ReactNode }) {
 function Stat({ l, v, c }: { l: string; v: string; c: string }) {
   return (
     <div className="ind-stat p-4">
-      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+      <div className="flex items-center gap-1.5 lg-eyebrow">
         <span className="inline-block h-2 w-2 rounded-full" style={{ background: c }} /> {l}
       </div>
-      <div className="mt-1 text-2xl font-extrabold tabular-nums tracking-tight text-foreground">{v}</div>
+      <div className="mt-1 lg-num text-2xl font-bold tracking-tight text-foreground">{v}</div>
     </div>
   )
 }

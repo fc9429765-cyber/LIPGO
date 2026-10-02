@@ -515,7 +515,7 @@ export default function RecobroIncapacidades() {
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <tr className="border-b text-left lg-eyebrow">
                       <th className="px-2 py-2">Colaborador</th>
                       <th className="px-2 py-2">Mes</th>
                       <th className="px-2 py-2">Tipo</th>

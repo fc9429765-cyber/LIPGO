@@ -1697,7 +1697,7 @@ function VehiculosEnPatioPanel({
         </div>
 
         <div className="flex items-baseline gap-1.5">
-          <span className="text-2xl font-extrabold tabular-nums leading-none text-slate-900">
+          <span className="lg-num text-2xl font-bold leading-none text-slate-900">
             {total}
           </span>
           <span className="text-xs text-slate-500 font-medium">en cola de atención</span>
@@ -1780,7 +1780,7 @@ function ClientesEnProcesoPanel({
         </div>
 
         <div className="flex items-baseline gap-1.5">
-          <span className="text-2xl font-extrabold tabular-nums leading-none text-slate-900">
+          <span className="lg-num text-2xl font-bold leading-none text-slate-900">
             {total}
           </span>
           <span className="text-xs text-slate-500 font-medium">
@@ -1868,7 +1868,7 @@ function ProgramacionHoraPanel({
         </div>
 
         <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-extrabold tabular-nums leading-none text-slate-900">
+          <span className="lg-num text-2xl font-bold leading-none text-slate-900">
             {totalProgramadoTon.toFixed(1)}
           </span>
           <span className="text-xs text-slate-500 font-medium">t programadas</span>

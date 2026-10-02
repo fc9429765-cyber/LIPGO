@@ -120,7 +120,7 @@ export function FacturacionProyectosIndicador() {
             <div className="mt-2 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <tr className="border-b text-left lg-eyebrow">
                     <th className="px-2 py-2">Proyecto</th>
                     <th className="px-2 py-2 text-right">Facturables</th>
                     <th className="px-2 py-2 text-right">Pendientes</th>

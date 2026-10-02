@@ -204,7 +204,7 @@ export default function NovedadesTiempoReal() {
       {/* Encabezado */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Novedades</p>
+          <p className="lg-eyebrow">Novedades</p>
           <h1 className="flex items-center gap-2 text-xl font-semibold">
             Novedades de personal
             {enVivo && (
@@ -244,7 +244,7 @@ export default function NovedadesTiempoReal() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,400px)_1fr]">
         {/* ---------------- REPORTAR ---------------- */}
-        <section className="h-fit rounded-xl border border-border bg-card">
+        <section className="h-fit lg-card">
           <div className="border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold">Reportar novedad</h2>
           </div>
@@ -381,7 +381,7 @@ export default function NovedadesTiempoReal() {
         </section>
 
         {/* ---------------- NOVEDADES DEL PERIODO ---------------- */}
-        <section className="rounded-xl border border-border bg-card">
+        <section className="lg-card">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
             <div>
               <h2 className="text-sm font-semibold">Novedades del periodo</h2>
@@ -443,7 +443,7 @@ export default function NovedadesTiempoReal() {
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-sm">
                 <thead>
-                  <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <tr className="border-b border-border lg-eyebrow">
                     <th className="px-3 py-2 text-left font-medium">Trabajador</th>
                     <th className="px-2 py-2 text-left font-medium">Novedad</th>
                     <th className="px-2 py-2 text-left font-medium">Fechas</th>

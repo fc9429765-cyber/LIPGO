@@ -109,7 +109,7 @@ export default function SeccionUtilidadNeta({
                   />
                 )}
                 <div>
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <p className="lg-eyebrow">
                     Margen neto
                   </p>
                   <p

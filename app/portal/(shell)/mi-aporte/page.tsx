@@ -197,18 +197,18 @@ export default function MiAportePage() {
               {data.desempeno ? (
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
                   <div>
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Puntaje</p>
+                    <p className="lg-eyebrow">Puntaje</p>
                     <p className="text-2xl font-bold" style={{ color: "#0D3B6E" }}>{data.desempeno.puntaje}</p>
                   </div>
                   <div>
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Riesgo</p>
+                    <p className="lg-eyebrow">Riesgo</p>
                     <p className="text-2xl font-bold" style={{ color: data.desempeno.riesgo <= 30 ? C.ok : data.desempeno.riesgo <= 60 ? C.warn : C.bad }}>
                       {data.desempeno.riesgo}%
                     </p>
                   </div>
                   {data.desempeno.decision && (
                     <div>
-                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Sugerencia</p>
+                      <p className="lg-eyebrow">Sugerencia</p>
                       <p className="text-sm font-semibold capitalize">{data.desempeno.decision}</p>
                     </div>
                   )}

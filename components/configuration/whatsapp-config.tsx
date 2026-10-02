@@ -191,7 +191,7 @@ export default function WhatsappConfig() {
     <div className="space-y-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Integraciones</p>
+          <p className="lg-eyebrow">Integraciones</p>
           <h1 className="flex items-center gap-2 text-xl font-semibold">
             <MessageCircle className="h-5 w-5" />
             WhatsApp
@@ -214,7 +214,7 @@ export default function WhatsappConfig() {
       )}
 
       {/* ESTADO DE LA CONEXIÓN */}
-      <section className="rounded-xl border border-border bg-card">
+      <section className="lg-card">
         <div className="border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold">Estado de la conexión</h2>
         </div>
@@ -248,24 +248,24 @@ export default function WhatsappConfig() {
           ) : (
             <div className="flex flex-wrap gap-6">
               <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Número</p>
+                <p className="lg-eyebrow">Número</p>
                 <p className="flex items-center gap-1.5 text-sm font-medium">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                   {estado.numeroVerificado}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                <p className="lg-eyebrow">
                   Nombre verificado
                 </p>
                 <p className="text-sm font-medium">{estado.nombreVerificado ?? "—"}</p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Token</p>
+                <p className="lg-eyebrow">Token</p>
                 <p className="font-mono text-sm">····{estado.tokenFinal}</p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">API</p>
+                <p className="lg-eyebrow">API</p>
                 <p className="font-mono text-sm">{estado.apiVersion}</p>
               </div>
             </div>
@@ -343,7 +343,7 @@ export default function WhatsappConfig() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* PRUEBA */}
-        <section className="h-fit rounded-xl border border-border bg-card">
+        <section className="h-fit lg-card">
           <div className="border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold">Enviar una prueba</h2>
           </div>
@@ -515,7 +515,7 @@ export default function WhatsappConfig() {
         </section>
 
         {/* BITÁCORA */}
-        <section className="rounded-xl border border-border bg-card">
+        <section className="lg-card">
           <div className="border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold">Últimos envíos</h2>
           </div>

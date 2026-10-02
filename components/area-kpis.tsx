@@ -111,7 +111,7 @@ export function AreaKpis({
                 <span className="truncate">{def.nombre}</span>
               </div>
               <div
-                className="mt-2 text-2xl font-extrabold tabular-nums tracking-tight"
+                className="mt-2 lg-num text-2xl font-bold tracking-tight"
                 style={{ color: v && !sinDatos ? color : "var(--muted-foreground)" }}
               >
                 {loading && !v ? "…" : sinDatos ? "Sin datos" : v ? formatKpi(def, v.valor) : "—"}

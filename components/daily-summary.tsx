@@ -105,7 +105,7 @@ export function DailySummary() {
               </text>
             </svg>
             <div>
-              <div className="text-2xl font-extrabold tabular-nums tracking-tight text-foreground">
+              <div className="lg-num text-2xl font-bold tracking-tight text-foreground">
                 {loading ? "…" : ton}
                 <span className="ml-0.5 text-sm font-bold text-muted-foreground">t</span>
               </div>

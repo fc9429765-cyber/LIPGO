@@ -286,7 +286,7 @@ export function MatrizIntegradaSIG({ selectedEmpresaId: propEmpresaId }: Props) 
                 {a.pct}%
               </span>
             </div>
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Avance real de la norma</p>
+            <p className="lg-eyebrow">Avance real de la norma</p>
             <Progress value={a.pct} className="mt-1 h-2" />
             <p className="mt-1.5 text-xs font-medium" style={{ color: SST_TOKENS.navy }}>
               {a.pesoObtenido.toFixed(1)} / {a.pesoTotal.toFixed(0)} pts (peso)

@@ -148,7 +148,7 @@ function Tarjeta({
     )
 
   return (
-    <section className="rounded-xl border border-border bg-card">
+    <section className="lg-card">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-semibold">
@@ -450,7 +450,7 @@ function Historial() {
   }, [cargar])
 
   return (
-    <section className="rounded-xl border border-border bg-card">
+    <section className="lg-card">
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
         <div>
           <h3 className="text-sm font-semibold">Avisos enviados</h3>
@@ -525,7 +525,7 @@ function Historial() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+              <tr className="border-b border-border text-left lg-eyebrow">
                 <th className="px-4 py-2 font-medium">Cuándo</th>
                 <th className="px-4 py-2 font-medium">Aviso</th>
                 <th className="px-4 py-2 font-medium">Orden</th>

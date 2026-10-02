@@ -294,7 +294,7 @@ export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" | "geren
           <div className="px-4 py-3">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                <tr className="text-left lg-eyebrow">
                   <th className="py-1 pr-2 text-right">Cant.</th>
                   <th className="py-1 pr-2">Tipo de vehículo</th>
                   <th className="py-1 pr-2">Destino / ruta</th>
@@ -344,7 +344,7 @@ export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" | "geren
             <datalist id="prog-destinos">{(cat?.destinos ?? []).map((d) => <option key={d} value={d} />)}</datalist>
             <datalist id="prog-productos">{(cat?.productos ?? []).map((p) => <option key={p} value={p} />)}</datalist>
             <div className="space-y-2">
-              <div className="hidden grid-cols-[72px_minmax(0,1.1fr)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_32px] gap-2 text-[11px] uppercase tracking-wide text-muted-foreground md:grid">
+              <div className="hidden grid-cols-[72px_minmax(0,1.1fr)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_32px] gap-2 lg-eyebrow md:grid">
                 <span>Cant.</span>
                 <span>Tipo de vehículo</span>
                 <span>Destino / ruta</span>
@@ -527,7 +527,7 @@ export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" | "geren
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <tr className="border-b border-border text-left lg-eyebrow">
                     <th className="px-4 py-2">Día</th>
                     <th className="px-2 py-2">Programación</th>
                     <th className="px-2 py-2 text-right">Prog.</th>

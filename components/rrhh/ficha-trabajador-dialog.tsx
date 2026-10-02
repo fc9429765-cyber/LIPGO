@@ -112,21 +112,21 @@ export function FichaTrabajadorDialog({
               <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                 <div className="rounded-lg border bg-muted/30 p-3">
                   <div className="text-lg font-bold tabular-nums">{ficha.resumen.tonAcumulada.toFixed(1)}t</div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Ton. acumuladas</div>
+                  <div className="lg-eyebrow">Ton. acumuladas</div>
                 </div>
                 <div className={`rounded-lg border p-3 ${ficha.resumen.pctCumplimiento < 70 ? "border-amber-300 bg-amber-50" : "bg-muted/30"}`}>
                   <div className={`text-lg font-bold tabular-nums ${ficha.resumen.pctCumplimiento < 70 ? "text-amber-700" : ""}`}>
                     {ficha.resumen.pctCumplimiento}%
                   </div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Meta cumplida</div>
+                  <div className="lg-eyebrow">Meta cumplida</div>
                 </div>
                 <div className="rounded-lg border bg-muted/30 p-3">
                   <div className="text-lg font-bold tabular-nums">{ficha.resumen.horasExtraSemana}h</div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Horas extra sem.</div>
+                  <div className="lg-eyebrow">Horas extra sem.</div>
                 </div>
                 <div className="rounded-lg border bg-muted/30 p-3">
                   <div className="text-lg font-bold tabular-nums">{ficha.resumen.diasTrabajados}</div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Días trabajados</div>
+                  <div className="lg-eyebrow">Días trabajados</div>
                 </div>
               </div>
 

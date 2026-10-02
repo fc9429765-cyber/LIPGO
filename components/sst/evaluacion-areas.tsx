@@ -114,7 +114,7 @@ export function EvaluacionAreas() {
                   <div className="mt-3 overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="border-b text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <tr className="border-b text-left lg-eyebrow">
                           <th className="px-1 py-1">Indicador</th>
                           <th className="px-1 py-1 text-right">Valor</th>
                           <th className="px-1 py-1 text-right">Meta</th>
@@ -192,7 +192,7 @@ export function EvaluacionAreas() {
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <tr className="border-b text-left lg-eyebrow">
                       <th className="px-2 py-1">Proyecto</th>
                       <th className="px-2 py-1">Coordinador</th>
                       <th className="px-2 py-1 text-right">Nota</th>

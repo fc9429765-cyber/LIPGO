@@ -190,13 +190,13 @@ export default function RequisicionPersonal() {
   return (
     <div className="space-y-4 p-4">
       <div>
-        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Requisición</p>
+        <p className="lg-eyebrow">Requisición</p>
         <h1 className="text-xl font-semibold">Solicitud de personal</h1>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* ---------------- FORMULARIO ---------------- */}
-        <section className="h-fit rounded-xl border border-border bg-card">
+        <section className="h-fit lg-card">
           <div className="border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold">Solicitar personal en misión{catalogos?.proyecto ? ` · ${catalogos.proyecto}` : ""}</h2>
             <p className="text-xs text-muted-foreground">
@@ -382,7 +382,7 @@ export default function RequisicionPersonal() {
               <div className="rounded-lg border border-border bg-muted/40 p-3">
                 <div className="flex flex-wrap items-end justify-between gap-2">
                   <div>
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <p className="lg-eyebrow">
                       Costo mensual estimado
                     </p>
                     <p className="text-2xl font-semibold tabular-nums">{COP.format(costo.total)}</p>
@@ -463,7 +463,7 @@ export default function RequisicionPersonal() {
         </section>
 
         {/* ---------------- REQUISICIONES EN CURSO ---------------- */}
-        <section className="rounded-xl border border-border bg-card">
+        <section className="lg-card">
           <div className="border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold">Requisiciones en curso</h2>
           </div>

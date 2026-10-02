@@ -120,7 +120,7 @@ export function CierreDiarioTira({
 
   const Dato = ({ l, v, tone }: { l: string; v: string; tone?: string }) => (
     <div className="min-w-0">
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{l}</div>
+      <div className="lg-eyebrow">{l}</div>
       <div className={`truncate text-sm font-bold tabular-nums ${tone ?? ""}`}>{v}</div>
     </div>
   )

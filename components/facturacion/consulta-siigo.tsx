@@ -285,7 +285,7 @@ export default function ConsultaSiigo() {
           </p>
         </div>
       ) : (
-        <section className="rounded-xl border border-border bg-card p-4">
+        <section className="lg-card p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="flex items-center gap-2 text-sm font-semibold">
@@ -357,7 +357,7 @@ export default function ConsultaSiigo() {
       )}
 
       {/* --- Filtros --- */}
-      <section className="rounded-xl border border-border bg-card p-4">
+      <section className="lg-card p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <Label className="text-xs">Desde</Label>
@@ -465,7 +465,7 @@ export default function ConsultaSiigo() {
       )}
 
       {/* --- Tabla --- */}
-      <section className="rounded-xl border border-border bg-card">
+      <section className="lg-card">
         {error ? (
           <div className="p-4">
             <p className="text-sm text-red-700">{error}</p>
@@ -482,7 +482,7 @@ export default function ConsultaSiigo() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                <tr className="border-b border-border text-left lg-eyebrow">
                   <th className="px-3 py-2">Factura</th>
                   <th className="px-3 py-2">Fecha</th>
                   <th className="px-3 py-2">Cliente</th>
@@ -619,11 +619,11 @@ export default function ConsultaSiigo() {
             <div className="space-y-4 p-5">
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-lg border border-border p-3">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</p>
+                  <p className="lg-eyebrow">Total</p>
                   <p className="mt-0.5 text-xl font-bold">{money(detalle.total, detalle.moneda)}</p>
                 </div>
                 <div className="rounded-lg border border-border p-3">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Saldo</p>
+                  <p className="lg-eyebrow">Saldo</p>
                   <p
                     className={`mt-0.5 text-xl font-bold ${detalle.pagada ? "text-emerald-700" : "text-amber-700"}`}
                   >

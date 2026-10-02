@@ -603,13 +603,13 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
               {/* Ancho completo tambien en celular (`col-span-2`): esta tarjeta
                   lleva barra de progreso y tres lineas de texto, y en media
                   pantalla de 360 px los numeros se partian. */}
-              <div className="col-span-2 rounded-lg border bg-card p-3 shadow-sm lg:col-span-2">
+              <div className="col-span-2 lg-card p-4 lg:col-span-2">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Cargado hoy</div>
+                  <div className="lg-eyebrow">Cargado hoy</div>
                   <Badge className={estadoColor[data.kpis.estadoTurno]}>{estadoLabel[data.kpis.estadoTurno]}</Badge>
                 </div>
                 <div className="mt-0.5 flex items-baseline gap-1">
-                  <span className="text-2xl font-extrabold tabular-nums">{t1(data.kpis.cargadoHoyTon)}</span>
+                  <span className="lg-num text-2xl font-bold">{t1(data.kpis.cargadoHoyTon)}</span>
                   <span className="text-xs text-muted-foreground">/ {t1(data.kpis.metaTonDia)} t meta del día</span>
                 </div>
                 <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
@@ -636,18 +636,18 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
                   </span>
                 </div>
               </div>
-              <div className="rounded-lg border bg-card p-3 shadow-sm">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Ritmo real</div>
+              <div className="lg-card p-4">
+                <div className="lg-eyebrow">Ritmo real</div>
                 <div className="mt-0.5 flex items-baseline gap-1">
-                  <span className="text-2xl font-extrabold tabular-nums">{t2(data.kpis.ritmoTonHora)}</span>
+                  <span className="lg-num text-2xl font-bold">{t2(data.kpis.ritmoTonHora)}</span>
                   <span className="text-xs text-muted-foreground">t/h</span>
                 </div>
                 <div className="text-[11px] text-muted-foreground">capacidad {t2(data.kpis.capacidadTonHora)} t/h</div>
               </div>
-              <div className="rounded-lg border bg-card p-3 shadow-sm">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Cumplimiento SLA</div>
+              <div className="lg-card p-4">
+                <div className="lg-eyebrow">Cumplimiento SLA</div>
                 <span
-                  className={`text-2xl font-extrabold tabular-nums ${
+                  className={`lg-num text-2xl font-bold ${
                     data.kpis.slaCumplimientoPct === null
                       ? "text-muted-foreground"
                       : data.kpis.slaCumplimientoPct >= 90
@@ -663,10 +663,10 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
                   <div className="text-[11px] font-medium text-rose-600 dark:text-rose-400">{data.kpis.ordenesEnRiesgo} vencida(s)</div>
                 )}
               </div>
-              <div className="rounded-lg border bg-card p-3 shadow-sm">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Personal en piso</div>
+              <div className="lg-card p-4">
+                <div className="lg-eyebrow">Personal en piso</div>
                 <div className="mt-0.5 flex items-baseline gap-1">
-                  <span className="text-2xl font-extrabold tabular-nums">{data.kpis.personalEnPiso}</span>
+                  <span className="lg-num text-2xl font-bold">{data.kpis.personalEnPiso}</span>
                   <span className="text-xs text-muted-foreground">aux.</span>
                 </div>
                 {/* Un solo renglon, como el resto de las tarjetas: dos lineas
@@ -715,7 +715,7 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
                 </div>
                 <div className="mt-0.5 flex items-baseline gap-1">
                   <span
-                    className={`text-2xl font-extrabold tabular-nums ${
+                    className={`lg-num text-2xl font-bold ${
                       data.kpis.esperaLotesPromedioMin === null
                         ? "text-muted-foreground"
                         : data.kpis.esperaLotesPromedioMin >= 60
@@ -765,16 +765,16 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
               </button>
               <div className="rounded-lg border border-[#0e3b3b] bg-[#0e3b3b] p-3 text-white">
                 <div className="text-[10px] font-semibold uppercase tracking-wide text-[#8fd3ce]">Proyección de cierre</div>
-                <div className="text-2xl font-extrabold tabular-nums text-[#21d4c8]">{data.kpis.proyeccionHoraFinCola || "—"}</div>
+                <div className="lg-num text-2xl font-bold text-[#21d4c8]">{data.kpis.proyeccionHoraFinCola || "—"}</div>
                 <div className="truncate whitespace-nowrap text-[11px] text-[#cfe9e6]">
                   muelles {data.kpis.muellesOcupados}/{data.kpis.muellesTotal}
                   {data.colaSinMuelle.length > 0 && ` · ${data.colaSinMuelle.length} en cola`}
                 </div>
               </div>
-              <div className="rounded-lg border bg-card p-3 shadow-sm">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Tiempo de cargue</div>
+              <div className="lg-card p-4">
+                <div className="lg-eyebrow">Tiempo de cargue</div>
                 <div className="mt-0.5 flex items-baseline gap-1">
-                  <span className="text-2xl font-extrabold tabular-nums">
+                  <span className="lg-num text-2xl font-bold">
                     {data.kpis.tiempoCargueProedioMin ?? "—"}
                   </span>
                   {data.kpis.tiempoCargueProedioMin != null && <span className="text-xs text-muted-foreground">min</span>}
@@ -816,7 +816,7 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
                   </button>
                 </div>
 
-                <div className="rounded-xl border bg-card shadow-sm">
+                <div className="lg-card">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-3 py-2.5 md:px-4 md:py-3">
                     <h2 className="text-sm font-bold">Distribución de muelles</h2>
                     <span className="hidden text-[11px] text-muted-foreground sm:inline">— toca un muelle para operarlo</span>
@@ -988,7 +988,7 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
               </div>
             </div>
 
-            <div className="rounded-xl border bg-card shadow-sm">
+            <div className="lg-card">
               <button
                 type="button"
                 onClick={toggleParteTurno}

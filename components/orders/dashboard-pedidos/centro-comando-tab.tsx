@@ -751,7 +751,7 @@ function CierreTile({
         </span>
       </div>
       <span
-        className={`text-2xl font-extrabold tabular-nums leading-none ${t.valueColor}`}
+        className={`lg-num text-2xl font-bold leading-none ${t.valueColor}`}
       >
         {value}
       </span>
