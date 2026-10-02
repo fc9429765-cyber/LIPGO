@@ -3755,7 +3755,13 @@ export async function crearCuadre(
       // "sistema" (convención del acta de cruce) y, si se aprobaba después
       // de crear el conteo, el mes quedaba con una diferencia "sin explicar"
       // del tamaño de esa entrada (caso real ID3, Conteo #8: 1.015 + 667 und).
-      const { porLote } = await calcularStockAlCorte(supabase, proyectoId, corte, { entradasDelDiaSonApertura: false })
+      // (2026-10-02) Los lotes NEGATIVOS también se listan (recortarNegativos:
+      // false): un lote en −140 significa que se despachó de un lote que no
+      // tenía esas unidades (quedaron en otro lote). Si el conteo lo esconde
+      // como 0, el físico nunca lo corrige y el error persiste meses (ID1:
+      // 17 lotes negativos, −1.645 und, el 2-oct). Listado, el contador lo
+      // ve y lo corrige con la reclasificación 309 desde el lote real.
+      const { porLote } = await calcularStockAlCorte(supabase, proyectoId, corte, { entradasDelDiaSonApertura: false, recortarNegativos: false })
       lineasBase = Object.values(porLote)
         .filter((r) => r.valor !== 0)
         .map((r) => ({ codproducto: r.codproducto, nombreproducto: r.producto || null, lote: r.lote || null, location: r.location || null, stock_actual: r.valor }))
