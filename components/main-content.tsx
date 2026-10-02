@@ -244,6 +244,8 @@ export function MainContent({
   // Ordenes filtrado por número de orden, o Head Count por cédula. El módulo
   // avisa cuando lo aplicó y aquí se limpia (si no, reaparecería al volver).
   const [registroInicial, setRegistroInicial] = React.useState<RegistroEncontrado | null>(null)
+  // Orden con la que el coordinador llega a Picking desde Centro de Coordinación ("Ir a Picking").
+  const [pickingOrderId, setPickingOrderId] = React.useState<number | null>(null)
 
   // Saludo del hero: personalizado por hora del día + nombre + empresa. Se
   // calcula en useEffect para no romper la hidratación (hora del server ≠ cliente).
@@ -339,6 +341,16 @@ export function MainContent({
       onSelectModule(d.modulo)
     }
 
+    // Centro de Coordinación → Picking con la orden abierta (reemplaza el
+    // "Confirmar Picking" por excepción: el coordinador verifica en Picking).
+    const handleIrAPicking = (event: Event) => {
+      const customEvent = event as CustomEvent<{ orderId: number }>
+      if (!customEvent.detail?.orderId) return
+      setPickingOrderId(customEvent.detail.orderId)
+      onSelectModule("Picking")
+    }
+
+    window.addEventListener("lipgo:ir-a-picking", handleIrAPicking)
     window.addEventListener("navigate-to-bascula", handleNavigateToBascula)
     window.addEventListener("navigate-to-sanitary-registry", handleNavigateToSanitaryRegistry)
     window.addEventListener("lipgo:ver-ausentismos-persona", handleVerAusentismosPersona)
@@ -351,6 +363,7 @@ export function MainContent({
       window.removeEventListener("lipgo:ver-ausentismos-persona", handleVerAusentismosPersona)
       window.removeEventListener("lipgo:ir-a-gestionar-facturas", handleIrAGestionarFacturas)
       window.removeEventListener("lipgo:abrir-registro", handleAbrirRegistro)
+      window.removeEventListener("lipgo:ir-a-picking", handleIrAPicking)
     }
   }, [onSelectModule, setSelectedEmpresaId])
 
@@ -512,7 +525,7 @@ export function MainContent({
             </PermissionGuard>
           ) : name === "Picking" ? (
             <PermissionGuard moduleName="Picking">
-              <Picking />
+              <Picking initialOrderId={pickingOrderId} onInitialOrderOpened={() => setPickingOrderId(null)} />
             </PermissionGuard>
           ) : name === "Packing" ? (
             <PermissionGuard moduleName="Packing">

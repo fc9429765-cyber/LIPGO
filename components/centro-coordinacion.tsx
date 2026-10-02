@@ -47,7 +47,6 @@ import {
   asignarOrdenAMuelle,
   liberarMuelle,
   getHojaDelMuelle,
-  marcarPickingConfirmadoPorExcepcion,
   getParteDeTurno,
   type CentroCoordinacionData,
   type OrdenOperativa,
@@ -60,7 +59,6 @@ import {
   assignPersonnelToOrder,
   pausarOrden,
   reanudarOrden,
-  confirmPicking,
   type PersonnelEmployee,
 } from "@/lib/picking-actions"
 import { PickingPhotoUploadDialog } from "@/components/picking-photo-upload-dialog"
@@ -233,7 +231,6 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
   const [photoDialogOpen, setPhotoDialogOpen] = useState(false)
 
   const [pausingOrder, setPausingOrder] = useState<string | null>(null)
-  const [confirmandoPickingId, setConfirmandoPickingId] = useState<number | null>(null)
 
   // Parte de turno — carga bajo demanda, solo cuando se abre. Control manual
   // (no <details>/<summary>): más predecible que depender del toggle nativo.
@@ -414,59 +411,18 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
   }
 
   /**
-   * Confirmación rápida de Picking desde el propio Centro de Coordinación.
-   * Problema real (2026-08-29/30): el montacarguista muchas veces verifica
-   * físicamente pero se va sin darle "Confirmar Picking" en Picking — la
-   * orden igual se cierra (esa pantalla nunca exigió picking confirmado),
-   * dejando líneas de `invtrans` en "por descontar" para siempre (el
-   * inventario real las excluye). Se detectaron 15 órdenes ya cerradas así.
-   * Ahora el servidor SÍ bloquea el cierre sin picking confirmado (ver
-   * upload-picking-photos/route.ts) — esto le da al coordinador, que es
-   * quien de verdad cierra la orden, una forma de resolverlo ahí mismo sin
-   * depender de que el montacarguista vuelva: confirma las líneas tal cual
-   * quedaron asignadas (mismo camino que "Confirmar Picking" sin QR).
+   * "Ir a Picking": lleva al coordinador a Picking con la orden ya abierta
+   * para que verifique línea por línea (lote y cantidad) y confirme allá.
+   *
+   * Aquí existió hasta el 2026-10-02 un "Confirmar Picking" por excepción que
+   * aprobaba las líneas tal cual quedaron asignadas, sin verificar nada. Se
+   * retiró por decisión de la gerencia: en la última semana de septiembre
+   * (ID3) 192 de 209 salidas se confirmaron así y el conteo del 1 de octubre
+   * no cuadró (lotes cruzados y cantidades que no salieron como se registró).
+   * Las líneas "por descontar" solo se aprueban desde Picking.
    */
-  const confirmarPickingRapido = async (orden: OrdenOperativa) => {
-    setConfirmandoPickingId(orden.orderId)
-    try {
-      let hoja = hojasPorOrden.get(orden.orderId)
-      if (!hoja) {
-        const r = await getHojaDelMuelle(orden.orderId)
-        if (r.success && r.data) {
-          hoja = r.data
-          setHojasPorOrden((prev) => new Map(prev).set(orden.orderId, r.data!))
-        }
-      }
-      const pendientes = (hoja?.lineas ?? []).filter((l) => String(l.status || "").toLowerCase() !== "aprobado")
-      if (pendientes.length === 0) {
-        toast({ title: "Nada pendiente", description: "Ya no hay líneas de picking sin confirmar." })
-        return
-      }
-      const items = pendientes.map((l) => ({ id: l.id, cantidad: l.cantidad }))
-      const r2 = await confirmPicking(orden.orderId, orden.ordendecargue, items)
-      if (r2.success) {
-        // Traza que esto fue una EXCEPCIÓN (coordinador, no montacarguista) —
-        // no bloquea el flujo si falla, es solo para auditoría.
-        await marcarPickingConfirmadoPorExcepcion(
-          pendientes.map((l) => l.id),
-          profile?.usuario || "Coordinador",
-        )
-        toast({ title: "Picking confirmado", description: `${pendientes.length} línea(s) verificada(s) — quedó registrado como excepción del coordinador.` })
-        // Fuerza recarga de la hoja (sus líneas ya cambiaron de estado) la
-        // próxima vez que se expanda, y refresca lineasAprobadas/lineasTotal
-        // del tablero (afecta el checklist "Realizar Picking").
-        setHojasPorOrden((prev) => {
-          const next = new Map(prev)
-          next.delete(orden.orderId)
-          return next
-        })
-        await cargar()
-      } else {
-        toast({ title: "Error", description: r2.message || "No se pudo confirmar el picking", variant: "destructive" })
-      }
-    } finally {
-      setConfirmandoPickingId(null)
-    }
+  const irAPicking = (orden: OrdenOperativa) => {
+    window.dispatchEvent(new CustomEvent("lipgo:ir-a-picking", { detail: { orderId: orden.orderId } }))
   }
 
   const togglePausa = async (orden: OrdenOperativa) => {
@@ -871,8 +827,7 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
                         onReasignar={() => slot.orden && abrirAsignar(slot.orden)}
                         onCambioTipoPago={cargar}
                         onCambioModoCarga={cargar}
-                        onConfirmarPicking={() => slot.orden && confirmarPickingRapido(slot.orden)}
-                        confirmandoPickingId={confirmandoPickingId}
+                        onIrAPicking={() => slot.orden && irAPicking(slot.orden)}
                         pausingOrder={pausingOrder}
                         puedeConcluirSinPersonal={slot.orden ? puedeConcluirSinPersonal(slot.orden) : false}
                         metaPorHoraTrabajador={data.kpis.metaPorHoraTrabajador}
@@ -1391,8 +1346,7 @@ function MuelleRow({
   onReasignar,
   onCambioTipoPago,
   onCambioModoCarga,
-  onConfirmarPicking,
-  confirmandoPickingId,
+  onIrAPicking,
   pausingOrder,
   puedeConcluirSinPersonal,
   metaPorHoraTrabajador,
@@ -1412,8 +1366,7 @@ function MuelleRow({
   onReasignar: () => void
   onCambioTipoPago: () => void
   onCambioModoCarga: () => void
-  onConfirmarPicking: () => void
-  confirmandoPickingId: number | null
+  onIrAPicking: () => void
   pausingOrder: string | null
   puedeConcluirSinPersonal: boolean
   metaPorHoraTrabajador: number
@@ -1579,19 +1532,18 @@ function MuelleRow({
           {pasoActual?.role === "op" && pasoActual.label === "Realizar Picking" ? (
             <div className="space-y-2 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
               <div>
-                🚜 <strong className="text-foreground">Realizar Picking</strong> lo hace normalmente el operario de montacargas
-                desde Picking (celular, con QR) — pero si ya verificó físicamente y no alcanzó a confirmarlo ahí, puedes
-                confirmarlo tú mismo aquí para no dejar la orden sin poder cerrarse.
+                🚜 <strong className="text-foreground">Realizar Picking</strong> lo hace el operario de montacargas desde
+                Picking (celular, con QR). Si lo vas a tramitar tú, se hace allá mismo: se verifica cada línea (lote y
+                cantidad) y se confirma. Desde aquí no se aprueban líneas sin verificar.
               </div>
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 border-amber-400 text-xs text-amber-800 hover:bg-amber-50 dark:text-amber-300"
-                onClick={onConfirmarPicking}
-                disabled={confirmandoPickingId === o.orderId}
+                className="h-7 border-teal-600 text-xs text-teal-800 hover:bg-teal-50 dark:text-teal-300"
+                onClick={onIrAPicking}
               >
                 <CheckSquare className="mr-1 h-3 w-3" />
-                {confirmandoPickingId === o.orderId ? "Confirmando..." : "Confirmar Picking"}
+                Ir a Picking de esta orden
               </Button>
             </div>
           ) : pasoActual?.role === "op" ? (

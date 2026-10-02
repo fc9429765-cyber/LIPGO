@@ -63,7 +63,15 @@ interface ExtendedPickingItem extends PickingItem {
   qrAccumulatedQuantity?: number
 }
 
-function Picking() {
+function Picking({
+  initialOrderId = null,
+  onInitialOrderOpened,
+}: {
+  // Orden con la que llega el coordinador desde Centro de Coordinación
+  // ("Ir a Picking"): se abre directo su verificación línea por línea.
+  initialOrderId?: number | null
+  onInitialOrderOpened?: () => void
+} = {}) {
   const { toast } = useToast()
   const { profile, selectedEmpresaId } = useAuth()
   const [orders, setOrders] = useState<PendingLoadOrder[]>([])
@@ -188,6 +196,29 @@ const loadOrders = async () => {
       loadOrders()
     }
   }, [selectedEmpresaId])
+
+  // Salto con dato desde Centro de Coordinación ("Ir a Picking"): el
+  // coordinador llega con una orden puntual y se le abre directo la
+  // verificación línea por línea. Si la orden ya no está pendiente (cerrada o
+  // sin lote), se avisa y se queda en la lista. El atajo "Confirmar Picking"
+  // por excepción del Centro de Coordinación se retiró el 2026-10-02: en la
+  // última semana de septiembre (ID3) 192 de 209 salidas se confirmaron así,
+  // sin verificar lote ni cantidad, y el conteo del 1-oct no cuadró.
+  useEffect(() => {
+    if (!initialOrderId || loading) return
+    const orden = orders.find((o) => o.id === initialOrderId)
+    if (orden) {
+      void handlePerformPicking(orden)
+    } else {
+      toast({
+        title: "La orden no está pendiente de picking",
+        description: "Ya se cerró o aún no tiene lote asignado; no hay líneas para verificar aquí.",
+        variant: "destructive",
+      })
+    }
+    onInitialOrderOpened?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialOrderId, loading, orders])
 
   /**
    * Modo de verificacion EFECTIVO de una linea. Todas arrancan en "simple",
