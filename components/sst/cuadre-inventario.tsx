@@ -187,24 +187,36 @@ export function CuadreInventario() {
     autoTable(doc, {
       startY: 45,
       head: [["Concepto", "Valor"]],
-      body: [
-        ["Stock sistema (libro)", fmtN(sel.total_sistema)],
-        ["Conteo físico", fmtN(sel.total_conteo)],
-        ["Diferencia", fmtN(sel.total_diferencia)],
-        ["Ítems contados", fmtN(sel.items)],
-        ["Ítems con diferencia", fmtN(sel.items_con_diferencia)],
-      ],
+      // Conteo aprobado: las correcciones 701/702 ya se contabilizaron, el sistema
+      // quedó igual al físico y la diferencia vigente es 0; lo encontrado se
+      // reporta como hallazgo corregido.
+      body: sel.estado === "aprobado"
+        ? [
+            ["Stock sistema (libro, antes de corregir)", fmtN(sel.total_sistema)],
+            ["Conteo físico", fmtN(sel.total_conteo)],
+            ["Hallazgo corregido con 701/702", fmtN(sel.total_diferencia)],
+            ["Diferencia vigente (tras correcciones)", "0"],
+            ["Ítems contados", fmtN(sel.items)],
+            ["Ítems corregidos", fmtN(sel.items_con_diferencia)],
+          ]
+        : [
+            ["Stock sistema (libro)", fmtN(sel.total_sistema)],
+            ["Conteo físico", fmtN(sel.total_conteo)],
+            ["Diferencia", fmtN(sel.total_diferencia)],
+            ["Ítems contados", fmtN(sel.items)],
+            ["Ítems con diferencia", fmtN(sel.items_con_diferencia)],
+          ],
       styles: { fontSize: 9 },
       headStyles: { fillColor: [13, 59, 110] },
     })
     const difs = detalle.filter((d) => (Number(d.diferencia) || 0) !== 0)
     let y = (doc as any).lastAutoTable.finalY + 8
     if (difs.length > 0) {
-      doc.text("Ítems con diferencia:", 14, y)
+      doc.text(sel.estado === "aprobado" ? "Ítems corregidos (701 sobrante / 702 faltante):" : "Ítems con diferencia:", 14, y)
       autoTable(doc, {
         startY: y + 3,
-        head: [["Producto", "Lote", "Sistema", "Conteo", "Diferencia"]],
-        body: difs.slice(0, 40).map((d) => [d.producto ?? "", d.lote ?? "", fmtN(d.sistema), fmtN(d.conteo), fmtN(d.diferencia)]),
+        head: [sel.estado === "aprobado" ? ["Producto", "Lote", "Sistema antes", "Conteo", "Corrección"] : ["Producto", "Lote", "Sistema", "Conteo", "Diferencia"]],
+        body: difs.slice(0, 40).map((d) => [d.producto ?? "", d.lote ?? "", fmtN(d.sistema), fmtN(d.conteo), sel.estado === "aprobado" ? `${Number(d.diferencia) > 0 ? "701 +" : "702 "}${fmtN(d.diferencia)}` : fmtN(d.diferencia)]),
         styles: { fontSize: 8 },
         headStyles: { fillColor: [13, 59, 110] },
       })
@@ -427,6 +439,13 @@ export function CuadreInventario() {
   if (sel) {
     const est = ESTADO_CUADRE[sel.estado ?? "borrador"] ?? ESTADO_CUADRE.borrador
     const editable = sel.estado === "borrador" || sel.estado === "contado"
+    // Conteo APROBADO = sus correcciones 701/702 ya se contabilizaron, así que el
+    // sistema quedó igual al físico: la diferencia que se muestra es 0 y lo que
+    // se encontró queda como "hallazgo corregido" (regla de gerencia 2026-10-02:
+    // "una vez se aplican los códigos de corrección esto debe quedar en 0").
+    // Los campos guardados (sistema, diferencia) no se tocan: son el hallazgo
+    // original y de ahí sale el ERI.
+    const corregido = sel.estado === "aprobado"
     return (
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -465,10 +484,19 @@ export function CuadreInventario() {
         </div>
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <SigKpi label="Sistema" value={fmt(sel.total_sistema)} accent={SST_TOKENS.navy} />
+          <SigKpi label={corregido ? "Sistema (ajustado)" : "Sistema"} value={fmt(corregido ? detalle.reduce((s, d) => s + (Number(d.conteo) || 0), 0) : sel.total_sistema)} accent={SST_TOKENS.navy} />
           <SigKpi label="Conteo físico" value={fmt(detalle.reduce((s, d) => s + (Number(d.conteo) || 0), 0))} accent={SST_TOKENS.navy} />
-          <SigKpi label="Diferencia" value={fmt(difTotal)} accent={difTotal === 0 ? SST_TOKENS.ok : SST_TOKENS.bad} valueColor={difTotal === 0 ? SST_TOKENS.ok : SST_TOKENS.bad} />
-          <SigKpi label="Ítems con diferencia" value={conDif} accent={conDif ? SST_TOKENS.bad : SST_TOKENS.ok} valueColor={conDif ? SST_TOKENS.bad : SST_TOKENS.ok} />
+          {corregido ? (
+            <>
+              <SigKpi label="Diferencia" value="0" accent={SST_TOKENS.ok} valueColor={SST_TOKENS.ok} />
+              <SigKpi label={`Hallazgo corregido (701/702)`} value={`${difTotal > 0 ? "+" : ""}${fmt(difTotal)} · ${conDif} ítems`} accent={SST_TOKENS.navy} />
+            </>
+          ) : (
+            <>
+              <SigKpi label="Diferencia" value={fmt(difTotal)} accent={difTotal === 0 ? SST_TOKENS.ok : SST_TOKENS.bad} valueColor={difTotal === 0 ? SST_TOKENS.ok : SST_TOKENS.bad} />
+              <SigKpi label="Ítems con diferencia" value={conDif} accent={conDif ? SST_TOKENS.bad : SST_TOKENS.ok} valueColor={conDif ? SST_TOKENS.bad : SST_TOKENS.ok} />
+            </>
+          )}
         </div>
 
         <Card className="overflow-hidden">
@@ -482,9 +510,10 @@ export function CuadreInventario() {
                     <th className="px-3 py-2">Producto</th>
                     <th className="px-3 py-2">Lote</th>
                     <th className="px-3 py-2">Ubic.</th>
-                    <th className="px-3 py-2 text-right">Sistema</th>
+                    <th className="px-3 py-2 text-right">{corregido ? "Sistema (ajustado)" : "Sistema"}</th>
                     <th className="px-3 py-2 text-right">Conteo</th>
                     <th className="px-3 py-2 text-right">Diferencia</th>
+                    {corregido && <th className="px-3 py-2 text-right" title="Lo que se encontró al contar; ya corregido con 701 (sobrante) o 702 (faltante) con fecha de la víspera">Hallazgo corregido</th>}
                     <th className="px-3 py-2">Contado por</th>
                   </tr>
                 </thead>
@@ -503,21 +532,28 @@ export function CuadreInventario() {
                               {g.codproducto && <span className="ml-1 text-[11px] font-normal text-muted-foreground">· {g.codproducto}</span>}
                             </span>
                           </td>
-                          <td className="px-3 py-1.5 text-right font-semibold">{fmt(g.sistema)}</td>
+                          <td className="px-3 py-1.5 text-right font-semibold">{fmt(corregido ? g.conteo : g.sistema)}</td>
                           <td className="px-3 py-1.5 text-right font-semibold">{fmt(g.conteo)}</td>
-                          <td className="px-3 py-1.5 text-right font-semibold" style={{ color: gDif === 0 ? undefined : gDif > 0 ? SST_TOKENS.ok : SST_TOKENS.bad }}>
-                            {gDif > 0 ? "+" : ""}{fmt(gDif)}
-                          </td>
+                          {corregido ? (
+                            <>
+                              <td className="px-3 py-1.5 text-right font-semibold" style={{ color: SST_TOKENS.ok }}>0</td>
+                              <td className="px-3 py-1.5 text-right text-[11px] text-muted-foreground">{gDif === 0 ? "—" : `${gDif > 0 ? "+" : ""}${fmt(gDif)}`}</td>
+                            </>
+                          ) : (
+                            <td className="px-3 py-1.5 text-right font-semibold" style={{ color: gDif === 0 ? undefined : gDif > 0 ? SST_TOKENS.ok : SST_TOKENS.bad }}>
+                              {gDif > 0 ? "+" : ""}{fmt(gDif)}
+                            </td>
+                          )}
                           <td className="px-3 py-1.5 text-right text-[11px] text-muted-foreground">{contadas}/{g.filas.length} líneas</td>
                         </tr>
                         {!colapsado && g.filas.map((d) => {
                           const dif = Number(d.diferencia) || 0
                           return (
-                            <tr key={d.id} className={`border-b last:border-0 ${dif !== 0 ? "bg-red-50" : ""}`}>
+                            <tr key={d.id} className={`border-b last:border-0 ${dif !== 0 && !corregido ? "bg-red-50" : ""}`}>
                               <td className="px-3 py-1.5"></td>
                               <td className="px-3 py-1.5 text-muted-foreground">{d.lote || "—"}</td>
                               <td className="px-3 py-1.5 text-muted-foreground">{d.location || "—"}</td>
-                              <td className="px-3 py-1.5 text-right">{fmt(d.sistema)}</td>
+                              <td className="px-3 py-1.5 text-right">{fmt(corregido ? d.conteo : d.sistema)}</td>
                               <td className="px-3 py-1.5 text-right">
                                 {editable ? (
                                   <span className="inline-flex items-center gap-1.5">
@@ -534,9 +570,18 @@ export function CuadreInventario() {
                                   fmt(d.conteo)
                                 )}
                               </td>
-                              <td className="px-3 py-1.5 text-right font-medium" style={{ color: dif === 0 ? undefined : dif > 0 ? SST_TOKENS.ok : SST_TOKENS.bad }}>
-                                {dif > 0 ? "+" : ""}{fmt(dif)}
-                              </td>
+                              {corregido ? (
+                                <>
+                                  <td className="px-3 py-1.5 text-right font-medium" style={{ color: SST_TOKENS.ok }}>0</td>
+                                  <td className="px-3 py-1.5 text-right text-[11px] text-muted-foreground">
+                                    {dif === 0 ? "—" : `${dif > 0 ? "+" : ""}${fmt(dif)} · ${dif > 0 ? "701" : "702"}`}
+                                  </td>
+                                </>
+                              ) : (
+                                <td className="px-3 py-1.5 text-right font-medium" style={{ color: dif === 0 ? undefined : dif > 0 ? SST_TOKENS.ok : SST_TOKENS.bad }}>
+                                  {dif > 0 ? "+" : ""}{fmt(dif)}
+                                </td>
+                              )}
                               <td className="px-3 py-1.5 text-[11px] text-muted-foreground">
                                 {d.contado_por ? (
                                   <span className="inline-flex items-center gap-1"><User className="h-3 w-3" />{d.contado_por}</span>
@@ -634,10 +679,21 @@ export function CuadreInventario() {
                         <span className="font-semibold" style={{ color: SST_TOKENS.ink }}>#{c.id}</span>
                         <span className="text-sm">{c.fecha}</span>
                         <Badge style={{ background: est.color, color: "white" }}>{est.label}</Badge>
-                        <span className="text-xs text-muted-foreground">{c.items} ítems · {c.items_con_diferencia} con diferencia</span>
-                        <span className="text-xs" style={{ color: (c.total_diferencia ?? 0) === 0 ? SST_TOKENS.ok : SST_TOKENS.bad }}>
-                          dif: {fmt(c.total_diferencia)}
-                        </span>
+                        {c.estado === "aprobado" ? (
+                          <>
+                            <span className="text-xs text-muted-foreground">{c.items} ítems · {c.items_con_diferencia} corregidos</span>
+                            <span className="text-xs" style={{ color: SST_TOKENS.ok }} title={`Hallazgo corregido con 701/702: ${fmt(c.total_diferencia)}`}>
+                              dif: 0
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-xs text-muted-foreground">{c.items} ítems · {c.items_con_diferencia} con diferencia</span>
+                            <span className="text-xs" style={{ color: (c.total_diferencia ?? 0) === 0 ? SST_TOKENS.ok : SST_TOKENS.bad }}>
+                              dif: {fmt(c.total_diferencia)}
+                            </span>
+                          </>
+                        )}
                       </button>
                       <button onClick={() => borrarCuadre(c)} className="text-muted-foreground opacity-0 transition-opacity hover:text-red-600 group-hover:opacity-100"><Trash2 className="h-4 w-4" /></button>
                     </Card>
