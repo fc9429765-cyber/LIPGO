@@ -115,6 +115,13 @@ export function PanelInventarioLIP() {
         if (!anio && r.data?.anio) setAnio(r.data.anio)
       } else toast({ title: "No se pudo cargar el panel", description: r.error })
       setLoading(false)
+    }).catch((e: any) => {
+      // Sin este catch, si la acción del servidor falla (tiempo agotado, red),
+      // la promesa quedaba rechazada sin manejar y el panel se quedaba en el
+      // spinner para siempre ("no me cargan los datos", 2026-10-02).
+      if (cancel) return
+      toast({ title: "No se pudo cargar el panel", description: e?.message || "Error de red o tiempo agotado. Intenta de nuevo." })
+      setLoading(false)
     })
     return () => { cancel = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps

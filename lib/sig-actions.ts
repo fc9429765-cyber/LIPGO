@@ -2634,6 +2634,50 @@ function calcularSaldoReal<T extends FilaInvtransParaSaldo>(
 // entradas/salidas + eventos de pérdida (lo que se cobra a LIP), por año y mes,
 // por cliente/sitio. Fuente: invtrans + reprocesos (todo en LIPgo).
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// RENDIMIENTO (2026-10-02): paginación EN PARALELO. PostgREST tope a 1.000
+// filas por respuesta y los paneles de inventario traían las páginas una tras
+// otra (el panel del ID3: 9 idas y vueltas seguidas solo para invtrans). Esta
+// función pide la primera página; si viene llena, pide las siguientes de a
+// `concurrencia` a la vez y concatena EN ORDEN (cada consulta sigue llevando
+// su ORDER BY único, así que cada página es determinista, igual que antes).
+// Se detiene en la primera página corta, exactamente como el bucle secuencial.
+// ---------------------------------------------------------------------------
+async function traerPaginasEnParalelo<T = any>(
+  pagina: (desde: number, hasta: number) => PromiseLike<{ data: T[] | null; error: any }>,
+  opciones: { tamano?: number; tope?: number; concurrencia?: number } = {},
+): Promise<{ data: T[]; error: any }> {
+  const tamano = opciones.tamano ?? 1000
+  const tope = opciones.tope ?? 60000
+  const concurrencia = opciones.concurrencia ?? 8
+  const primera = await pagina(0, tamano - 1)
+  if (primera.error) return { data: [], error: primera.error }
+  const filas: T[] = [...(primera.data ?? [])]
+  if ((primera.data?.length ?? 0) < tamano) return { data: filas, error: null }
+  let desde = tamano
+  while (desde <= tope) {
+    const lote: Array<PromiseLike<{ data: T[] | null; error: any }>> = []
+    for (let i = 0; i < concurrencia; i++) {
+      const d = desde + i * tamano
+      if (d > tope) break
+      lote.push(pagina(d, d + tamano - 1))
+    }
+    const resultados = await Promise.all(lote)
+    let corta = false
+    for (const r of resultados) {
+      if (r.error) return { data: [], error: r.error }
+      filas.push(...(r.data ?? []))
+      if ((r.data?.length ?? 0) < tamano) {
+        corta = true
+        break
+      }
+    }
+    if (corta) break
+    desde += lote.length * tamano
+  }
+  return { data: filas, error: null }
+}
+
 export async function getPanelInventarioLIP(
   proyectoId?: number | null,
   anio?: string | null,
@@ -2696,22 +2740,20 @@ export async function getPanelInventarioLIP(
       }
     }
     const inv: any[] = []
-    let fromIdx = 0
-    while (true) {
-      let q = supabase
-        .from("invtrans")
-        .select("idempresa,tipomov,origen,status,cantidad,creado,codproducto,nombreproducto,cod_movimiento")
-        .in("idempresa", clientes)
-      if (rangoDesde) q = q.gte("creado", rangoDesde)
-      if (rangoHasta) q = q.lt("creado", rangoHasta)
-      const { data, error } = await q
-        .order("id", { ascending: true }) // paginación determinista: sin ORDER BY, .range() salta/duplica filas
-        .range(fromIdx, fromIdx + 999)
-      if (error) return { success: false, error: error.message }
-      inv.push(...(data ?? []))
-      if (!data || data.length < 1000) break
-      fromIdx += 1000
-      if (fromIdx > 60000) break // tope de seguridad
+    {
+      const rInv = await traerPaginasEnParalelo((desde, hasta) => {
+        let q = supabase
+          .from("invtrans")
+          .select("idempresa,tipomov,origen,status,cantidad,creado,codproducto,nombreproducto,cod_movimiento")
+          .in("idempresa", clientes)
+        if (rangoDesde) q = q.gte("creado", rangoDesde)
+        if (rangoHasta) q = q.lt("creado", rangoHasta)
+        return q
+          .order("id", { ascending: true }) // paginación determinista: sin ORDER BY, .range() salta/duplica filas
+          .range(desde, hasta)
+      })
+      if (rInv.error) return { success: false, error: rInv.error.message }
+      inv.push(...rInv.data)
     }
 
     // Anclas físicas reales (fisico_snapshot) — se traen ANTES del segundo
@@ -2752,20 +2794,16 @@ export async function getPanelInventarioLIP(
     const invParaSaldo: any[] = []
     {
       const saldoDesde = anclaMesMin ? new Date(Date.UTC(Number(anclaMesMin.slice(0, 4)), Number(anclaMesMin.slice(5, 7)) - 1, 1)).toISOString() : null
-      let fIdx = 0
-      while (true) {
+      const rSaldo = await traerPaginasEnParalelo((desde, hasta) => {
         let q = supabase
           .from("invtrans")
           .select("idempresa,tipomov,status,cantidad,creado,codproducto,cod_movimiento")
           .in("idempresa", clientes)
         if (saldoDesde) q = q.gte("creado", saldoDesde)
-        const { data, error } = await q.order("id", { ascending: true }).range(fIdx, fIdx + 999)
-        if (error) return { success: false, error: error.message }
-        invParaSaldo.push(...(data ?? []))
-        if (!data || data.length < 1000) break
-        fIdx += 1000
-        if (fIdx > 60000) break
-      }
+        return q.order("id", { ascending: true }).range(desde, hasta)
+      })
+      if (rSaldo.error) return { success: false, error: rSaldo.error.message }
+      invParaSaldo.push(...rSaldo.data)
     }
 
     // Reprocesos (daños en proceso).
@@ -2778,13 +2816,11 @@ export async function getPanelInventarioLIP(
     // en `calcularSaldoReal` (productos sin ningún cierre físico real
     // todavía) y para contar SKUs con stock.
     const saldosRows: any[] = []
-    let sFrom = 0
-    while (true) {
-      const { data } = await supabase.from("saldoinvdetalle").select("codproducto,stock_actual").in("idempresa", clientes).order("codproducto").order("lote").order("location").range(sFrom, sFrom + 999)
-      saldosRows.push(...(data ?? []))
-      if (!data || data.length < 1000) break
-      sFrom += 1000
-      if (sFrom > 60000) break
+    {
+      const rS = await traerPaginasEnParalelo((desde, hasta) =>
+        supabase.from("saldoinvdetalle").select("codproducto,stock_actual").in("idempresa", clientes).order("codproducto").order("lote").order("location").range(desde, hasta),
+      )
+      saldosRows.push(...rS.data) // como antes: un error puntual aquí deja la lista vacía (es solo respaldo)
     }
     const stockVivoPorProducto: Record<string, number> = {}
     for (const r of saldosRows) stockVivoPorProducto[r.codproducto] = (stockVivoPorProducto[r.codproducto] || 0) + (Number(r.stock_actual) || 0)
@@ -2992,14 +3028,12 @@ export async function getCuadreDiario(
     const clientes: number[] = proyectoId ? [proyectoId] : SIG_CLIENTES_LIP
     const has = (v: any, t: string) => String(v || "").toLowerCase().includes(t)
     const inv: any[] = []
-    let from = 0
-    while (true) {
-      const { data, error } = await supabase.from("invtrans").select("tipomov,origen,cantidad,creado,cod_movimiento,status").in("idempresa", clientes).order("id", { ascending: true }).range(from, from + 999)
-      if (error) return { success: false, data: [], error: error.message }
-      inv.push(...(data ?? []))
-      if (!data || data.length < 1000) break
-      from += 1000
-      if (from > 60000) break
+    {
+      const rInv = await traerPaginasEnParalelo((desde, hasta) =>
+        supabase.from("invtrans").select("tipomov,origen,cantidad,creado,cod_movimiento,status").in("idempresa", clientes).order("id", { ascending: true }).range(desde, hasta),
+      )
+      if (rInv.error) return { success: false, data: [], error: rInv.error.message }
+      inv.push(...rInv.data)
     }
     // Agrupar por día — DÍA CALENDARIO DE COLOMBIA (invtrans.creado está en
     // UTC, 5h adelante: un movimiento de las 8pm caía en el día siguiente y
@@ -3057,13 +3091,11 @@ export async function getPreservacionInventario(
     const clientes: number[] = proyectoId ? [proyectoId] : SIG_CLIENTES_LIP
     // Saldos con stock
     const saldos: any[] = []
-    let sFrom = 0
-    while (true) {
-      const { data } = await supabase.from("saldoinvdetalle").select("codproducto,nombreproducto,lote,stock_actual").in("idempresa", clientes).order("codproducto").order("lote").order("location").range(sFrom, sFrom + 999)
-      saldos.push(...(data ?? []))
-      if (!data || data.length < 1000) break
-      sFrom += 1000
-      if (sFrom > 60000) break
+    {
+      const rS = await traerPaginasEnParalelo((desde, hasta) =>
+        supabase.from("saldoinvdetalle").select("codproducto,nombreproducto,lote,stock_actual").in("idempresa", clientes).order("codproducto").order("lote").order("location").range(desde, hasta),
+      )
+      saldos.push(...rS.data)
     }
     // Vida útil por producto (productos.vidautildias)
     const vida: Record<string, number> = {}
@@ -3336,34 +3368,30 @@ export async function getKardexInventario(
     const yr = (s: any) => (s ? fechaColombiaDe(s).slice(0, 4) : null)
     const mo = (s: any) => (s ? fechaColombiaDe(s).slice(5, 7) : null)
 
-    // Movimientos (paginado)
+    // Movimientos (paginado, páginas en paralelo)
     const inv: any[] = []
-    let from = 0
-    while (true) {
-      const { data, error } = await supabase
-        .from("invtrans")
-        .select("idempresa,codproducto,nombreproducto,tipomov,origen,cantidad,creado,cod_movimiento,status")
-        .in("idempresa", clientes)
-        .order("id", { ascending: true }) // paginación determinista
-        .range(from, from + 999)
-      if (error) return { success: false, error: error.message }
-      inv.push(...(data ?? []))
-      if (!data || data.length < 1000) break
-      from += 1000
-      if (from > 60000) break
+    {
+      const rInv = await traerPaginasEnParalelo((desde, hasta) =>
+        supabase
+          .from("invtrans")
+          .select("idempresa,codproducto,nombreproducto,tipomov,origen,cantidad,creado,cod_movimiento,status")
+          .in("idempresa", clientes)
+          .order("id", { ascending: true }) // paginación determinista
+          .range(desde, hasta),
+      )
+      if (rInv.error) return { success: false, error: rInv.error.message }
+      inv.push(...rInv.data)
     }
 
     // Saldo actual por producto (saldoinvdetalle) — solo se usa como
     // respaldo del arranque en `calcularSaldoReal` (productos sin ningún
     // cierre físico real todavía), NUNCA como el "Saldo" mostrado.
     const saldos: Record<string, number> = {}
-    let sFrom = 0
-    while (true) {
-      const { data } = await supabase.from("saldoinvdetalle").select("codproducto,stock_actual").in("idempresa", clientes).order("codproducto").order("lote").order("location").range(sFrom, sFrom + 999)
-      for (const r of data ?? []) saldos[r.codproducto] = (saldos[r.codproducto] || 0) + (Number(r.stock_actual) || 0)
-      if (!data || data.length < 1000) break
-      sFrom += 1000
-      if (sFrom > 60000) break
+    {
+      const rS = await traerPaginasEnParalelo((desde, hasta) =>
+        supabase.from("saldoinvdetalle").select("codproducto,stock_actual").in("idempresa", clientes).order("codproducto").order("lote").order("location").range(desde, hasta),
+      )
+      for (const r of rS.data) saldos[r.codproducto] = (saldos[r.codproducto] || 0) + (Number(r.stock_actual) || 0)
     }
 
     // Anclas físicas reales por (empresa, producto) — mismo mecanismo que
@@ -5222,32 +5250,30 @@ export async function getConciliacionMensualInventario(
     // Traer invtrans del/los proyecto(s) (paginado). El inventario y los despachos
     // se llevan POR LOTE, así que traemos producto+lote para el cuadre físico.
     const inv: any[] = []
-    let from = 0
-    while (true) {
-      const { data, error } = await supabase
-        .from("invtrans")
-        .select("idempresa, idproducto, nombreproducto, codproducto, lote, tipomov, origen, cantidad, creado, ocargue, ordentolva, cod_movimiento, status, location")
-        .in("idempresa", clientes)
-        .order("id", { ascending: true }) // paginación determinista: sin ORDER BY, .range() salta/duplica filas — causa REAL de los "ajustes irreales" (confirmado 2026-08-08: marzo ID1 contaba 48.675 de cargue cuando lo real es 90.480)
-        .range(from, from + 999)
-      if (error) return { success: false, error: error.message }
-      inv.push(...(data ?? []))
-      if (!data || data.length < 1000) break
-      from += 1000
-      if (from > 100000) break
+    {
+      const rInv = await traerPaginasEnParalelo(
+        (desde, hasta) =>
+          supabase
+            .from("invtrans")
+            .select("idempresa, idproducto, nombreproducto, codproducto, lote, tipomov, origen, cantidad, creado, ocargue, ordentolva, cod_movimiento, status, location")
+            .in("idempresa", clientes)
+            .order("id", { ascending: true }) // paginación determinista: sin ORDER BY, .range() salta/duplica filas — causa REAL de los "ajustes irreales" (confirmado 2026-08-08: marzo ID1 contaba 48.675 de cargue cuando lo real es 90.480)
+            .range(desde, hasta),
+        { tope: 100000 },
+      )
+      if (rInv.error) return { success: false, error: rInv.error.message }
+      inv.push(...rInv.data)
     }
 
     // Saldo VIVO por (producto, lote) — es la VERDAD física (lo confirma el conteo).
     const saldosRows: any[] = []
     {
-      let sf = 0
-      while (true) {
-        const { data } = await supabase.from("saldoinvdetalle").select("idproducto, nombreproducto, codproducto, categoria, subcategoria, lote, stock_actual").in("idempresa", clientes).order("codproducto").order("lote").order("location").range(sf, sf + 999)
-        saldosRows.push(...(data ?? []))
-        if (!data || data.length < 1000) break
-        sf += 1000
-        if (sf > 100000) break
-      }
+      const rS = await traerPaginasEnParalelo(
+        (desde, hasta) =>
+          supabase.from("saldoinvdetalle").select("idproducto, nombreproducto, codproducto, categoria, subcategoria, lote, stock_actual").in("idempresa", clientes).order("codproducto").order("lote").order("location").range(desde, hasta),
+        { tope: 100000 },
+      )
+      saldosRows.push(...rS.data)
     }
 
     // La conciliación es SOLO de Producto Terminado + Sub Producto (así lo maneja
@@ -5692,9 +5718,22 @@ function mesAnteriorDe(mes: string): string {
 // anterior — causó un hueco real en la Acta de Cruce de ID2 (confirmado
 // con datos reales 2026-08-08). Toda comparación de fecha-calendario contra
 // el corte debe pasar por esta función, no por `String(creado).slice(0,10)`.
+// RENDIMIENTO (2026-10-02): el formateador se crea UNA vez y el resultado se
+// memoriza por timestamp. Antes se construía un Intl.DateTimeFormat en cada
+// llamada y esta función se invoca decenas de miles de veces por apertura del
+// Panel LIP Inventario (yr/mo por fila, mesDeFila por fila y por ancla en
+// calcularSaldoReal…): medido con el perfilador, 7,3 s de los 11 s que tardaba
+// el panel del ID3 eran solo esto. La salida es idéntica ("YYYY-MM-DD" Bogotá).
+const _formateadorFechaColombia = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota", year: "numeric", month: "2-digit", day: "2-digit" })
+const _cacheFechaColombia = new Map<string, string>()
 function fechaColombiaDe(iso: string): string {
   if (!iso) return ""
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso))
+  const memo = _cacheFechaColombia.get(iso)
+  if (memo !== undefined) return memo
+  const valor = _formateadorFechaColombia.format(new Date(iso))
+  if (_cacheFechaColombia.size > 200_000) _cacheFechaColombia.clear() // tope de memoria por instancia
+  _cacheFechaColombia.set(iso, valor)
+  return valor
 }
 
 // ---------------------------------------------------------------------------
