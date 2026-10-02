@@ -117,11 +117,6 @@ export const groups: Group[] = [
       // tipo · destino) y su cumplimiento. Permiso `programacion_cliente` (SQL 211).
       // La misma pantalla, en modo LIP, vive en Torre de Control como "Proyecciones".
       { name: "Programación del cliente", icon: CalendarClock, label: "Programación de mañana" },
-      // — Pantalla sola —
-      // Viene de Producción (2026-09-30): es una SOLICITUD DEL CLIENTE (turnos u
-      // horas adicionales), como los pedidos. La aprobación sigue en Operación
-      // LIP › Personal del día › Aprobar Turnos. Conserva nombre y permiso.
-      { name: "Servicios Adicionales", icon: Clock },
     ],
   },
   {
@@ -172,8 +167,8 @@ export const groups: Group[] = [
     icon: Package2,
     // REORG navegación (2026-09-30): el orden define los hubs de
     // lib/navegacion.ts (Ingresos de producción · Tolva · Control de piso).
-    // "Servicios Adicionales" pasó a "Pedidos y solicitudes" (es una solicitud
-    // del cliente). Los `name` y permisos no cambian.
+    // "Servicios Adicionales" se queda aquí (subgrupo Planta): la solicitud nace
+    // en producción. Los `name` y permisos no cambian.
     // 2026-10-01: el área "MRP" (una sola tarjeta) se plegó aquí como subgrupo
     // "Materiales · MRP"; la clave de grupo `mrp` ya no existe. Los permisos
     // de esos módulos siguen bajo Producción en Gestión de Usuarios.
@@ -196,8 +191,14 @@ export const groups: Group[] = [
           // — Hub "Control de piso" —
           { name: "Dashboard de Producción", icon: Activity },
           { name: "Reporte de Paros", icon: AlertTriangle },
-          // — Pantalla sola —
+          // — Pantallas solas —
           { name: "Reprocesos", icon: ArrowRightLeft },
+          // Servicios Adicionales (turnos u horas extra que el proyecto solicita):
+          // la solicitud NACE EN PRODUCCIÓN, por eso vive aquí (gerencia 2026-10-02;
+          // el 30-sep se había movido a Pedidos y se revirtió). La aprobación
+          // sigue en Operación LIP › Personal del día › Aprobar Turnos. Conserva
+          // nombre y permiso (`solicitudturnos`).
+          { name: "Servicios Adicionales", icon: Clock },
         ],
       },
       {
