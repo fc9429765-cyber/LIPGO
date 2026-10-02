@@ -13,6 +13,11 @@
 // y el rol anon no puede leerlas; la autorizacion del modulo ya se controla
 // con los permisos (sig_matriz / sig_iso*). Mismo patron que permissions-actions.
 import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
+// `autorizar` vive en autorizaciones-core, que es `server-only`: se importa de
+// forma dinámica solo donde se valida una clave, para que los scripts de
+// mantenimiento (tsx) puedan seguir cargando este módulo.
+import { procesoInventarioEjecutar } from "@/lib/autorizaciones"
+import { UMBRAL_CLAVE_UNIDADES_DEFECTO, REGLAS_FIJAS, codigoReversoDe, type ReglaNovedad } from "@/lib/conteo-novedades"
 import { getResumenISO, type EstadoISO } from "@/lib/iso9001-actions"
 import { getMatrizEstandares } from "@/lib/sst-auditoria-actions"
 import { computar0312 } from "@/lib/sst-types"
@@ -4147,6 +4152,10 @@ export async function aplicarCorreccionesConteo(
   cuadreId: number,
   items: Array<{ detalleId: number; codigo: string; parejaDetalleId?: number | null }>,
   actor: string,
+  // Clave personal: obligatoria solo para las líneas cuya cantidad supera el
+  // umbral del proyecto (proceso "inv_conteo_umbral", SQL 214). Las demás se
+  // aplican sin clave. Umbral: parámetro 'umbral_clave_unidades' (defecto 50).
+  opciones: { clave?: string | null } = {},
 ): Promise<{ success: boolean; aplicadas: number; saltadas: number; pendientes: number; errores: string[]; error?: string }> {
   const vacio = { aplicadas: 0, saltadas: 0, pendientes: 0, errores: [] as string[] }
   try {
@@ -4183,6 +4192,22 @@ export async function aplicarCorreccionesConteo(
     const errores: string[] = []
     const etiqueta = (d: any) => `${d.producto ?? d.codproducto} L${d.lote ?? ""} ${d.location ?? ""}`
 
+    // Umbral de aprobación: por encima de N unidades la corrección exige clave
+    // personal (una sola validación por llamada; queda en el log de autorizaciones).
+    const umbral = await leerUmbralConteo(supabase, proyectoId)
+    let claveValidada = false
+    const exigeClave = async (cantidad: number, referencia: string): Promise<string | null> => {
+      if (Math.abs(cantidad) <= umbral) return null
+      if (claveValidada) return null
+      const clave = String(opciones.clave ?? "").trim()
+      if (!clave) return `supera el umbral de ${umbral} unidades: requiere tu clave personal`
+      const { autorizar } = await import("@/lib/autorizaciones-core")
+      const r = await autorizar({ proceso: "inv_conteo_umbral", idempresa: proyectoId, clave, referencia })
+      if (!r.ok) return r.error || "clave no autorizada"
+      claveValidada = true
+      return null
+    }
+
     // Inserta UNA corrección, la postea y la marca aprobada (mismo camino que aprobarAjusteInventario).
     const aplicarUna = async (d: any, cod: string, tipo: string, cantidad: number, motivo: string, soporte: string) => {
       const direccion = cantidad < 0 ? "salida" : "ingreso"
@@ -4212,6 +4237,8 @@ export async function aplicarCorreccionesConteo(
         if (!def.pareja) {
           const direccion = pend < 0 ? "salida" : "ingreso"
           if (def.signo !== "ambos" && def.signo !== direccion) { errores.push(`${etiqueta(d)}: el código ${it.codigo} es de ${def.signo} y la línea es un ${direccion === "salida" ? "faltante" : "sobrante"}`); continue }
+          const faltaClave = await exigeClave(pend, `conteo #${cuadreId} · ${etiqueta(d)} · ${it.codigo} ${pend}`)
+          if (faltaClave) { errores.push(`${etiqueta(d)}: ${faltaClave}`); continue }
           await aplicarUna(d, it.codigo, def.tipo, pend, motivo, `Conteo #${cuadreId} · línea ${d.id}`)
           aplicadas++
         } else {
@@ -4224,6 +4251,8 @@ export async function aplicarCorreccionesConteo(
           if (pendP === 0 || Math.sign(pendP) === Math.sign(pend)) { errores.push(`${etiqueta(d)}: la pareja (${etiqueta(p)}) no tiene una diferencia de signo contrario pendiente`); continue }
           const x = Math.min(Math.abs(pend), Math.abs(pendP))
           const sale = pend < 0 ? d : p, entra = pend < 0 ? p : d
+          const faltaClaveP = await exigeClave(x, `conteo #${cuadreId} · ${etiqueta(d)} · ${it.codigo} pareja ${x}`)
+          if (faltaClaveP) { errores.push(`${etiqueta(d)}: ${faltaClaveP}`); continue }
           const sop = `Conteo #${cuadreId} · ${it.codigo} pareja: ${def.pareja === "lote" ? `lote ${sale.lote} → lote ${entra.lote}` : `${sale.location} → ${entra.location}`} (${x})`
           await aplicarUna(sale, it.codigo, def.tipo, -x, motivo, sop)
           await aplicarUna(entra, it.codigo, def.tipo, x, motivo, sop)
@@ -4244,17 +4273,221 @@ export async function aplicarCorreccionesConteo(
   }
 }
 
+// ---------- Parámetros del conteo (SQL 214): umbral de clave ----------
+// Lee el umbral del proyecto; si no hay fila (o la tabla aún no existe) usa el
+// valor por defecto. Nunca bloquea el conteo por falta de configuración.
+async function leerUmbralConteo(supabase: any, idempresa: number): Promise<number> {
+  try {
+    const { data } = await supabase.from("sig_conteo_parametro").select("idempresa,valor").eq("clave", "umbral_clave_unidades").or(`idempresa.eq.${idempresa},idempresa.is.null`)
+    const propio = (data ?? []).find((r: any) => Number(r.idempresa) === idempresa) ?? (data ?? []).find((r: any) => r.idempresa == null)
+    const n = Number(propio?.valor)
+    return Number.isFinite(n) && n >= 0 ? n : UMBRAL_CLAVE_UNIDADES_DEFECTO
+  } catch {
+    return UMBRAL_CLAVE_UNIDADES_DEFECTO
+  }
+}
+
+export async function getUmbralConteo(idempresa: number): Promise<{ success: boolean; umbral: number }> {
+  const supabase: any = await getSupabaseAdmin()
+  return { success: true, umbral: await leerUmbralConteo(supabase, Number(idempresa)) }
+}
+
+export async function guardarUmbralConteo(idempresa: number, umbral: number, actor: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const n = Number(umbral)
+    if (!Number.isFinite(n) || n < 0) return { success: false, error: "El umbral debe ser un número de unidades (0 o más)." }
+    const supabase: any = await getSupabaseAdmin()
+    const { error } = await supabase
+      .from("sig_conteo_parametro")
+      .upsert({ idempresa: Number(idempresa), clave: "umbral_clave_unidades", valor: String(n), actualizado_por: actor, updated_at: new Date().toISOString() }, { onConflict: "idempresa,clave" })
+    if (error) return { success: false, error: error.message.includes("sig_conteo_parametro") ? "Falta correr el SQL 214 (tabla sig_conteo_parametro)." : error.message }
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Error desconocido" }
+  }
+}
+
+// ---------- Diccionario de novedades (SQL 214) ----------
+/** Reglas activas del proyecto + globales, ordenadas. Sin reglas guardadas (o sin tabla) devuelve las fijas. */
+export async function getReglasNovedad(idempresa: number): Promise<{ success: boolean; data: ReglaNovedad[]; origen: "tabla" | "fijas"; error?: string }> {
+  try {
+    const supabase: any = await getSupabaseAdmin()
+    const { data, error } = await supabase
+      .from("sig_conteo_novedad_regla")
+      .select("id,idempresa,codigo,patron,etiqueta,orden,activo")
+      .eq("activo", true)
+      .or(`idempresa.eq.${Number(idempresa)},idempresa.is.null`)
+      .order("orden", { ascending: true })
+      .order("id", { ascending: true })
+    if (error) return { success: true, data: REGLAS_FIJAS, origen: "fijas", error: error.message }
+    if (!data || data.length === 0) return { success: true, data: REGLAS_FIJAS, origen: "fijas" }
+    return { success: true, data: data as ReglaNovedad[], origen: "tabla" }
+  } catch (err: any) {
+    return { success: true, data: REGLAS_FIJAS, origen: "fijas", error: err?.message }
+  }
+}
+
+/** Guarda (o actualiza) una regla. Sin id = nueva. idempresa null = global. */
+export async function guardarReglaNovedad(
+  idempresa: number | null,
+  regla: { id?: number | null; codigo: string; patron: string; etiqueta?: string | null; orden?: number | null },
+  actor: string,
+): Promise<{ success: boolean; id?: number; error?: string }> {
+  try {
+    const patron = String(regla.patron ?? "").trim()
+    if (!patron) return { success: false, error: "Escribe el texto o patrón de la novedad." }
+    if (!["701", "702", "309", "311", "653", "551", "344"].includes(String(regla.codigo))) return { success: false, error: "Código no válido para el conteo." }
+    if (patron.startsWith("/")) { try { new RegExp(patron.slice(1, patron.lastIndexOf("/") > 0 ? patron.lastIndexOf("/") : undefined)) } catch { return { success: false, error: "La expresión regular no es válida." } } }
+    const supabase: any = await getSupabaseAdmin()
+    const fila = { idempresa: idempresa ?? null, codigo: String(regla.codigo), patron, etiqueta: regla.etiqueta ?? null, orden: Number(regla.orden ?? 100), activo: true }
+    if (regla.id) {
+      const { error } = await supabase.from("sig_conteo_novedad_regla").update(fila).eq("id", regla.id)
+      if (error) return { success: false, error: error.message }
+      return { success: true, id: regla.id }
+    }
+    const { data, error } = await supabase.from("sig_conteo_novedad_regla").insert({ ...fila, creado_por: actor }).select("id").single()
+    if (error) return { success: false, error: error.message.includes("sig_conteo_novedad_regla") ? "Falta correr el SQL 214 (tabla sig_conteo_novedad_regla)." : error.message }
+    return { success: true, id: data?.id }
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Error desconocido" }
+  }
+}
+
+export async function eliminarReglaNovedad(id: number): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase: any = await getSupabaseAdmin()
+    const { error } = await supabase.from("sig_conteo_novedad_regla").update({ activo: false }).eq("id", id)
+    if (error) return { success: false, error: error.message }
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Error desconocido" }
+  }
+}
+
+/** Copia las reglas fijas a la tabla (globales) para poder editarlas. Solo si la tabla está vacía. */
+export async function sembrarReglasNovedad(actor: string): Promise<{ success: boolean; creadas: number; error?: string }> {
+  try {
+    const supabase: any = await getSupabaseAdmin()
+    const { count, error: e0 } = await supabase.from("sig_conteo_novedad_regla").select("*", { count: "exact", head: true })
+    if (e0) return { success: false, creadas: 0, error: e0.message.includes("sig_conteo_novedad_regla") ? "Falta correr el SQL 214 (tabla sig_conteo_novedad_regla)." : e0.message }
+    if ((count ?? 0) > 0) return { success: true, creadas: 0 }
+    const filas = REGLAS_FIJAS.map((r) => ({ idempresa: null, codigo: r.codigo, patron: r.patron, etiqueta: r.etiqueta ?? null, orden: r.orden ?? 100, activo: true, creado_por: actor }))
+    const { error } = await supabase.from("sig_conteo_novedad_regla").insert(filas)
+    if (error) return { success: false, creadas: 0, error: error.message }
+    return { success: true, creadas: filas.length }
+  } catch (err: any) {
+    return { success: false, creadas: 0, error: err?.message || "Error desconocido" }
+  }
+}
+
+// ---------- Recuento ----------
+/**
+ * Devuelve una línea al contador para recontarla antes de corregir (práctica
+ * estándar: toda diferencia se recuenta). Se usa el estado existente de la
+ * línea: queda "sin digitar" (contado_en null) con la marca RECONTAR en
+ * contado_por; la cantidad anterior se conserva como referencia. Al volver a
+ * digitarla, guardarLineaConteoCuadre la deja normal.
+ */
+export async function solicitarRecuentoLinea(detalleId: number, actor: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase: any = await getSupabaseAdmin()
+    const { data: d } = await supabase.from("sig_inventario_cuadre_detalle").select("id,cuadre_id,codproducto,lote,location").eq("id", detalleId).single()
+    if (!d) return { success: false, error: "Línea no encontrada" }
+    const { data: cab } = await supabase.from("sig_inventario_cuadre").select("estado").eq("id", d.cuadre_id).single()
+    if (!["contado", "cerrado", "borrador"].includes(String(cab?.estado))) return { success: false, error: "El conteo ya está aprobado; no se puede recontar." }
+    const { count } = await supabase.from("sig_inventario_ajuste").select("*", { count: "exact", head: true }).eq("cuadre_id", d.cuadre_id).eq("activo", true).eq("codproducto", d.codproducto).eq("lote", d.lote ?? "").eq("location", d.location ?? "")
+    if ((count ?? 0) > 0) return { success: false, error: "Esta línea ya tiene correcciones aplicadas; reversa primero la corrección." }
+    const { error } = await supabase.from("sig_inventario_cuadre_detalle").update({ contado_en: null, contado_por: `RECONTAR · pedido por ${actor}` }).eq("id", detalleId)
+    if (error) return { success: false, error: error.message }
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Error desconocido" }
+  }
+}
+
+// ---------- Reverso y reactivación de correcciones ----------
+/**
+ * Reversa una corrección YA contabilizada con el código de reverso del
+ * catálogo (701/653→102, 702→602, 551→552, 311→312, 309→309 contrario),
+ * exigiendo la clave personal del proceso correspondiente (inv_102, inv_602,
+ * inv_552, inv_312, inv_309). Crea una corrección nueva enlazada a la original
+ * (soporte "[rev de aj#id]"), fechada HOY (el reverso pertenece al mes en que
+ * se hace), y la postea con el mismo camino. La original no se toca. Si la
+ * línea del conteo sigue abierta, vuelve a aparecer como pendiente en
+ * "Diferencias" y se puede aplicar de nuevo con el código correcto.
+ */
+export async function reversarAjusteInventario(
+  id: number,
+  clave: string,
+  motivo: string,
+  actor: string,
+): Promise<{ success: boolean; reversoId?: number; invtransId?: number | null; error?: string }> {
+  try {
+    const supabase: any = await getSupabaseAdmin()
+    const { data: aj } = await supabase.from("sig_inventario_ajuste").select("*").eq("id", id).single()
+    if (!aj) return { success: false, error: "Corrección no encontrada" }
+    if (aj.activo === false) return { success: false, error: "La corrección está anulada; no hay nada que reversar." }
+    if (aj.estado !== "aprobado" || !aj.invtrans_id) return { success: false, error: "Solo se reversa una corrección ya contabilizada. Una registrada se elimina." }
+    if (!String(motivo ?? "").trim()) return { success: false, error: "Indica el motivo del reverso." }
+    const rev = codigoReversoDe(aj.cod_movimiento, aj.direccion)
+    if (!rev) return { success: false, error: `El código ${aj.cod_movimiento ?? "—"} no se reversa desde aquí.` }
+    const marcador = `[rev de aj#${aj.id}]`
+    const { data: yaRev } = await supabase.from("sig_inventario_ajuste").select("id").eq("activo", true).ilike("soporte", `%${marcador}%`).limit(1).maybeSingle()
+    if (yaRev?.id) return { success: false, error: `Esta corrección ya fue reversada (corrección #${yaRev.id}).` }
+    const { autorizar } = await import("@/lib/autorizaciones-core")
+    const auth = await autorizar({ proceso: procesoInventarioEjecutar(rev.codigo), idempresa: Number(aj.proyecto_id), clave, referencia: `reverso de corrección #${aj.id} (${aj.cod_movimiento})` })
+    if (!auth.ok) return { success: false, error: auth.error || "Clave no autorizada." }
+    const cantidad = -(Number(aj.cantidad) || 0)
+    const direccion = cantidad < 0 ? "salida" : "ingreso"
+    const hoy = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Bogota" }))
+    const fecha = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`
+    const { data: nuevo, error } = await supabase
+      .from("sig_inventario_ajuste")
+      .insert({ proyecto_id: aj.proyecto_id, cuadre_id: aj.cuadre_id, fecha, codproducto: aj.codproducto, producto: aj.producto, lote: aj.lote, location: aj.location, direccion, cod_movimiento: rev.codigo, cantidad, tipo: "reverso", motivo: `Reverso de corrección #${aj.id} (${aj.cod_movimiento} ${Number(aj.cantidad) > 0 ? "+" : ""}${aj.cantidad}): ${String(motivo).trim()}`, soporte: `${marcador} · autorizó ${auth.autorizadoPor ?? actor}`, responsable: actor, estado: "registrado", activo: true })
+      .select("*")
+      .single()
+    if (error || !nuevo) return { success: false, error: error?.message || "No se pudo registrar el reverso" }
+    const r = await postCorreccionInvtrans(supabase, nuevo, auth.autorizadoPor ?? actor)
+    if (r.error) return { success: false, error: `No se pudo mover el stock: ${r.error}` }
+    const ok = await marcarAjusteAprobado(supabase, nuevo.id, auth.autorizadoPor ?? actor, r.id)
+    if (ok.error) return { success: false, error: ok.error }
+    return { success: true, reversoId: nuevo.id, invtransId: r.id }
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Error desconocido" }
+  }
+}
+
+/** Reactiva una corrección anulada antes de contabilizar (vuelve a "registrado"; no mueve stock). */
+export async function reactivarAjusteInventario(id: number): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase: any = await getSupabaseAdmin()
+    const { data: aj } = await supabase.from("sig_inventario_ajuste").select("id,activo,estado,invtrans_id").eq("id", id).single()
+    if (!aj) return { success: false, error: "Corrección no encontrada" }
+    if (aj.activo !== false) return { success: false, error: "La corrección no está anulada." }
+    if (aj.invtrans_id) return { success: false, error: "Esta corrección ya movió stock; no se reactiva, se reversa o se registra una nueva." }
+    const { error } = await supabase.from("sig_inventario_ajuste").update({ activo: true, estado: "registrado" }).eq("id", id)
+    if (error) return { success: false, error: error.message }
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Error desconocido" }
+  }
+}
+
 export async function getAjustesInventario(
   proyectoId: number,
+  incluirAnulados = false,
 ): Promise<{ success: boolean; data: SigInventarioAjuste[]; error?: string }> {
   try {
     if (!proyectoId) return { success: true, data: [] }
     const supabase: any = await getSupabaseAdmin()
-    const { data, error } = await supabase
+    let q = supabase
       .from("sig_inventario_ajuste")
       .select("*")
       .eq("proyecto_id", proyectoId)
-      .eq("activo", true)
+    // Anuladas (activo=false) solo cuando se piden: sirven para "reactivar" una
+    // corrección registrada que se eliminó antes de contabilizarla.
+    if (!incluirAnulados) q = q.eq("activo", true)
+    const { data, error } = await q
       .order("fecha", { ascending: false })
       .order("id", { ascending: false })
     if (error) return { success: false, data: [], error: error.message }

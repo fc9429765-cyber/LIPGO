@@ -31,13 +31,23 @@ import {
   getProductosInventario,
   getTiposMovimiento,
   aplicarCorreccionesConteo,
+  getReglasNovedad,
+  guardarReglaNovedad,
+  eliminarReglaNovedad,
+  sembrarReglasNovedad,
+  getUmbralConteo,
+  guardarUmbralConteo,
+  solicitarRecuentoLinea,
+  reversarAjusteInventario,
+  reactivarAjusteInventario,
 } from "@/lib/sig-actions"
-import { proponerCodigo, opcionesPara, opcionDe } from "@/lib/conteo-novedades"
+import { proponerCodigo, opcionesPara, opcionDe, codigoReversoDe, OPCIONES_CODIGO, type ReglaNovedad } from "@/lib/conteo-novedades"
+import { AyudaClaveAutorizacion } from "@/components/mi-clave-autorizacion"
 import { useAuth } from "@/components/auth-provider"
 import { SigHeader, SigFilterBar, SigKpi } from "@/components/sst/sig-ui"
 import { SignaturePad, type SignaturePadHandle } from "@/components/rrhh/signature-pad"
 import type { SigInventarioCuadre, SigInventarioCuadreDetalle, SigInventarioAjuste } from "@/lib/sig-types"
-import { Loader2, ClipboardCheck, Plus, Lock, Trash2, FileCheck2, ArrowLeft, Pencil, BookOpen, CheckCircle2, ArrowDownToLine, ArrowUpFromLine, PackageSearch, User, ChevronDown, ChevronRight, ListChecks, Wand2 } from "lucide-react"
+import { Loader2, ClipboardCheck, Plus, Lock, Trash2, FileCheck2, ArrowLeft, Pencil, BookOpen, CheckCircle2, ArrowDownToLine, ArrowUpFromLine, PackageSearch, User, ChevronDown, ChevronRight, ListChecks, Wand2, RotateCcw, Undo2, Settings2, Repeat, ShieldCheck } from "lucide-react"
 
 const ESTADO_CUADRE: Record<string, { label: string; color: string }> = {
   borrador: { label: "Borrador", color: "#94a3b8" },
@@ -120,6 +130,17 @@ export function CuadreInventario() {
   // Propuesta por línea (id del detalle → código y pareja), editable por el revisor.
   const [propuestas, setPropuestas] = useState<Map<number, { codigo: string; parejaId: number | null; aviso: string | null; coincidencia: string | null }>>(new Map())
   const [aplicando, setAplicando] = useState(false)
+  // Diccionario de novedades (editable, SQL 214; sin filas se usan las reglas fijas) y umbral de clave.
+  const [reglas, setReglas] = useState<ReglaNovedad[]>([])
+  const [origenReglas, setOrigenReglas] = useState<"tabla" | "fijas">("fijas")
+  const [umbral, setUmbral] = useState<number>(50)
+  const [umbralEdit, setUmbralEdit] = useState<string>("50")
+  const [claveConteo, setClaveConteo] = useState("")
+  const [verDiccionario, setVerDiccionario] = useState(false)
+  const [nuevaRegla, setNuevaRegla] = useState<{ codigo: string; patron: string; etiqueta: string }>({ codigo: "551", patron: "", etiqueta: "" })
+  // Historial de correcciones: ver anuladas (para reactivar) y diálogo de reverso.
+  const [verAnulados, setVerAnulados] = useState(false)
+  const [reversoDlg, setReversoDlg] = useState<{ ajuste: SigInventarioAjuste; clave: string; motivo: string } | null>(null)
   const firmaPadRef = useRef<SignaturePadHandle | null>(null)
 
   async function abrirNomenclatura() {
@@ -135,10 +156,12 @@ export function CuadreInventario() {
     }
     setLoading(true)
     const pid = Number(proyecto)
-    const [c, a, p] = await Promise.all([getCuadres(pid), getAjustesInventario(pid), getProductosInventario(pid)])
+    const [c, a, p, rg, um] = await Promise.all([getCuadres(pid), getAjustesInventario(pid, verAnulados), getProductosInventario(pid), getReglasNovedad(pid), getUmbralConteo(pid)])
     if (c.success) setCuadres(c.data)
     if (a.success) setAjustes(a.data)
     if (p.success) setProductos(p.data)
+    if (rg.success) { setReglas(rg.data); setOrigenReglas(rg.origen) }
+    if (um.success) { setUmbral(um.umbral); setUmbralEdit(String(um.umbral)) }
     setLoading(false)
   }
   useEffect(() => {
@@ -428,16 +451,27 @@ export function CuadreInventario() {
 
   // Indicadores de ajustes (control y aprobación).
   const indAj = useMemo(() => {
-    const total = ajustes.length
-    const pendientes = ajustes.filter((a) => (a.estado ?? "registrado") !== "aprobado").length
+    const activos = ajustes.filter((a) => a.activo !== false)
+    const total = activos.length
+    const pendientes = activos.filter((a) => (a.estado ?? "registrado") !== "aprobado").length
     const aprobados = total - pendientes
     let faltante = 0, sobrante = 0
-    for (const a of ajustes) {
+    for (const a of activos) {
       const c = Number(a.cantidad) || 0
       if (c < 0) faltante += Math.abs(c)
       else sobrante += c
     }
     return { total, pendientes, aprobados, faltante, sobrante }
+  }, [ajustes])
+  // Correcciones ya reversadas: id original → id del reverso (enlace por el marcador "[rev de aj#id]" en soporte).
+  const reversadas = useMemo(() => {
+    const m = new Map<number, number>()
+    for (const a of ajustes) {
+      if (a.activo === false) continue
+      const mm = /\[rev de aj#(\d+)\]/.exec(String(a.soporte ?? ""))
+      if (mm) m.set(Number(mm[1]), a.id)
+    }
+    return m
   }, [ajustes])
 
   const fmt = (n: any) => (Number(n) || 0).toLocaleString("es-CO")
@@ -511,7 +545,7 @@ export function CuadreInventario() {
         const pend = pendienteDe(d)
         if (pend === 0) { next.delete(d.id); continue }
         if (conservar && next.has(d.id)) continue
-        const p = proponerCodigo(d.observacion, pend)
+        const p = proponerCodigo(d.observacion, pend, reglas)
         let parejaId: number | null = null
         if (p.pareja) {
           const cands = candidatasPareja(d, p.pareja).sort((a, b) => Math.abs(Math.abs(pendienteDe(a)) - Math.abs(pend)) - Math.abs(Math.abs(pendienteDe(b)) - Math.abs(pend)))
@@ -537,9 +571,15 @@ export function CuadreInventario() {
       .map((x) => ({ detalleId: x.id, codigo: x.p!.codigo, parejaDetalleId: x.p!.parejaId }))
     if (items.length === 0) { toast({ title: "Nada para aplicar", description: "Las líneas elegidas no tienen un código aplicable desde el conteo." }); return }
     const resumen = items.length === 1 ? "1 corrección" : `${items.length} correcciones`
-    if (!confirm(`Se contabilizarán ${resumen} con fecha ${sel.fecha ? fechaAnteriorTexto(sel.fecha) : "de la víspera"} (mueven el stock: faltantes salen, sobrantes entran) y quedarán registradas con su código y la novedad como motivo.\n\n¿Aplicar?`)) return
+    // Umbral: por encima de N unidades se exige la clave personal (proceso inv_conteo_umbral).
+    const sobreUmbral = items.filter((it) => { const d = detalle.find((x) => x.id === it.detalleId); return d ? Math.abs(pendienteDe(d)) > umbral : false })
+    if (sobreUmbral.length > 0 && !claveConteo.trim()) {
+      toast({ title: `${sobreUmbral.length} línea(s) superan el umbral de ${fmt(umbral)} unidades`, description: "Escribe tu clave personal de autorización en la casilla de arriba para aplicarlas.", variant: "destructive" as any })
+      return
+    }
+    if (!confirm(`Se contabilizarán ${resumen} con fecha ${sel.fecha ? fechaAnteriorTexto(sel.fecha) : "de la víspera"} (mueven el stock: faltantes salen, sobrantes entran) y quedarán registradas con su código y la novedad como motivo.${sobreUmbral.length ? `\n\n${sobreUmbral.length} de ellas superan el umbral de ${fmt(umbral)} unidades y se autorizan con tu clave.` : ""}\n\n¿Aplicar?`)) return
     setAplicando(true)
-    const r = await aplicarCorreccionesConteo(sel.id, items, actor)
+    const r = await aplicarCorreccionesConteo(sel.id, items, actor, { clave: claveConteo })
     setAplicando(false)
     if (r.aplicadas > 0) toast({ title: `${r.aplicadas} corrección(es) contabilizada(s)`, description: r.pendientes === 0 ? "No quedan diferencias pendientes: ya puedes firmar el acta y cerrar el mes." : `Quedan ${r.pendientes} línea(s) pendientes.` })
     if (r.errores.length) toast({ title: `${r.errores.length} línea(s) no se aplicaron`, description: r.errores.slice(0, 3).join(" · "), variant: "destructive" as any })
@@ -550,6 +590,77 @@ export function CuadreInventario() {
     if (r.pendientes === 0 && r.aplicadas > 0 && sel.estado === "contado") setSel({ ...sel, estado: "cerrado" })
     setPropuestas(new Map())
   }
+
+  // Recuento: devuelve la línea al contador (queda "sin digitar" con la marca RECONTAR).
+  async function recontar(d: SigInventarioCuadreDetalle) {
+    if (!sel) return
+    if (!confirm(`Pedir recuento de ${d.producto} lote ${d.lote || "—"} en ${d.location || "—"}.\n\nLa línea vuelve al contador como pendiente; su cantidad actual (${fmt(d.conteo)}) queda de referencia hasta que la recuente.\n\n¿Continuar?`)) return
+    const r = await solicitarRecuentoLinea(d.id, actor)
+    if (!r.success) { toast({ title: "No se pudo pedir el recuento", description: r.error }); return }
+    toast({ title: "Recuento solicitado", description: "La línea aparece marcada en la hoja de conteo." })
+    const det = await getCuadreDetalle(sel.id)
+    if (det.success) setDetalle(det.data)
+    setPropuestas((prev) => { const n = new Map(prev); n.delete(d.id); return n })
+  }
+
+  // Reverso de una corrección contabilizada (código de reverso + clave personal).
+  async function confirmarReverso() {
+    if (!reversoDlg) return
+    const { ajuste, clave, motivo } = reversoDlg
+    if (!clave.trim()) { toast({ title: "Escribe tu clave personal" }); return }
+    if (!motivo.trim()) { toast({ title: "Indica el motivo del reverso" }); return }
+    setSaving(true)
+    const r = await reversarAjusteInventario(ajuste.id, clave, motivo, actor)
+    setSaving(false)
+    if (!r.success) { toast({ title: "No se pudo reversar", description: r.error, variant: "destructive" as any }); return }
+    toast({ title: "Corrección reversada", description: `Se contabilizó el reverso (corrección #${r.reversoId}${r.invtransId ? ", mov #" + r.invtransId : ""}) con fecha de hoy.` })
+    setReversoDlg(null)
+    await cargar()
+    if (sel) { const det = await getCuadreDetalle(sel.id); if (det.success) setDetalle(det.data) }
+  }
+
+  async function reactivar(a: SigInventarioAjuste) {
+    if (!confirm(`Reactivar la corrección #${a.id} (${a.producto}, ${a.cod_movimiento ?? "—"} ${fmt(a.cantidad)}). Vuelve a "registrado"; no mueve stock hasta aprobarla.\n\n¿Continuar?`)) return
+    const r = await reactivarAjusteInventario(a.id)
+    if (r.success) { toast({ title: "Corrección reactivada" }); cargar() }
+    else toast({ title: "No se pudo reactivar", description: r.error })
+  }
+
+  // Diccionario de novedades y umbral (editable).
+  async function guardarRegla() {
+    if (!nuevaRegla.patron.trim()) { toast({ title: "Escribe el texto o patrón" }); return }
+    const r = await guardarReglaNovedad(null, { codigo: nuevaRegla.codigo, patron: nuevaRegla.patron.trim(), etiqueta: nuevaRegla.etiqueta.trim() || null, orden: 50 }, actor)
+    if (!r.success) { toast({ title: "No se pudo guardar la regla", description: r.error }); return }
+    setNuevaRegla({ codigo: nuevaRegla.codigo, patron: "", etiqueta: "" })
+    const rg = await getReglasNovedad(Number(proyecto))
+    if (rg.success) { setReglas(rg.data); setOrigenReglas(rg.origen) }
+  }
+  async function borrarRegla(id: number) {
+    const r = await eliminarReglaNovedad(id)
+    if (!r.success) { toast({ title: "No se pudo eliminar", description: r.error }); return }
+    const rg = await getReglasNovedad(Number(proyecto))
+    if (rg.success) { setReglas(rg.data); setOrigenReglas(rg.origen) }
+  }
+  async function sembrarReglas() {
+    const r = await sembrarReglasNovedad(actor)
+    if (!r.success) { toast({ title: "No se pudo copiar el diccionario", description: r.error }); return }
+    toast({ title: r.creadas ? `${r.creadas} reglas copiadas; ya puedes editarlas` : "El diccionario ya estaba en la tabla" })
+    const rg = await getReglasNovedad(Number(proyecto))
+    if (rg.success) { setReglas(rg.data); setOrigenReglas(rg.origen) }
+  }
+  async function guardarUmbral() {
+    const r = await guardarUmbralConteo(Number(proyecto), Number(umbralEdit), actor)
+    if (!r.success) { toast({ title: "No se pudo guardar el umbral", description: r.error }); return }
+    const um = await getUmbralConteo(Number(proyecto))
+    if (um.success) { setUmbral(um.umbral); setUmbralEdit(String(um.umbral)) }
+    toast({ title: `Umbral guardado: ${umbralEdit} unidades` })
+  }
+
+  // Recargar el historial cuando se activa/desactiva "ver anuladas".
+  useEffect(() => {
+    if (proyecto) cargar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verAnulados])
 
   // ---------- Vista DETALLE de un cuadre ----------
   if (sel) {
@@ -580,6 +691,9 @@ export function CuadreInventario() {
               <Badge style={{ background: est.color, color: "white" }}>{est.label}</Badge>
             </div>
             <div className="flex gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setVerDiccionario(true)} title="Diccionario de novedades y umbral de clave">
+                <Settings2 className="mr-1 h-4 w-4" /> Diccionario
+              </Button>
               <Button size="sm" variant="outline" onClick={() => interpretar(false)} disabled={aplicando} title="Vuelve a leer la novedad de cada línea y propone el código">
                 <Wand2 className="mr-1 h-4 w-4" /> Interpretar novedades
               </Button>
@@ -595,6 +709,17 @@ export function CuadreInventario() {
             <SigKpi label="Aplicadas" value={lineasDif.length - pendientesCount} accent={SST_TOKENS.ok} valueColor={SST_TOKENS.ok} />
             <SigKpi label="Fecha de las correcciones" value={sel.fecha ? fechaAnteriorTexto(sel.fecha) : "víspera"} accent={SST_TOKENS.navy} />
           </div>
+
+          {lineasDif.some((d) => Math.abs(pendienteDe(d)) > umbral) && (
+            <Card className="flex flex-wrap items-center gap-3 p-3" style={{ borderColor: SST_TOKENS.warn }}>
+              <ShieldCheck className="h-4 w-4" style={{ color: SST_TOKENS.warn }} />
+              <div className="text-xs">
+                <b>Umbral de aprobación: {fmt(umbral)} unidades.</b> Las líneas marcadas lo superan y se aplican solo con tu clave personal de autorización (queda en el registro de autorizaciones).
+              </div>
+              <Input type="password" value={claveConteo} onChange={(e) => setClaveConteo(e.target.value)} placeholder="Tu clave personal" autoComplete="off" className="h-8 w-44" />
+              <AyudaClaveAutorizacion />
+            </Card>
+          )}
 
           <p className="text-xs text-muted-foreground">
             El contador escribió la novedad en cada línea; el sistema propone el código y tú lo confirmas o lo cambias antes de aplicar. Sin novedad se propone 701 (sobrante) o 702 (faltante).
@@ -689,15 +814,29 @@ export function CuadreInventario() {
                         </td>
                         <td className="px-3 py-1.5">
                           {pend !== 0 ? (
-                            <Button
-                              size="sm"
-                              className="h-7 text-xs"
-                              disabled={aplicando || !opc?.aplicable || (!!opc?.pareja && !p?.parejaId)}
-                              onClick={() => aplicarLineas([d.id])}
-                              style={{ background: SST_TOKENS.navy, color: "white" }}
-                            >
-                              Aplicar
-                            </Button>
+                            <div className="flex flex-col items-start gap-1">
+                              {Math.abs(pend) > umbral && (
+                                <span className="inline-flex items-center gap-1 text-[11px]" style={{ color: SST_TOKENS.warn }} title={`Supera el umbral de ${fmt(umbral)} unidades: requiere clave`}>
+                                  <ShieldCheck className="h-3 w-3" /> requiere clave
+                                </span>
+                              )}
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  disabled={aplicando || !opc?.aplicable || (!!opc?.pareja && !p?.parejaId)}
+                                  onClick={() => aplicarLineas([d.id])}
+                                  style={{ background: SST_TOKENS.navy, color: "white" }}
+                                >
+                                  Aplicar
+                                </Button>
+                                {aplicadas.length === 0 && (
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={aplicando} onClick={() => recontar(d)} title="Devolver la línea al contador para recontarla antes de corregir">
+                                    <RotateCcw className="mr-1 h-3 w-3" /> Recontar
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
                           ) : (
                             <div className="text-[11px]" style={{ color: SST_TOKENS.ok }}>
                               Aplicada
@@ -832,7 +971,7 @@ export function CuadreInventario() {
                         {!colapsado && g.filas.map((d) => {
                           const dif = Number(d.diferencia) || 0
                           return (
-                            <tr key={d.id} className={`border-b last:border-0 ${dif !== 0 && !corregido ? "bg-red-50" : ""}`}>
+                            <tr key={d.id} className={`border-b last:border-0 ${!d.contado_en && String(d.contado_por || "").startsWith("RECONTAR") ? "bg-amber-50" : dif !== 0 && !corregido ? "bg-red-50" : ""}`}>
                               <td className="px-3 py-1.5 text-muted-foreground">
                                 {agrupar === "ubicacion" ? (
                                   <>
@@ -873,7 +1012,11 @@ export function CuadreInventario() {
                                 </td>
                               )}
                               <td className="px-3 py-1.5 text-[11px] text-muted-foreground">
-                                {d.contado_por ? (
+                                {!d.contado_en && String(d.contado_por || "").startsWith("RECONTAR") ? (
+                                  <span className="inline-flex items-center gap-1 font-semibold" style={{ color: SST_TOKENS.warn }} title={d.contado_por ?? ""}>
+                                    <RotateCcw className="h-3 w-3" /> Recontar
+                                  </span>
+                                ) : d.contado_por ? (
                                   <span className="inline-flex items-center gap-1"><User className="h-3 w-3" />{d.contado_por}</span>
                                 ) : (
                                   "—"
@@ -1017,9 +1160,17 @@ export function CuadreInventario() {
               <SigKpi label="Sobrante (+)" value={fmt(indAj.sobrante)} accent={SST_TOKENS.ok} valueColor={SST_TOKENS.ok} />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <Button size="sm" variant="outline" onClick={abrirNomenclatura}>
-                <BookOpen className="mr-1 h-4 w-4" /> Tipos de movimiento (qué código usar)
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={abrirNomenclatura}>
+                  <BookOpen className="mr-1 h-4 w-4" /> Tipos de movimiento (qué código usar)
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setVerDiccionario(true)} title="Diccionario de novedades y umbral de clave">
+                  <Settings2 className="mr-1 h-4 w-4" /> Diccionario y umbral
+                </Button>
+                <Button size="sm" variant={verAnulados ? "secondary" : "ghost"} onClick={() => setVerAnulados((v) => !v)} title="Mostrar las correcciones anuladas para poder reactivarlas">
+                  <Undo2 className="mr-1 h-4 w-4" /> {verAnulados ? "Ocultar anuladas" : "Ver anuladas"}
+                </Button>
+              </div>
               <Button size="sm" onClick={() => setFormAjuste({ fecha: "", direccion: "salida", tipo: "faltante", codproducto: "", producto: "", lote: "", location: "", cantidad: 0, motivo: "", responsable: actor, soporte: "" })}>
                 <Plus className="mr-2 h-4 w-4" /> Registrar corrección
               </Button>
@@ -1059,18 +1210,31 @@ export function CuadreInventario() {
                           <td className="px-3 py-1.5 text-center"><Badge style={{ background: SST_TOKENS.navy, color: "white" }}>{a.cod_movimiento || "—"}</Badge></td>
                           <td className="px-3 py-1.5 text-right font-medium" style={{ color: (a.cantidad ?? 0) < 0 ? SST_TOKENS.bad : SST_TOKENS.ok }}>{(a.cantidad ?? 0) > 0 ? "+" : ""}{fmt(a.cantidad)}</td>
                           <td className="px-3 py-1.5">
-                            {aprobado ? (
+                            {a.activo === false ? (
+                              <Badge variant="outline" title="Eliminada antes de contabilizar; se puede reactivar">Anulada</Badge>
+                            ) : aprobado ? (
                               <Badge style={{ background: SST_TOKENS.ok, color: "white" }} title={`${a.aprobado_por ?? ""} ${a.aprobado_fecha ? "· " + String(a.aprobado_fecha).slice(0, 10) : ""}`}>Aprobado</Badge>
                             ) : (
                               <Badge style={{ background: SST_TOKENS.warn, color: "white" }}>Registrado</Badge>
                             )}
+                            {a.tipo === "reverso" && <div className="mt-0.5 text-[11px] text-muted-foreground" title={a.motivo ?? ""}>reverso</div>}
+                            {reversadas.has(a.id) && <div className="mt-0.5 text-[11px]" style={{ color: SST_TOKENS.warn }} title={`Reversada por la corrección #${reversadas.get(a.id)}`}>reversada · #{reversadas.get(a.id)}</div>}
                           </td>
                           <td className="px-3 py-1.5 text-xs">{a.responsable || "—"}</td>
                           <td className="px-3 py-1.5">
                             <span className="flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
-                              {!aprobado && <button onClick={() => aprobar(a)} title="Aprobar" className="text-muted-foreground hover:text-green-600"><CheckCircle2 className="h-3.5 w-3.5" /></button>}
-                              {!aprobado && <button onClick={() => setFormAjuste({ ...a })} title="Editar" className="text-muted-foreground hover:text-foreground"><Pencil className="h-3.5 w-3.5" /></button>}
-                              <button onClick={() => borrarAjuste(a)} title="Eliminar" className="text-muted-foreground hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                              {a.activo === false ? (
+                                !a.invtrans_id && <button onClick={() => reactivar(a)} title="Reactivar (vuelve a registrado)" className="text-muted-foreground hover:text-green-600"><Undo2 className="h-3.5 w-3.5" /></button>
+                              ) : (
+                                <>
+                                  {!aprobado && <button onClick={() => aprobar(a)} title="Aprobar" className="text-muted-foreground hover:text-green-600"><CheckCircle2 className="h-3.5 w-3.5" /></button>}
+                                  {!aprobado && <button onClick={() => setFormAjuste({ ...a })} title="Editar" className="text-muted-foreground hover:text-foreground"><Pencil className="h-3.5 w-3.5" /></button>}
+                                  {aprobado && !!a.invtrans_id && a.tipo !== "reverso" && !reversadas.has(a.id) && !!codigoReversoDe(a.cod_movimiento, a.direccion) && (
+                                    <button onClick={() => setReversoDlg({ ajuste: a, clave: "", motivo: "" })} title={`Reversar con ${codigoReversoDe(a.cod_movimiento, a.direccion)?.etiqueta} (requiere clave)`} className="text-muted-foreground hover:text-amber-600"><Repeat className="h-3.5 w-3.5" /></button>
+                                  )}
+                                  {!aprobado && <button onClick={() => borrarAjuste(a)} title="Eliminar (se puede reactivar)" className="text-muted-foreground hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>}
+                                </>
+                              )}
                             </span>
                           </td>
                         </tr>
@@ -1083,6 +1247,117 @@ export function CuadreInventario() {
           </TabsContent>
         </Tabs>
       )}
+
+      {/* Dialog: reverso de una corrección contabilizada (código de reverso + clave personal) */}
+      <Dialog open={!!reversoDlg} onOpenChange={(o) => !o && setReversoDlg(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reversar corrección #{reversoDlg?.ajuste.id}</DialogTitle>
+          </DialogHeader>
+          {reversoDlg && (
+            <div className="space-y-3 text-sm">
+              <div className="rounded-md border p-2 text-xs">
+                <div><b>{reversoDlg.ajuste.producto}</b> · lote {reversoDlg.ajuste.lote || "—"} · {reversoDlg.ajuste.location || "—"}</div>
+                <div>Original: <b>{reversoDlg.ajuste.cod_movimiento}</b> {Number(reversoDlg.ajuste.cantidad) > 0 ? "+" : ""}{fmt(reversoDlg.ajuste.cantidad)} · {reversoDlg.ajuste.fecha}{reversoDlg.ajuste.invtrans_id ? ` · mov #${reversoDlg.ajuste.invtrans_id}` : ""}</div>
+                <div>Reverso: <b>{codigoReversoDe(reversoDlg.ajuste.cod_movimiento, reversoDlg.ajuste.direccion)?.etiqueta}</b> {Number(reversoDlg.ajuste.cantidad) > 0 ? "−" : "+"}{fmt(Math.abs(Number(reversoDlg.ajuste.cantidad) || 0))} · con fecha de hoy</div>
+                {reversoDlg.ajuste.motivo && <div className="text-muted-foreground">Motivo original: {reversoDlg.ajuste.motivo}</div>}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                La corrección original no se borra: queda enlazada a su reverso para la trazabilidad. Si la línea del conteo sigue abierta, vuelve a aparecer en Diferencias para aplicarla con el código correcto.
+              </p>
+              <Input value={reversoDlg.motivo} onChange={(e) => setReversoDlg({ ...reversoDlg, motivo: e.target.value })} placeholder="Motivo del reverso" />
+              <div className="flex items-center gap-2">
+                <Input type="password" value={reversoDlg.clave} onChange={(e) => setReversoDlg({ ...reversoDlg, clave: e.target.value })} placeholder="Tu clave personal de autorización" autoComplete="off" />
+                <AyudaClaveAutorizacion />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setReversoDlg(null)}>Cancelar</Button>
+                <Button size="sm" disabled={saving || !reversoDlg.clave.trim() || !reversoDlg.motivo.trim()} onClick={confirmarReverso} style={{ background: SST_TOKENS.warn, color: "white" }}>
+                  {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Repeat className="mr-1 h-4 w-4" />} Reversar y contabilizar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: diccionario de novedades y umbral de clave */}
+      <Dialog open={verDiccionario} onOpenChange={setVerDiccionario}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Diccionario de novedades y umbral de clave</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <Card className="space-y-2 p-3">
+              <div className="text-xs font-semibold uppercase text-muted-foreground">Umbral de aprobación (este proyecto)</div>
+              <p className="text-xs text-muted-foreground">Una corrección del conteo cuya cantidad supere este número de unidades exige la clave personal (proceso "Aplicar corrección de conteo sobre el umbral").</p>
+              <div className="flex items-center gap-2">
+                <Input type="number" min={0} value={umbralEdit} onChange={(e) => setUmbralEdit(e.target.value)} className="h-8 w-32" />
+                <span className="text-xs text-muted-foreground">unidades · vigente: {fmt(umbral)}</span>
+                <Button size="sm" variant="outline" onClick={guardarUmbral} disabled={umbralEdit === String(umbral)}>Guardar</Button>
+              </div>
+            </Card>
+            <Card className="space-y-2 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-semibold uppercase text-muted-foreground">Reglas novedad → código ({reglas.length}) · {origenReglas === "tabla" ? "editables" : "fijas (sin copiar aún)"}</div>
+                {origenReglas === "fijas" && (
+                  <Button size="sm" variant="outline" onClick={sembrarReglas} title="Copia las reglas fijas a la tabla para poder editarlas (requiere SQL 214)">Copiar para editar</Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">Se evalúan en orden; gana la primera que coincide con la novedad (sin tildes ni mayúsculas). Texto simple o expresión regular entre barras, p. ej. <code>/lote (equivocad|cruzad)/</code>.</p>
+              <div className="max-h-[38vh] overflow-auto rounded-md border">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-background">
+                    <tr className="border-b text-left uppercase text-muted-foreground">
+                      <th className="px-2 py-1">Orden</th>
+                      <th className="px-2 py-1">Código</th>
+                      <th className="px-2 py-1">Patrón</th>
+                      <th className="px-2 py-1">Etiqueta</th>
+                      <th className="px-2 py-1"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reglas.map((r, i) => (
+                      <tr key={r.id ?? `f${i}`} className="border-b last:border-0">
+                        <td className="px-2 py-1 text-muted-foreground">{r.orden ?? 100}</td>
+                        <td className="px-2 py-1"><Badge style={{ background: SST_TOKENS.navy, color: "white" }}>{r.codigo}</Badge></td>
+                        <td className="px-2 py-1 font-mono">{r.patron}</td>
+                        <td className="px-2 py-1">{r.etiqueta || "—"}</td>
+                        <td className="px-2 py-1 text-right">
+                          {origenReglas === "tabla" && r.id ? (
+                            <button onClick={() => borrarRegla(r.id!)} title="Eliminar regla" className="text-muted-foreground hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex flex-wrap items-end gap-2">
+                <div>
+                  <div className="text-[11px] text-muted-foreground">Código</div>
+                  <select className="h-8 rounded-md border bg-background px-2 text-xs" value={nuevaRegla.codigo} onChange={(e) => setNuevaRegla({ ...nuevaRegla, codigo: e.target.value })}>
+                    {OPCIONES_CODIGO.map((o) => (
+                      <option key={o.codigo} value={o.codigo}>{o.etiqueta}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <div className="text-[11px] text-muted-foreground">Texto o patrón</div>
+                  <Input value={nuevaRegla.patron} onChange={(e) => setNuevaRegla({ ...nuevaRegla, patron: e.target.value })} placeholder="p. ej. empaque roto" className="h-8" />
+                </div>
+                <div>
+                  <div className="text-[11px] text-muted-foreground">Etiqueta</div>
+                  <Input value={nuevaRegla.etiqueta} onChange={(e) => setNuevaRegla({ ...nuevaRegla, etiqueta: e.target.value })} placeholder="opcional" className="h-8 w-40" />
+                </div>
+                <Button size="sm" onClick={guardarRegla} disabled={origenReglas !== "tabla" || !nuevaRegla.patron.trim()} title={origenReglas !== "tabla" ? "Primero copia las reglas fijas para editar" : "Agregar regla"}>
+                  <Plus className="mr-1 h-4 w-4" /> Agregar
+                </Button>
+              </div>
+            </Card>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog nuevo conteo */}
       <Dialog open={!!nuevo} onOpenChange={(o) => !o && setNuevo(null)}>
