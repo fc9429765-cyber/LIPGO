@@ -2750,15 +2750,59 @@ async function obtenerBaseDelMes(
       const valor = d.conteo === null || d.conteo === undefined ? Number(d.sistema) || 0 : Number(d.conteo) || 0
       const key = `${d.codproducto}||${d.lote ?? ""}||${d.location ?? ""}`
       porLote[key] = (porLote[key] || 0) + valor
-      porProducto[d.codproducto] = (porProducto[d.codproducto] || 0) + valor
       if (d.producto && !nombrePorCod[d.codproducto]) nombrePorCod[d.codproducto] = d.producto
+    }
+    const fechaConteo = String(conteo.fecha).slice(0, 10)
+    let descripcion = `Conteo total #${conteo.id} del ${fechaLargaEs(conteo.fecha)} (${conteo.estado})`
+    // Conteo hecho DESPUÉS del día 1 (p. ej. el 3): el físico ya trae lo que
+    // entró y salió del 1 al 3. Para que sea el inicial del día 1 (regla de
+    // gerencia: "ese conteo debe ser el inicial del 1 del mes"), se lleva
+    // hacia atrás con las transacciones aprobadas fechadas entre el día 1 y
+    // el día anterior al conteo — incluidos los ajustes del propio conteo,
+    // que se postean fechados la víspera. Así base(día 1) + movimientos del
+    // mes = cierre, exacto, y el Kardex del mes arranca el día 1 como pide
+    // el usuario, aunque el conteo físico se haya hecho el 2 o el 3.
+    if (fechaConteo > primerDia) {
+      let filas: any[]
+      if (precargado) filas = precargado.filas
+      else {
+        const desdeUtc = new Date(`${primerDia}T00:00:00Z`)
+        desdeUtc.setUTCDate(desdeUtc.getUTCDate() - 1)
+        const hastaUtc = new Date(`${fechaConteo}T00:00:00Z`)
+        hastaUtc.setUTCDate(hastaUtc.getUTCDate() + 1)
+        const rMov = await traerPaginasEnParalelo((desde, hasta) =>
+          supabase
+            .from("invtrans")
+            .select("codproducto,lote,location,tipomov,cantidad,status,creado")
+            .eq("idempresa", proyectoId)
+            .gte("creado", desdeUtc.toISOString())
+            .lt("creado", hastaUtc.toISOString())
+            .order("id", { ascending: true })
+            .range(desde, hasta),
+        )
+        filas = rMov.data
+      }
+      for (const r of filas) {
+        if (!String(r.status || "").toLowerCase().startsWith("aprob")) continue
+        if (!r.creado) continue
+        const f = fechaColombiaDe(r.creado)
+        if (f < primerDia || f >= fechaConteo) continue
+        const key = `${r.codproducto}||${r.lote ?? ""}||${r.location ?? ""}`
+        const c = Math.abs(Number(r.cantidad) || 0)
+        porLote[key] = (porLote[key] || 0) - (r.tipomov === "Entrada" ? c : -c)
+      }
+      descripcion += `, llevado al ${fechaLargaEs(primerDia)} con las transacciones del ${primerDia.slice(8)} al ${String(Number(fechaConteo.slice(8)) - 1).padStart(2, "0")}`
+    }
+    for (const [key, v] of Object.entries(porLote)) {
+      const cod = key.split("||")[0]
+      porProducto[cod] = (porProducto[cod] || 0) + v
     }
     return {
       mes,
-      fecha: String(conteo.fecha).slice(0, 10),
+      fecha: primerDia,
       fuente: "conteo",
       cuadreId: conteo.id,
-      descripcion: `Conteo total #${conteo.id} del ${fechaLargaEs(conteo.fecha)} (${conteo.estado})`,
+      descripcion,
       porProducto,
       porLote,
       nombrePorCod,
