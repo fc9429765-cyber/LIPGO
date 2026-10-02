@@ -45,6 +45,20 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error("[ErrorBoundary] Error no capturado en el módulo:", error, info.componentStack)
+    // Pestaña vieja tras un despliegue: el navegador pide un archivo JS que ya
+    // no existe ("Loading chunk … failed"). La única salida es recargar; se
+    // hace sola UNA vez cada 30 s para no entrar en bucle si el error persiste.
+    if (/ChunkLoadError|Loading chunk|Failed to fetch dynamically imported module|Importing a module script failed|CSS_CHUNK_LOAD_FAILED/i.test(`${error?.name} ${error?.message}`)) {
+      try {
+        const ultima = Number(sessionStorage.getItem("lipgo:recarga-chunk") || 0)
+        if (Date.now() - ultima > 30_000) {
+          sessionStorage.setItem("lipgo:recarga-chunk", String(Date.now()))
+          window.location.reload()
+        }
+      } catch {
+        window.location.reload()
+      }
+    }
   }
 
   componentDidUpdate(prev: Props) {

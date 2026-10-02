@@ -26,10 +26,15 @@ export function getUserModulesCached(): Promise<UserModulesResponse> {
     .then(async (res) => {
       if (!res.ok) throw new Error(`/api/user-modules ${res.status}`)
       const data = (await res.json()) as Partial<UserModulesResponse>
-      return {
+      const resultado = {
         protectedModules: Array.isArray(data?.protectedModules) ? data.protectedModules : [],
         allowedModules: Array.isArray(data?.allowedModules) ? data.allowedModules : [],
       }
+      // Sin módulos permitidos = casi siempre "todavía no hay sesión" (el
+      // endpoint responde vacío sin usuario). No se guarda: el siguiente que
+      // pregunte, ya con sesión, vuelve a pedirlos en vez de heredar el vacío.
+      if (resultado.allowedModules.length === 0 && vigente?.promesa === promesa) vigente = null
+      return resultado
     })
     .catch((e) => {
       // No dejar en caché un fallo: el siguiente que pregunte vuelve a intentar.

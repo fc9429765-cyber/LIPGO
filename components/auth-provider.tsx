@@ -41,6 +41,11 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  // La caché compartida de /api/user-modules es por pestaña: al cambiar el usuario
+  // de la sesión (entrar, salir, otro usuario) se vacía para no heredar módulos ajenos.
+  useEffect(() => {
+    invalidarUserModulesCache()
+  }, [profile?.id])
   const [loading, setLoading] = useState(true)
   // Ref (no state): solo lo lee el listener de auth para no recargar el perfil
   // dos veces. Como state era dependencia del efecto y se seteaba dentro, el
