@@ -14,7 +14,7 @@ import { configModules } from "@/lib/config-definitions"
 import ConsultaSiigo from "@/components/facturacion/consulta-siigo"
 // Producción: maestro de montacargas, QR y bitácora de mantenimiento.
 import { ModuloGuiaBar } from "@/components/modulo-guia-bar" // Guia embebida en la pantalla de cada modulo
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Compass, Search, Sparkles, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PermissionGuard } from "@/components/permission-guard"
 // Reconstruido: reportar la novedad y ver su efecto en la quincena en una sola
@@ -1149,8 +1149,8 @@ export function MainContent({
               `}</style>
               <div className="lipgo-home-hero mb-3 px-4 py-2.5">
                 <div className="relative z-10 flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-                  <h1 className="text-base font-extrabold tracking-tight sm:text-lg">
-                    <span aria-hidden="true">👋</span> {nowInfo.saludo}
+                  <h1 className="text-base font-bold tracking-tight sm:text-lg">
+                    {nowInfo.saludo}
                     {primerNombre ? `, ${primerNombre}` : ""}
                   </h1>
                   <span className="text-xs sm:text-sm" style={{ color: "#9fd4e6" }}>
@@ -1167,11 +1167,8 @@ export function MainContent({
                   flotante queda para el resto de pantallas (aquí no, para no duplicar). */}
               <section className="mb-5 sm:mb-6">
                 <div className="mb-2.5">
-                  <span
-                    className="inline-flex items-center gap-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em]"
-                    style={{ color: "#00a6c4" }}
-                  >
-                    <span aria-hidden="true">✨</span> La inteligencia de LIPgo
+                  <span className="inline-flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.14em] text-acento">
+                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> La inteligencia de LIPgo
                   </span>
                   <p className="mt-1 max-w-[62ch] text-[13px] text-muted-foreground">
                     Háblale a <span className="font-bold text-foreground">LIPbot</span> en lenguaje natural: te da{" "}
@@ -1194,14 +1191,14 @@ export function MainContent({
 
                 {/* Los tres superpoderes — lo que hace a LIPbot distinto de un chat */}
                 <div className="mt-2.5 flex flex-wrap gap-2">
-                  <span className="inline-flex items-center gap-2 rounded-lg border border-border bg-muted/60 px-2.5 py-1 text-[11.5px] font-semibold text-foreground">
-                    <span aria-hidden="true">🔎</span> <span><b className="font-extrabold">Consulta</b> datos reales</span>
+                  <span className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1 text-[11.5px] font-medium text-foreground">
+                    <Search className="h-3.5 w-3.5 text-acento" aria-hidden="true" /> <span><b className="font-bold">Consulta</b> datos reales</span>
                   </span>
-                  <span className="inline-flex items-center gap-2 rounded-lg border border-border bg-muted/60 px-2.5 py-1 text-[11.5px] font-semibold text-foreground">
-                    <span aria-hidden="true">🧭</span> <span><b className="font-extrabold">Navega</b> a cualquier módulo</span>
+                  <span className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1 text-[11.5px] font-medium text-foreground">
+                    <Compass className="h-3.5 w-3.5 text-acento" aria-hidden="true" /> <span><b className="font-bold">Navega</b> a cualquier módulo</span>
                   </span>
-                  <span className="inline-flex items-center gap-2 rounded-lg border border-border bg-muted/60 px-2.5 py-1 text-[11.5px] font-semibold text-foreground">
-                    <span aria-hidden="true">⚡</span> <span><b className="font-extrabold">Ejecuta</b> acciones por ti</span>
+                  <span className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1 text-[11.5px] font-medium text-foreground">
+                    <Zap className="h-3.5 w-3.5 text-acento" aria-hidden="true" /> <span><b className="font-bold">Ejecuta</b> acciones por ti</span>
                   </span>
                 </div>
 
@@ -1223,7 +1220,8 @@ export function MainContent({
               <ContinuarReciente onNavigate={onNavigateModule} />
 
               {/* Aplicaciones — el otro pilar del Inicio */}
-              <ModuleCards onSelectGroup={onSelectGroup} onSelectModule={onSelectModule} />
+              {/* El distintivo de pendientes de cada área abre el módulo con su grupo (navegación robusta). */}
+              <ModuleCards onSelectGroup={onSelectGroup} onSelectModule={onNavigateModule} />
 
               {/* Pulso operativo */}
               <div className="mt-5 sm:mt-6">

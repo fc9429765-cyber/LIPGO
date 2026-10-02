@@ -268,8 +268,8 @@ export function ModulesView({ groupKey, onBack, onSelectModule }: ModulesViewPro
   return (
     <div className="space-y-5" style={{ "--tint": tint } as CSSProperties}>
       <style>{`
-        .mosaico{ position:relative; display:flex; flex-direction:column; border-radius:16px; background:var(--card,#fff);
-          border:1px solid #e7edf4; padding:14px 14px 12px; text-align:left; cursor:pointer; overflow:hidden; outline:none;
+        .mosaico{ position:relative; display:flex; flex-direction:column; border-radius:14px; background:var(--card,#fff);
+          border:1px solid var(--border,#E3E8EE); padding:14px 14px 12px; text-align:left; cursor:pointer; overflow:hidden; outline:none;
           transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
         .mosaico::before{ content:""; position:absolute; inset:0; border-radius:16px; padding:1.2px; pointer-events:none;
           background:linear-gradient(135deg, color-mix(in srgb, var(--tint) 68%, transparent), transparent 60%);
@@ -282,21 +282,21 @@ export function ModulesView({ groupKey, onBack, onSelectModule }: ModulesViewPro
           background:color-mix(in srgb, var(--tint) 14%, #fff); color:var(--tint);
           box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--tint) 22%, transparent); transition:transform .16s, background .16s, color .16s; }
         .mosaico:hover .mos-ico{ transform:scale(1.06); color:#fff; background:linear-gradient(135deg, var(--tint), color-mix(in srgb, var(--tint) 62%, #000)); }
-        .mos-title{ font-size:14.5px; font-weight:800; line-height:1.15; color:#132a44; letter-spacing:-.01em; }
-        .mos-desc{ margin-top:3px; font-size:11.5px; line-height:1.35; color:#5f7390; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+        .mos-title{ font-size:14.5px; font-weight:700; line-height:1.15; color:var(--foreground,#0B1220); letter-spacing:-.01em; }
+        .mos-desc{ margin-top:3px; font-size:11.5px; line-height:1.35; color:var(--muted-foreground,#5B6B7F); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
         .mos-star{ flex:none; color:#c9d3df; border-radius:8px; padding:2px; transition:color .15s, transform .15s; }
         .mos-star:hover{ color:#f59e0b; transform:scale(1.1); }
         .mos-star.is-fav{ color:#f59e0b; } .mos-star.is-fav svg{ fill:#f59e0b; }
         .mos-tab{ display:inline-flex; align-items:center; gap:4px; border-radius:999px; border:1px solid #e7edf4; background:#f6f9fc;
           padding:3px 9px; font-size:11px; font-weight:600; color:#3d5168; transition:background .15s, color .15s, border-color .15s; }
         .mos-tab:hover{ background:color-mix(in srgb, var(--tint) 14%, #fff); color:var(--tint); border-color:color-mix(in srgb, var(--tint) 35%, transparent); }
-        .mos-tab.is-medio{ border-color:#fcd34d; background:#fffbeb; color:#92400e; }
-        .mos-tab.is-alto{ border-color:#fca5a5; background:#fef2f2; color:#991b1b; }
-        .mos-tab-n{ border-radius:999px; padding:0 5px; font-size:10px; font-weight:800; background:currentColor; }
-        .mos-tab-n{ color:#fff; } .mos-tab.is-medio .mos-tab-n{ background:#d97706; } .mos-tab.is-alto .mos-tab-n{ background:#dc2626; }
-        .mos-badge{ display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:3px 9px 3px 7px; font-size:11px; font-weight:700; }
-        .mos-badge.is-medio{ background:#fffbeb; color:#92400e; border:1px solid #fcd34d; }
-        .mos-badge.is-alto{ background:#fef2f2; color:#991b1b; border:1px solid #fca5a5; }
+        .mos-tab.is-medio{ border-color:#FED7AA; background:#FFF7ED; color:#9A3412; }
+        .mos-tab.is-alto{ border-color:#FECACA; background:#FEF2F2; color:#991B1B; }
+        .mos-tab-n{ border-radius:999px; padding:0 5px; font-size:10px; font-weight:800; background:currentColor; font-variant-numeric:tabular-nums; }
+        .mos-tab-n{ color:#fff; } .mos-tab.is-medio .mos-tab-n{ background:#B45309; } .mos-tab.is-alto .mos-tab-n{ background:#B91C1C; }
+        .mos-badge{ display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:3px 9px 3px 7px; font-size:11px; font-weight:700; font-variant-numeric:tabular-nums; }
+        .mos-badge.is-medio{ background:#FFF7ED; color:#9A3412; border:1px solid #FED7AA; }
+        .mos-badge.is-alto{ background:#FEF2F2; color:#991B1B; border:1px solid #FECACA; }
         .mos-dot{ width:7px; height:7px; border-radius:999px; background:currentColor; }
         .mos-enter{ display:inline-flex; align-items:center; gap:3px; font-size:11.5px; font-weight:800; color:var(--tint);
           opacity:0; transform:translateX(-6px); transition:opacity .16s, transform .16s; }
@@ -329,17 +329,18 @@ export function ModulesView({ groupKey, onBack, onSelectModule }: ModulesViewPro
             {selectedEmpresaNombre ?? "Todo LIP"} · {fechaLarga()} · {totalPantallas} pantalla{totalPantallas !== 1 ? "s" : ""}
           </p>
           {pulso.length > 0 && (
-            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px]">
+            <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px]">
               <span className="font-semibold text-foreground">Hoy requiere acción:</span>
               {pulso.slice(0, 4).map((p) => (
                 <button
                   key={p.modulo}
                   type="button"
                   onClick={() => onSelectModule(p.modulo)}
-                  className={`rounded-full border px-2 py-0.5 font-medium transition-colors ${
-                    p.nivel === "alto" ? "border-red-200 bg-red-50 text-red-800 hover:bg-red-100" : "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                  className={`lg-num inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-medium transition-colors ${
+                    p.nivel === "alto" ? "border-critico-bd bg-critico-bg text-critico-fg hover:bg-red-100" : "border-atencion-bd bg-atencion-bg text-atencion-fg hover:bg-orange-100"
                   }`}
                 >
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
                   {p.texto}
                 </button>
               ))}
