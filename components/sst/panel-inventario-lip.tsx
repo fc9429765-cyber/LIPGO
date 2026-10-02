@@ -662,7 +662,7 @@ export function PanelInventarioLIP() {
             <>
               <p className="text-xs text-muted-foreground">
                 <ClipboardList className="mr-1 inline h-3.5 w-3.5" />
-                <b>{selectedEmpresaNombre}</b> · solo <b>Producto Terminado + Sub Producto</b> (el empaque y la materia prima se concilian aparte). <b>Saldo inicial</b> de cada mes = su <b>Conteo total aprobado</b> (si no hay, el sistema al corte del día 1). <b>Ingresos</b> = aprobación de ingresos + devoluciones · <b>Salidas</b> = cargue (601) + reproceso/avería (551) · <b>Ajustes</b> = 701/702. <b>Saldo final</b> = base del mes siguiente (stock vivo en el mes en curso). Todo por la fecha de cada transacción; traslados, proyección y tolva no se cuentan. Lo que las transacciones no explican queda en <b>"Sin explicar"</b>, tal cual, sin forzar el cuadre. Cada mes genera un acta PDF en <code>inventario/cierres/{selectedEmpresaId}/AAAA-MM/</code>.
+                <b>{selectedEmpresaNombre}</b> · solo <b>Producto Terminado + Sub Producto</b> (el empaque y la materia prima se concilian aparte). <b>Saldo inicial</b> de cada mes = su <b>Conteo total aprobado</b> (si no hay, el sistema al corte del día 1). <b>Ingresos</b> = aprobación de ingresos + devoluciones · <b>Salidas</b> = cargue (601) + reproceso/avería (551) · <b>Ajustes</b> = 701/702. <b>Saldo final</b> = base del mes siguiente (stock vivo en el mes en curso). Todo por la fecha de cada transacción; la proyección no se cuenta (no es inventario) y los ingresos de producción por tolva sí. Lo que las transacciones no cubren queda en <b>"Sin soporte"</b> y debe llevarse a cero con su corrección documentada; nunca se fuerza el cuadre. Cada mes genera un acta PDF en <code>inventario/cierres/{selectedEmpresaId}/AAAA-MM/</code>.
               </p>
               {loadingConc ? (
                 <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" style={{ color: SST_TOKENS.navy }} /></div>
@@ -675,7 +675,7 @@ export function PanelInventarioLIP() {
                     <KPI label="Saldo inicial del periodo" valor={fmt(conc.resumen.invInicial)} unidad="und" Icon={ArrowDownToLine} color={SST_TOKENS.navy} sub={concFilas[0]?.baseDescripcion || "base fija del primer mes"} />
                     <KPI label="Merma de proceso" valor={fmt(conc.resumen.mermaMesEnCurso ?? 0)} unidad="und" Icon={AlertTriangle} color={SST_TOKENS.warn} sub={`reproceso/avería · mes ${conc.resumen.mesMerma ?? "—"}`} />
                     <KPI
-                      label="Sin explicar (meses cerrados)"
+                      label="Sin soporte (meses cerrados)"
                       valor={fmt((conc.resumen.mermaProceso ?? 0) - (conc.resumen.ajusteMesEnCurso ?? 0))}
                       unidad="und"
                       Icon={RefreshCw}
@@ -698,8 +698,8 @@ export function PanelInventarioLIP() {
                           <th className="px-3 py-2 text-right">Ingresos</th>
                           <th className="px-3 py-2 text-right">Cargue (601)</th>
                           <th className="px-3 py-2 text-right">Reproceso (551)</th>
-                          <th className="px-3 py-2 text-right">Ajustes (701/702)</th>
-                          <th className="px-3 py-2 text-right">Sin explicar</th>
+                          <th className="px-3 py-2 text-right">Ajustes y reclasif.</th>
+                          <th className="px-3 py-2 text-right" title="Debe ser 0: toda diferencia debe quedar soportada con su corrección">Sin soporte</th>
                           <th className="px-3 py-2 text-right">Saldo final</th>
                           <th className="px-3 py-2 text-center">Soporte</th>
                         </tr>
@@ -721,8 +721,8 @@ export function PanelInventarioLIP() {
                             <td className="px-3 py-1.5 text-right" style={{ color: SST_TOKENS.ok }} title={`Prod./recepción ${fmt(f.recepcion ?? 0)} · Dev. ${fmt(f.devolucion ?? 0)}${f.inicial ? ` · Inicial 561 ${fmt(f.inicial)}` : ""}`}>{fmt(f.ingresos)}</td>
                             <td className="px-3 py-1.5 text-right" style={{ color: SST_TOKENS.navy }}>{fmt(f.cargue)}</td>
                             <td className="px-3 py-1.5 text-right" style={{ color: (f.reproceso ?? 0) ? SST_TOKENS.warn : "inherit" }} title="Reproceso / avería registrada (mov 551) — merma real de proceso">{fmt(f.reproceso)}</td>
-                            <td className="px-3 py-1.5 text-right text-muted-foreground" title="Ajustes 701/702 aprobados en el mes (con signo)">{fmt(f.ajuste ?? 0)}</td>
-                            <td className="px-3 py-1.5 text-right font-semibold" style={{ color: f.mermaProceso ? SST_TOKENS.bad : SST_TOKENS.ok }} title="Saldo inicial + ingresos + ajustes − cargue − reproceso − saldo final. ≠ 0 = transacciones que el stock no refleja (o al revés): revisar">{f.mermaProceso ? fmt(f.mermaProceso) : "✓"}</td>
+                            <td className="px-3 py-1.5 text-right text-muted-foreground" title="Ajustes 701/702 y reclasificaciones 309 aprobados en el mes (con signo)">{fmt(f.ajuste ?? 0)}</td>
+                            <td className="px-3 py-1.5 text-right font-semibold" style={{ color: f.mermaProceso ? SST_TOKENS.bad : SST_TOKENS.ok }} title="Saldo inicial + ingresos + ajustes − cargue − reproceso − saldo final. Debe ser 0: salidas sin confirmar o diferencia que falta corregir con su soporte">{f.mermaProceso ? fmt(f.mermaProceso) : "✓"}</td>
                             <td className="px-3 py-1.5 text-right font-semibold" title={f.cierreDescripcion || ""}>{fmt(f.saldoFinal)}</td>
                             <td className="px-3 py-1.5 text-center">
                               {f.documento_url ? (
@@ -763,7 +763,7 @@ export function PanelInventarioLIP() {
               )}
 
               <p className="text-[11px] text-muted-foreground">
-                La <b>merma de proceso</b> (reproceso 551) se documenta en el cierre y NO se cobra a LIP. Una cifra en <b>"Sin explicar"</b> no se absorbe en el cálculo: señala transacciones que el stock no refleja (o stock sin transacción) y se corrige donde nació. Regenerar el acta sobrescribe el PDF en la carpeta del mes.
+                La <b>merma de proceso</b> (reproceso 551) se documenta en el cierre y NO se cobra a LIP. Una cifra en <b>"Sin soporte"</b> no se absorbe en el cálculo: señala salidas sin confirmar o una diferencia que falta registrar con su corrección y documento, y se corrige donde nació. Regenerar el acta sobrescribe el PDF en la carpeta del mes.
               </p>
             </>
           )}
@@ -780,9 +780,9 @@ export function PanelInventarioLIP() {
           {kardexInfo && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-xs">
               <span><span className="text-muted-foreground">Saldo inicial =</span> <b>{kardexInfo.base ? kardexInfo.base.descripcion : "sin periodo (acumulado histórico)"}</b></span>
-              <span><span className="text-muted-foreground">Saldo =</span> inicial + entradas − salidas + ajustes − merma, transacción por transacción</span>
+              <span><span className="text-muted-foreground">Saldo =</span> inicial + entradas − salidas + ajustes − merma + reclasificaciones, transacción por transacción</span>
               <span><span className="text-muted-foreground">Stock al cierre =</span> <b>{kardexInfo.cierre?.descripcion}</b></span>
-              <span><span className="text-muted-foreground">Sin explicar =</span> saldo − stock al cierre (≠ 0: transacciones que el stock no refleja, o al revés)</span>
+              <span><span className="text-muted-foreground">Sin soporte =</span> saldo − stock al cierre. Debe ser 0; si no, hay salidas sin confirmar o una diferencia que falta corregir con su soporte</span>
             </div>
           )}
           {loadingKardex ? (
@@ -800,12 +800,12 @@ export function PanelInventarioLIP() {
                       <th className="px-3 py-2 text-right">Saldo inicial</th>
                       <th className="px-3 py-2 text-right">Entradas</th>
                       <th className="px-3 py-2 text-right">Salidas</th>
-                      <th className="px-3 py-2 text-right">Traslados</th>
+                      <th className="px-3 py-2 text-right" title="Reclasificaciones y traslados (309/311/312/343/344), neto: dentro del mismo producto suman 0">Reclasif. (neto)</th>
                       <th className="px-3 py-2 text-right">Ajustes</th>
                       <th className="px-3 py-2 text-right">Merma</th>
                       <th className="px-3 py-2 text-right">Saldo</th>
                       <th className="px-3 py-2 text-right">Stock al cierre</th>
-                      <th className="px-3 py-2 text-right">Sin explicar</th>
+                      <th className="px-3 py-2 text-right" title="Saldo por transacciones − stock al cierre. Debe ser 0: toda diferencia debe quedar soportada con su corrección">Sin soporte</th>
                       <th className="px-3 py-2"></th>
                     </tr>
                   </thead>
@@ -824,7 +824,7 @@ export function PanelInventarioLIP() {
                           <td className="px-3 py-1.5 text-right" style={{ color: SST_TOKENS.warn }}>{fmt(p.merma)}</td>
                           <td className="px-3 py-1.5 text-right font-semibold">{fmt(p.saldo)}</td>
                           <td className="px-3 py-1.5 text-right tabular-nums">{fmt(p.saldoCierre)}</td>
-                          <td className="px-3 py-1.5 text-right font-semibold tabular-nums" style={{ color: p.descuadre ? SST_TOKENS.bad : SST_TOKENS.ok }} title={p.descuadre ? "El saldo por transacciones no coincide con el stock al cierre: revisar este producto" : "Cuadra"}>
+                          <td className="px-3 py-1.5 text-right font-semibold tabular-nums" style={{ color: p.descuadre ? SST_TOKENS.bad : SST_TOKENS.ok }} title={p.descuadre ? "Diferencia sin soporte: salidas sin confirmar (picking pendiente) o corrección que falta registrar con su documento" : "Cuadra"}>
                             {p.descuadre ? fmt(p.descuadre) : "✓"}
                           </td>
                           <td className="px-3 py-1.5 text-right"><ZoomIn className="h-3.5 w-3.5 text-muted-foreground" /></td>
@@ -848,7 +848,7 @@ export function PanelInventarioLIP() {
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-xs">
               <span><span className="text-muted-foreground">Arranca en</span> <b>{fmt(cuadreInfo.base.saldo)}</b> <span className="text-muted-foreground">= {cuadreInfo.base.descripcion}</span></span>
               {cuadreInfo.cierre && !Number.isNaN(cuadreInfo.cierre.saldo) && (
-                <span><span className="text-muted-foreground">Cierra en</span> <b>{fmt(cuadreInfo.cierre.saldo)}</b> <span className="text-muted-foreground">= {cuadreInfo.cierre.descripcion}</span>{cuadreInfo.saldoFinalCalculado !== undefined && cuadreInfo.saldoFinalCalculado !== cuadreInfo.cierre.saldo && (<span className="ml-1 font-semibold" style={{ color: SST_TOKENS.bad }}>· sin explicar {fmt(cuadreInfo.saldoFinalCalculado - cuadreInfo.cierre.saldo)}</span>)}</span>
+                <span><span className="text-muted-foreground">Cierra en</span> <b>{fmt(cuadreInfo.cierre.saldo)}</b> <span className="text-muted-foreground">= {cuadreInfo.cierre.descripcion}</span>{cuadreInfo.saldoFinalCalculado !== undefined && cuadreInfo.saldoFinalCalculado !== cuadreInfo.cierre.saldo && (<span className="ml-1 font-semibold" style={{ color: SST_TOKENS.bad }}>· sin soporte {fmt(cuadreInfo.saldoFinalCalculado - cuadreInfo.cierre.saldo)}</span>)}</span>
               )}
               {cuadreInfo.cierre?.esVivo && <span className="text-muted-foreground">Cierre = {cuadreInfo.cierre.descripcion}</span>}
             </div>
@@ -1299,7 +1299,7 @@ export function PanelInventarioLIP() {
                         <span className="text-muted-foreground">· stock al cierre</span>
                         <span className="font-semibold tabular-nums">{fmt(drill.saldoCierre)}</span>
                         {drill.descuadre ? (
-                          <span className="font-semibold" style={{ color: SST_TOKENS.bad }}>· sin explicar {fmt(drill.descuadre)}</span>
+                          <span className="font-semibold" style={{ color: SST_TOKENS.bad }}>· sin soporte {fmt(drill.descuadre)}</span>
                         ) : drill.descuadre === 0 ? (
                           <span className="font-semibold" style={{ color: SST_TOKENS.ok }}>· cuadra</span>
                         ) : null}

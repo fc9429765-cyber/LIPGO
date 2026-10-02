@@ -62,7 +62,24 @@ export async function getPendientesPorPantalla(
       cuenta(head("programacion_cliente").eq("idempresa", empresaId).eq("fecha_operacion", manana).eq("vigente", true)),
     ])
 
+    // Salidas de inventario "por descontar" en órdenes YA finalizadas: el
+    // camión se fue, el stock las descontó, pero la transacción no está
+    // aprobada (picking sin confirmar). Mientras existan, el Kardex las
+    // muestra como diferencia sin soporte y no se puede crear el Conteo
+    // total del mes. El coordinador las resuelve con "Confirmar Picking".
+    let salidasSinConfirmar = 0
+    try {
+      const { data: pend } = await sb.from("invtrans").select("ocargue").eq("idempresa", empresaId).eq("status", "por descontar").limit(500)
+      const ordenes = Array.from(new Set((pend ?? []).map((p: any) => String(p.ocargue || "").trim()).filter(Boolean)))
+      if (ordenes.length > 0) {
+        const { data: fin } = await sb.from("cabeceraoc").select("ordendecargue").in("ordendecargue", ordenes).ilike("status", "finalizado")
+        const finalizadas = new Set((fin ?? []).map((f: any) => f.ordendecargue))
+        salidasSinConfirmar = (pend ?? []).filter((p: any) => finalizadas.has(String(p.ocargue || "").trim())).length
+      }
+    } catch { /* sin acceso a la tabla: no se muestra el pendiente */ }
+
     const out: PendientePantalla[] = []
+    if (salidasSinConfirmar) out.push({ modulo: "Centro de Coordinación", cantidad: salidasSinConfirmar, texto: plural(salidasSinConfirmar, "salida sin confirmar de orden finalizada", "salidas sin confirmar de órdenes finalizadas"), nivel: "alto" })
     if (usaProgramacion > 0 && programacionManana === 0 && horaBogota >= 12 && !mananaDomingo) {
       // Al coordinador (responsable de consignarla) y al cliente (puede registrarla).
       out.push({ modulo: "Consignar programación del cliente", cantidad: 1, texto: "sin programación para mañana", nivel: horaBogota >= 17 ? "alto" : "medio" })

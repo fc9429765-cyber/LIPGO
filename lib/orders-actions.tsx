@@ -1645,6 +1645,35 @@ export async function updateBasculaData(orderData: {
 
     if (orderData.pesajeinicial) updateData.pesajeinicial = orderData.pesajeinicial
     if (orderData.pesajefinal) {
+      // CANDADO (gerencia 2026-10-02): el pesaje final FINALIZA la orden. Un
+      // Cargue no puede finalizar con salidas de inventario "por descontar"
+      // (picking sin confirmar): el camión se va con el stock ya descontado
+      // pero sin transacción aprobada, y esas líneas quedan como diferencia
+      // sin soporte del mes (caso real ID3: 6 líneas en 3 órdenes de
+      // septiembre; ID1: 9 líneas en 4 órdenes). El cierre con fotos ya lo
+      // exigía; Báscula era la puerta que faltaba. El coordinador resuelve
+      // con "Confirmar Picking" en Centro de Coordinación y se registra el
+      // pesaje final después.
+      try {
+        const admin = await getSupabaseAdmin()
+        const { data: orden } = await admin.from("cabeceraoc").select("ordendecargue, tipooperacion").eq("id", orderData.orderId).maybeSingle()
+        if (orden?.tipooperacion === "Cargue" && orden?.ordendecargue) {
+          const { count } = await admin
+            .from("invtrans")
+            .select("id", { count: "exact", head: true })
+            .eq("ocargue", orden.ordendecargue)
+            .eq("status", "por descontar")
+          if ((count || 0) > 0) {
+            return {
+              success: false,
+              message: `La orden ${orden.ordendecargue} tiene ${count} línea(s) de inventario sin confirmar (picking pendiente). El coordinador debe confirmar el Picking en Centro de Coordinación antes del pesaje final.`,
+            }
+          }
+        }
+      } catch (e: any) {
+        // Falla segura hacia el control: si no se pudo verificar, no se finaliza.
+        return { success: false, message: `No se pudo verificar el picking de la orden: ${e?.message ?? e}` }
+      }
       updateData.pesajefinal = orderData.pesajefinal
       // When pesajefinal is set, also set status to "finalizado"
       updateData.status = "finalizado"

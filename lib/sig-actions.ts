@@ -3213,10 +3213,10 @@ export async function getCuadreDiario(
       if (base && !enPeriodoBase(r, baseFecha, cierreFecha)) continue
       const d = r.creado ? fechaColombiaDe(r.creado) : ""
       if (!d) continue
-      // 309/311/312/344/343 son pareja neta 0 igual que el traslado clásico
-      // (texto "traslado entre localizaciones") — sin esto, una corrección de
-      // lote/ubicación aparecía moviendo el saldo del día cuando no debía.
-      if (esCodigoTrasladoNetoCero(r.cod_movimiento) || has(r.origen, "traslado entre localizaciones")) continue // interno: no afecta
+      // 309/311/312/344/343 y el traslado clásico: cada pata va a "otros" con
+      // su signo; dentro del mismo producto suman 0 en el día y, si un 309
+      // cruzó de producto, el total del sitio tampoco cambia. Así el diario
+      // aplica exactamente lo mismo que el stock.
       const c = Number(r.cantidad) || 0
       byDay[d] = byDay[d] || { ingresos: 0, salidas: 0, otros: 0 }
       if (r.tipomov === "Entrada" && (has(r.origen, "producc") || has(r.origen, "aprob") || has(r.origen, "descarg") || has(r.origen, "logo"))) byDay[d].ingresos += c
@@ -3406,7 +3406,10 @@ export async function getMovimientosProducto(
     for (const r of cronologico) {
       if (!dentroPeriodo(r)) continue
       const antes = corrido
-      if (esAprobada(r) && !netoCeroProducto(r)) {
+      // TODA transacción aprobada mueve el corrido, también las patas de un
+      // 309/311 (dentro del mismo producto suman 0; si cruzó de producto,
+      // es una reclasificación con soporte, igual que en el stock).
+      if (esAprobada(r)) {
         corrido = Math.round((corrido + (r.tipomov === "Entrada" ? 1 : -1) * Math.abs(Number(r.cantidad) || 0)) * 100) / 100
       }
       saldosPorFila.set(r, { antes, despues: corrido })
@@ -3564,13 +3567,15 @@ export async function getKardexInventario(
       const c = Math.abs(Number(r.cantidad) || 0)
       if (r.nombreproducto && !map[cod].producto) map[cod].producto = r.nombreproducto
       // Clasificación con SIGNO EXACTO respecto al stock: el saldo de la fila
-      // es base + entradas − salidas + ajustes − merma, transacción por
-      // transacción. 309/311/312/344/343 (reclasificar/trasladar/bloquear)
-      // son pareja neta 0 y van a "Traslados" sin tocar el saldo — si un 309
-      // cruzó de producto, la diferencia aparece en "Sin explicar" en vez de
-      // esconderse dentro del cálculo (caso real ID3, PT000080, confirmado
-      // por el usuario como error de digitación).
-      if (esCodigoTrasladoNetoCero(r.cod_movimiento) || has(r.origen, "traslado entre localizaciones")) map[cod].traslados += c
+      // es base + entradas − salidas + ajustes − merma + reclasificaciones,
+      // transacción por transacción. 309/311/312/344/343 (reclasificar,
+      // trasladar, bloquear) son pareja salida+entrada: dentro del mismo
+      // producto suman 0; si un 309 cruzó de producto, cada producto ve su
+      // pata y el saldo la aplica, igual que el stock — es una transacción
+      // con código y soporte, no una diferencia (regla de gerencia
+      // 2026-10-02: "toda diferencia debe tener un soporte"). La columna
+      // muestra el NETO.
+      if (esCodigoTrasladoNetoCero(r.cod_movimiento) || has(r.origen, "traslado entre localizaciones")) map[cod].traslados += r.tipomov === "Entrada" ? c : -c
       else if (r.tipomov === "Reproceso" || (r.tipomov === "Salida" && has(r.origen, "reproceso"))) map[cod].merma += c
       else if (r.tipomov === "Entrada" && (has(r.origen, "producc") || has(r.origen, "aprob") || has(r.origen, "descarg") || has(r.origen, "logo") || has(r.origen, "reproceso"))) map[cod].entradas += c
       else if (r.tipomov === "Salida" && has(r.origen, "orden de cargue")) map[cod].salidas += c
@@ -3583,7 +3588,7 @@ export async function getKardexInventario(
       .map((cod) => {
         const p = map[cod] ?? { codproducto: cod, producto: "", entradas: 0, salidas: 0, ajustes: 0, traslados: 0, merma: 0 }
         const saldoInicial = base ? Math.round(base.porProducto[cod] ?? 0) : null
-        const saldo = Math.round((saldoInicial ?? 0) + p.entradas - p.salidas + p.ajustes - p.merma)
+        const saldo = Math.round((saldoInicial ?? 0) + p.entradas - p.salidas + p.ajustes - p.merma + p.traslados)
         const saldoCierre = Math.round((cierre.porProducto ? cierre.porProducto[cod] : vivo[cod]) ?? 0)
         return {
           ...p,
@@ -3596,7 +3601,12 @@ export async function getKardexInventario(
           saldoInicial, // base fija del periodo (null si no se pidió periodo)
           saldo, // base + movimientos del periodo (transacción por transacción)
           saldoCierre, // base del mes siguiente, o stock vivo si el periodo llega a hoy
-          descuadre: saldo - saldoCierre, // ≠ 0 = hay transacciones que el stock no refleja (o al revés): revisar
+          // "Sin soporte": saldo por transacciones − stock al cierre. Debe ser 0.
+          // Causas reales cuando no lo es: salidas "por descontar" (picking sin
+          // confirmar: el stock ya las descontó, la transacción no está
+          // aprobada) o un conteo hecho con otra convención. Toda diferencia
+          // debe terminar soportada con su corrección, nunca quedarse aquí.
+          descuadre: saldo - saldoCierre,
         }
       })
       .filter((f) => f.saldoInicial || f.entradas || f.salidas || f.ajustes || f.traslados || f.merma || f.saldoCierre)
@@ -5512,9 +5522,16 @@ export async function getConciliacionMensualInventario(
       const tieneOC = !!(r.ocargue && String(r.ocargue).trim())
       // lote paralelo/alterno SIN orden de cargue: no es una salida real
       if ((st.includes("altern") || st.includes("paralel") || has(r.origen, "altern") || has(r.origen, "paralel")) && !tieneOC) continue
-      // 309/311/312/344/343: parejas neto 0 (reclasificar/trasladar/bloquear), nunca ingreso ni salida real.
-      if (esCodigoTrasladoNetoCero(r.cod_movimiento) || has(r.origen, "traslado entre localizaciones")) continue
-      if (r.ordentolva || has(r.ocargue, "tolva") || has(r.ocargue, "proyec") || has(r.origen, "tolva") || has(r.origen, "proyec")) continue
+      // 309/311/312/344/343 (reclasificar/trasladar/bloquear): cada pata se
+      // aplica con su signo (abajo caen en "ajuste"); dentro del mismo
+      // producto suman 0 y si cruzaron de producto es una reclasificación
+      // con soporte, igual que en el stock.
+      // (2026-10-02) Los ingresos de producción con `ordentolva` (Indupan:
+      // 55.000 und/mes) SON stock real y la vista de saldos los cuenta: ya no
+      // se excluyen (antes el roll los dejaba fuera y el "cuadre forzado"
+      // escondía −59.000 und/mes en ID1). Solo se excluye la PROYECCIÓN, que
+      // no es inventario.
+      if (has(r.ocargue, "proyec") || has(r.origen, "proyec")) continue
       if (!r.creado) continue
       const mk = fechaColombiaDe(r.creado).slice(0, 7)
       aniosSet.add(mk.slice(0, 4))
