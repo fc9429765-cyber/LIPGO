@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/components/auth-provider"
 import { useToast } from "@/components/ui/use-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Eyebrow } from "@/components/ui/lipgo"
 import { Button } from "@/components/ui/button"
 import { DatePickerField } from "@/components/ui/date-picker-field"
 import { Label } from "@/components/ui/label"
@@ -174,10 +175,11 @@ export default function ProductividadAuxiliares() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-            <Trophy className="h-6 w-6" /> Productividad de Auxiliares
+          <Eyebrow>Gerencia · {tituloPlanta}</Eyebrow>
+          <h1 className="flex items-center gap-2 text-xl font-bold leading-tight tracking-tight sm:text-2xl">
+            <Trophy className="h-5 w-5 text-acento sm:h-6 sm:w-6" /> Productividad de Auxiliares
           </h1>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          <p className="mt-0.5 max-w-3xl text-xs text-muted-foreground sm:text-sm">
             Quién carga y descarga de verdad en <b className="text-foreground">{tituloPlanta}</b>, según el equipo que el coordinador asignó a cada
             vehículo. Haz clic en cualquier auxiliar para ver su ficha 360°.
           </p>
@@ -205,14 +207,13 @@ export default function ProductividadAuxiliares() {
         </div>
       </div>
 
-      <Card>
-        <CardContent className="flex flex-wrap items-end gap-3 pt-5">
-          <div>
-            <Label className="text-xs uppercase text-muted-foreground">Desde</Label>
+      <div className="lg-card flex flex-wrap items-end gap-3 px-4 py-3 sm:px-5">
+          <div className="flex flex-col gap-1">
+            <Label className="lg-eyebrow">Desde</Label>
             <DatePickerField value={desde} onChange={setDesde} className="h-9 w-[150px] text-sm" />
           </div>
-          <div>
-            <Label className="text-xs uppercase text-muted-foreground">Hasta</Label>
+          <div className="flex flex-col gap-1">
+            <Label className="lg-eyebrow">Hasta</Label>
             <DatePickerField value={hasta} onChange={setHasta} className="h-9 w-[150px] text-sm" />
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -228,8 +229,7 @@ export default function ProductividadAuxiliares() {
           <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
             <Switch checked={incluirApoyos} onCheckedChange={setIncluirApoyos} /> Incluir apoyos externos (“AUXILIAR PRUEBA”)
           </label>
-        </CardContent>
-      </Card>
+      </div>
 
       {data && persona ? (
         <Ficha360
@@ -244,7 +244,7 @@ export default function ProductividadAuxiliares() {
         <>
           {/* Resumen del periodo: el informe habla por sí solo. */}
           {(lider || hayTolva) && (
-            <div className="rounded-lg border bg-muted/40 p-3 text-sm leading-relaxed">
+            <div className="lg-card px-4 py-3 text-sm leading-relaxed sm:px-5">
               <Trophy className="mr-1.5 inline h-4 w-4 text-amber-500" />
               En {tituloPlanta}, del {fechaCorta(data.desde)} al {fechaCorta(data.hasta)}, <b>{data.totalAuxiliares} auxiliares</b> atendieron{" "}
               <b>{data.totalOrdenes} vehículos</b> ({data.vehiculos.length} placas) con <b>{t2(data.totalToneladas)} t</b>, un promedio de{" "}
