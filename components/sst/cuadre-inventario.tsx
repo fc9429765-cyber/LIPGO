@@ -97,6 +97,21 @@ export function CuadreInventario() {
   const detalleRef = useRef<SigInventarioCuadreDetalle[]>([])
   useEffect(() => { detalleRef.current = detalle }, [detalle])
   const [gruposColapsados, setGruposColapsados] = useState<Set<string>>(new Set())
+  // Cómo se recorre el conteo: por UBICACIÓN de menor a mayor (orden natural:
+  // A2 antes que A10) es como se cuenta en piso; por producto es la vista de
+  // revisión. Pedido de gerencia 2026-10-02. Se recuerda en el navegador.
+  const [agrupar, setAgrupar] = useState<"ubicacion" | "producto">("ubicacion")
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("lipgo:conteo:agrupar")
+      if (v === "producto" || v === "ubicacion") setAgrupar(v)
+    } catch {}
+  }, [])
+  const cambiarAgrupar = (v: "ubicacion" | "producto") => {
+    setAgrupar(v)
+    try { localStorage.setItem("lipgo:conteo:agrupar", v) } catch {}
+  }
+  const ordenNatural = (a: string, b: string) => a.localeCompare(b, "es", { numeric: true, sensitivity: "base" })
   const firmaPadRef = useRef<SignaturePadHandle | null>(null)
 
   async function abrirNomenclatura() {
@@ -414,17 +429,23 @@ export function CuadreInventario() {
   const difTotal = useMemo(() => detalle.reduce((s, d) => s + (Number(d.diferencia) || 0), 0), [detalle])
   const conDif = useMemo(() => detalle.filter((d) => (Number(d.diferencia) || 0) !== 0).length, [detalle])
 
-  // Agrupa el detalle por producto: cantidad por lote (filas) + cantidad total (subtotal).
+  // Agrupa el detalle (subtotal por grupo + filas por lote):
+  //  - por UBICACIÓN: grupos = ubicaciones en orden natural de menor a mayor
+  //    (A2, A10, A14, B42, E37…), filas = producto/lote dentro de cada una;
+  //  - por PRODUCTO: grupos = productos, filas = lotes ordenados por ubicación.
   const grupos = useMemo(() => {
     const map = new Map<
       string,
       { key: string; producto: string; codproducto: string | null; sistema: number; conteo: number; diferencia: number; filas: SigInventarioCuadreDetalle[] }
     >()
+    const porUbic = agrupar === "ubicacion"
     for (const d of detalle) {
-      const key = d.codproducto || d.producto || "—"
+      const key = porUbic ? (d.location || "Sin ubicación") : (d.codproducto || d.producto || "—")
       let g = map.get(key)
       if (!g) {
-        g = { key, producto: d.producto || d.codproducto || "—", codproducto: d.codproducto, sistema: 0, conteo: 0, diferencia: 0, filas: [] }
+        g = porUbic
+          ? { key, producto: d.location || "Sin ubicación", codproducto: null, sistema: 0, conteo: 0, diferencia: 0, filas: [] }
+          : { key, producto: d.producto || d.codproducto || "—", codproducto: d.codproducto, sistema: 0, conteo: 0, diferencia: 0, filas: [] }
         map.set(key, g)
       }
       g.sistema += Number(d.sistema) || 0
@@ -432,8 +453,16 @@ export function CuadreInventario() {
       g.diferencia += Number(d.diferencia) || 0
       g.filas.push(d)
     }
-    return Array.from(map.values()).sort((a, b) => a.producto.localeCompare(b.producto))
-  }, [detalle])
+    const lista = Array.from(map.values())
+    for (const g of lista) {
+      g.filas.sort((a, b) =>
+        porUbic
+          ? (a.producto || "").localeCompare(b.producto || "") || ordenNatural(a.lote || "", b.lote || "")
+          : ordenNatural(a.location || "", b.location || "") || ordenNatural(a.lote || "", b.lote || ""),
+      )
+    }
+    return lista.sort((a, b) => (porUbic ? ordenNatural(a.producto, b.producto) : a.producto.localeCompare(b.producto)))
+  }, [detalle, agrupar])
 
   // ---------- Vista DETALLE de un cuadre ----------
   if (sel) {
@@ -460,6 +489,10 @@ export function CuadreInventario() {
             {sel.creado_por && <span className="text-xs text-muted-foreground">por {sel.creado_por}</span>}
           </div>
           <div className="flex gap-2">
+            <div className="inline-flex self-center overflow-hidden rounded-md border text-[11px]" title="Orden del conteo: por ubicación de menor a mayor (como se recorre el piso) o por producto">
+              <button type="button" onClick={() => cambiarAgrupar("ubicacion")} className={`px-2 py-1 ${agrupar === "ubicacion" ? "bg-muted font-semibold" : "text-muted-foreground"}`}>Por ubicación</button>
+              <button type="button" onClick={() => cambiarAgrupar("producto")} className={`px-2 py-1 ${agrupar === "producto" ? "bg-muted font-semibold" : "text-muted-foreground"}`}>Por producto</button>
+            </div>
             {editable && (
               <span className="self-center text-[11px] text-muted-foreground">
                 Cada línea se guarda sola al contarla — varias personas pueden contar a la vez sin pisarse.
@@ -507,7 +540,7 @@ export function CuadreInventario() {
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-background">
                   <tr className="border-b text-left text-[11px] uppercase text-muted-foreground">
-                    <th className="px-3 py-2">Producto</th>
+                    <th className="px-3 py-2">{agrupar === "ubicacion" ? "Ubicación · producto" : "Producto"}</th>
                     <th className="px-3 py-2">Lote</th>
                     <th className="px-3 py-2">Ubic.</th>
                     <th className="px-3 py-2 text-right">{corregido ? "Sistema (ajustado)" : "Sistema"}</th>
@@ -550,7 +583,14 @@ export function CuadreInventario() {
                           const dif = Number(d.diferencia) || 0
                           return (
                             <tr key={d.id} className={`border-b last:border-0 ${dif !== 0 && !corregido ? "bg-red-50" : ""}`}>
-                              <td className="px-3 py-1.5"></td>
+                              <td className="px-3 py-1.5 text-muted-foreground">
+                                {agrupar === "ubicacion" ? (
+                                  <>
+                                    <span className="text-foreground">{d.producto || d.codproducto || "—"}</span>
+                                    {d.codproducto && <span className="ml-1 text-[11px]">· {d.codproducto}</span>}
+                                  </>
+                                ) : null}
+                              </td>
                               <td className="px-3 py-1.5 text-muted-foreground">{d.lote || "—"}</td>
                               <td className="px-3 py-1.5 text-muted-foreground">{d.location || "—"}</td>
                               <td className="px-3 py-1.5 text-right">{fmt(corregido ? d.conteo : d.sistema)}</td>
