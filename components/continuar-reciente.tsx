@@ -44,7 +44,7 @@ export function ContinuarReciente({ onNavigate }: { onNavigate: (modulo: string)
   return (
     <div className="mb-4 sm:mb-5">
       <div className="mb-2 flex items-baseline gap-2">
-        <h2 className="text-sm font-extrabold tracking-tight text-foreground">Continuar donde ibas</h2>
+        <h2 className="text-sm font-bold tracking-tight text-foreground">Continuar donde ibas</h2>
         <span className="text-xs text-muted-foreground">· recientes y favoritos · Ctrl K para buscar</span>
       </div>
       <div className="flex flex-wrap gap-2">

@@ -480,7 +480,7 @@ export default function PrefacturaProduccion({ idempresaFija }: { idempresaFija?
                 {heSel.length > 0 && <BloqueLineas titulo="Horas extra" lineas={heSel} unidadLabel="Horas" />}
                 <div className="flex items-center justify-between border-t-2 border-primary/40 pt-3">
                   <span className="text-sm font-bold">TOTAL PREFACTURA</span>
-                  <span className="text-lg font-extrabold tabular-nums text-primary">{money(totalSel)}</span>
+                  <span className="text-lg font-bold tabular-nums text-primary">{money(totalSel)}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Valor base, antes de IVA y retenciones — esos los suma Siigo al emitir la factura.

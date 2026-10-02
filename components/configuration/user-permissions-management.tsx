@@ -586,7 +586,7 @@ export function UserPermissionsManagement() {
               <div key={s.label} className="flex items-center gap-2.5 bg-card px-4 py-3">
                 <s.icon className={`h-4 w-4 ${s.tone}`} />
                 <div className="leading-none">
-                  <p className="text-xl font-extrabold tabular-nums text-foreground">{s.value}</p>
+                  <p className="text-xl font-bold tabular-nums text-foreground">{s.value}</p>
                   <p className="text-[11px] uppercase tracking-wider text-muted-foreground mt-1">{s.label}</p>
                 </div>
               </div>

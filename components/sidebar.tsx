@@ -714,31 +714,12 @@ export function Sidebar({
       <aside
         className={`lipgo-sb hidden md:flex flex-col h-screen border-r border-border z-20 transition-all duration-300 ${collapsed ? "w-16 lg:w-20" : "w-56 lg:w-64"}`}
       >
-        {/* Hero de marca — Torre de Control (red de operación animada) */}
+        {/* Cabecera de marca (pulido 2026-10-02): sobria y fija. El rombo real
+            del logo, LIP·GO y el lema de LIP. Sin animaciones ni adornos. */}
         <div
-          className={`relative flex-shrink-0 overflow-hidden border-b border-border ${collapsed ? "h-16 lg:h-20" : "h-32"}`}
+          className={`relative flex-shrink-0 border-b border-border ${collapsed ? "h-16 lg:h-20" : "h-[104px]"}`}
           style={{ "--hero": heroAccent } as CSSProperties}
         >
-          {!collapsed && (
-            <>
-              <div className="lipgo-hero-bg absolute inset-0" aria-hidden="true" />
-              <svg className="absolute inset-0 h-full w-full" viewBox="0 0 264 128" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-                <path className="lipgo-route b" d="M-10 40 C 60 40, 90 96, 170 96 S 260 60, 280 62" />
-                <path className="lipgo-route" d="M-10 92 C 70 92, 95 44, 165 44 S 250 74, 280 30" />
-                <circle className="lipgo-node hub" cx="165" cy="44" r="3.4" />
-                <circle className="lipgo-hub-ring hero-accent-stroke" cx="165" cy="44" r="3" fill="none" strokeWidth="1.3" />
-                <circle className="lipgo-node" cx="34" cy="86" r="2.6" />
-                <circle className="lipgo-node" cx="238" cy="52" r="2.6" />
-                <g transform="translate(0,72)">
-                  {/* Actor adaptativo: cambia de glifo y color según el módulo activo.
-                      key fuerza el remount para reproducir el fundido de entrada. */}
-                  <g className="lipgo-actor" key={selectedGroup ?? "home"}>
-                    <HeroActor groupKey={selectedGroup} />
-                  </g>
-                </g>
-              </svg>
-            </>
-          )}
           <button
             onClick={onToggleCollapse}
             className="absolute right-2 top-2 z-10 rounded-lg p-1.5 transition-colors hover:bg-white/10"
@@ -760,16 +741,14 @@ export function Sidebar({
                 onSelectGroup(null)
                 onSelectModule(null)
               }}
-              className="absolute bottom-3 left-4 z-10 flex flex-col items-start gap-1.5 text-left"
+              className="absolute bottom-3.5 left-4 z-10 flex flex-col items-start gap-1.5 text-left"
+              aria-label="Ir al Inicio"
             >
               <span className="flex items-center gap-2.5">
-                <Image src="/lipgo-icon.png" alt="" width={32} height={32} className="lipgo-logo-img" priority />
+                <Image src="/lipgo-icon.png" alt="" width={34} height={34} className="lipgo-logo-img" priority />
                 <span className="lipgo-word">LIP<em>GO</em></span>
               </span>
-              <span className="lipgo-tag">
-                <span className="lipgo-live" />
-                Torre de Control · en vivo
-              </span>
+              <span className="lipgo-tag">Progressive Integral Logistics</span>
             </button>
           )}
         </div>

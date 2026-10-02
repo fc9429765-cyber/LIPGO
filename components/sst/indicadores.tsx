@@ -220,7 +220,7 @@ export function IndicadoresSST({ selectedEmpresaId: propEmpresaId }: { selectedE
             <span className="inline-block h-0.5 w-5 rounded" style={{ background: SST_TOKENS.teal }} />
             Resolución 0312
           </div>
-          <h2 className="mt-1 text-xl font-extrabold tracking-tight" style={{ color: SST_TOKENS.navy }}>
+          <h2 className="mt-1 text-xl font-bold tracking-tight" style={{ color: SST_TOKENS.navy }}>
             Indicadores del SG-SST · gestión {base ? `${base} › ${anio}` : anio}
           </h2>
           <p className="text-xs text-muted-foreground">
@@ -632,7 +632,7 @@ function TarjetaIndicador({ f, d, base, grande, onVer }: { f: Ficha; d: DatoIndi
       </div>
       <div className="mt-1.5 text-sm font-semibold text-foreground">{f.nombre}</div>
       <div className="mt-1 flex items-baseline gap-2">
-        <span className={`font-extrabold tabular-nums tracking-tight ${grande ? "text-3xl" : "text-4xl"}`} style={{ color }}>
+        <span className={`font-bold tabular-nums tracking-tight ${grande ? "text-3xl" : "text-4xl"}`} style={{ color }}>
           {fmt(valor)}
         </span>
         <span className="text-xs text-muted-foreground">

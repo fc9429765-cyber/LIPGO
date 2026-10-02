@@ -104,7 +104,7 @@ export function EvaluacionAreas() {
                       <div className="text-xs text-muted-foreground">{a.responsable || "Responsable sin asignar"}</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-extrabold leading-none" style={{ color: colorNota(a.nota) }}>
+                      <div className="text-2xl font-bold leading-none" style={{ color: colorNota(a.nota) }}>
                         {medible ? fmtNum(a.nota) + "%" : "—"}
                       </div>
                       <div className="text-[10px] text-muted-foreground">nota del área</div>
@@ -207,7 +207,7 @@ export function EvaluacionAreas() {
                           <span className="inline-flex items-center gap-1"><Users className="h-3 w-3 text-muted-foreground" />{c.coordinador}</span>
                         </td>
                         <td className="px-2 py-2 text-right">
-                          <span className="text-lg font-extrabold" style={{ color: colorNota(c.nota) }}>{c.pesoTotal > 0 ? fmtNum(c.nota) + "%" : "—"}</span>
+                          <span className="text-lg font-bold" style={{ color: colorNota(c.nota) }}>{c.pesoTotal > 0 ? fmtNum(c.nota) + "%" : "—"}</span>
                         </td>
                         <td className="px-2 py-2">
                           <div className="flex flex-wrap gap-1">

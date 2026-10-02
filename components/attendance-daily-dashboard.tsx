@@ -389,28 +389,28 @@ export function AttendanceDailyDashboard() {
         <Card>
           <CardContent className="pt-4 pb-3">
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Marcaciones hoy</p>
-            <p className="text-3xl font-bold mt-1 tabular-nums">{stats.total}</p>
+            <p className="text-2xl font-bold mt-1 tabular-nums">{stats.total}</p>
             <p className="text-[11px] text-muted-foreground mt-1">turnos y novedades del día · solo operativos</p>
           </CardContent>
         </Card>
         <Card className="border-b-4 border-b-emerald-500">
           <CardContent className="pt-4 pb-3">
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">A tiempo</p>
-            <p className="text-3xl font-bold mt-1 tabular-nums text-emerald-600">{stats.aTiempo}</p>
+            <p className="text-2xl font-bold mt-1 tabular-nums text-emerald-600">{stats.aTiempo}</p>
             <p className="text-[11px] text-muted-foreground mt-1">{stats.pctCumplimiento}% de cumplimiento</p>
           </CardContent>
         </Card>
         <Card className="border-b-4 border-b-amber-500">
           <CardContent className="pt-4 pb-3">
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Llegadas tarde</p>
-            <p className="text-3xl font-bold mt-1 tabular-nums text-amber-600">{stats.tarde}</p>
+            <p className="text-2xl font-bold mt-1 tabular-nums text-amber-600">{stats.tarde}</p>
             <p className="text-[11px] text-muted-foreground mt-1">generan novedad automática</p>
           </CardContent>
         </Card>
         <Card className={stats.sinReportar > 0 ? "border-b-4 border-b-rose-500" : "border-b-4 border-b-emerald-500"}>
           <CardContent className="pt-4 pb-3">
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">No presentados</p>
-            <p className={`text-3xl font-bold mt-1 tabular-nums ${stats.sinReportar > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+            <p className={`text-2xl font-bold mt-1 tabular-nums ${stats.sinReportar > 0 ? "text-rose-600" : "text-emerald-600"}`}>
               {stats.sinReportar}
             </p>
             <p className="text-[11px] text-muted-foreground mt-1">
@@ -543,7 +543,7 @@ export function AttendanceDailyDashboard() {
                         </span>
                         <span className="flex-1" />
                         <span
-                          className={`text-base font-extrabold tabular-nums ${g.pct >= 90 ? "text-emerald-600" : g.pct >= 75 ? "text-amber-600" : "text-rose-600"}`}
+                          className={`text-base font-bold tabular-nums ${g.pct >= 90 ? "text-emerald-600" : g.pct >= 75 ? "text-amber-600" : "text-rose-600"}`}
                         >
                           {g.pct}%
                         </span>

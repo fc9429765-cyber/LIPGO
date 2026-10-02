@@ -149,7 +149,7 @@ export default function ContratosManagement() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Gestión de Contratos</h1>
+        <h1 className="text-2xl font-bold">Gestión de Contratos</h1>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button onClick={() => { setEditingId(null); setFormData({ colaborador_id: "", fecha_inicio: "", fecha_fin: "", tipo_contrato: "indefinido", cargo: "", salario_base: "", cliente_asignado: "", sede: "", estado: "activo" }) }} className="gap-2">

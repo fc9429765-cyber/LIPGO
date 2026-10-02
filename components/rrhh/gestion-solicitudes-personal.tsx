@@ -128,7 +128,7 @@ export default function GestionSolicitudesPersonal() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Aprobación de Solicitudes de Personal</h1>
+        <h1 className="text-2xl font-bold">Aprobación de Solicitudes de Personal</h1>
         <p className="text-muted-foreground">
           Revisa las solicitudes de personal. Cada una requiere la aprobación de RRHH y del Gerente de
           Operaciones.

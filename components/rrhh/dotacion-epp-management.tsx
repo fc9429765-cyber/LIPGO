@@ -132,7 +132,7 @@ export default function DotacionEPPManagement() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Gestión de Dotación EPP</h1>
+        <h1 className="text-2xl font-bold">Gestión de Dotación EPP</h1>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button onClick={() => { setEditingId(null); setFormData({ colaborador_id: "", fecha_entrega: "", tipo_item: "", item: "", talla: "", cantidad: "1", estado: "entregado", observaciones: "" }) }} className="gap-2">

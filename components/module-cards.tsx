@@ -82,21 +82,14 @@ export function ModuleCards({ onSelectGroup, onSelectModule }: ModuleCardsProps)
         .app-tile{ position:relative; display:flex; flex-direction:column; gap:12px; border-radius:var(--r);
           background:var(--card,#fff); border:1px solid var(--border,#E3E8EE); padding:16px; text-align:left; cursor:pointer; overflow:hidden;
           transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
-        .app-tile::after{ content:""; position:absolute; top:-40%; right:-30%; width:140px; height:140px; border-radius:50%;
-          background:radial-gradient(closest-side, color-mix(in srgb, var(--tint) 24%, transparent), transparent);
-          opacity:.3; transition:opacity .25s, transform .25s; pointer-events:none; }
-        .app-tile::before{ content:""; position:absolute; inset:0; border-radius:var(--r); padding:1.3px; pointer-events:none;
-          background:linear-gradient(135deg, color-mix(in srgb, var(--tint) 70%, transparent), transparent 62%);
-          -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude;
-          opacity:0; transition:opacity .2s; }
-        .app-tile:hover, .app-tile:focus-visible{ transform:translateY(-2px); border-color:transparent; outline:none;
-          box-shadow:0 14px 30px color-mix(in srgb, var(--tint) 22%, transparent), 0 4px 10px rgba(11,18,32,.05); }
-        .app-tile:hover::before, .app-tile:focus-visible::before{ opacity:1; }
-        .app-tile:hover::after{ opacity:.55; transform:scale(1.15); }
+        /* Pulido profesional (2026-10-02): sin halos ni elevación; el hover es un
+           borde del color del área y el ícono se rellena. */
+        .app-tile:hover, .app-tile:focus-visible{ border-color:color-mix(in srgb, var(--tint) 55%, transparent); outline:none;
+          box-shadow:0 1px 2px rgba(11,18,32,.04), 0 0 0 1px color-mix(in srgb, var(--tint) 25%, transparent); }
         .app-ico{ position:relative; z-index:1; width:44px; height:44px; border-radius:13px; display:flex; align-items:center; justify-content:center;
           background:color-mix(in srgb, var(--tint) 14%, #fff); color:var(--tint);
-          transition:transform .2s, background .2s, color .2s; }
-        .app-tile:hover .app-ico{ transform:scale(1.05); color:#fff; background:var(--tint); }
+          transition:background .15s, color .15s; }
+        .app-tile:hover .app-ico{ color:#fff; background:var(--tint); }
         .app-name{ position:relative; z-index:1; font-size:15px; font-weight:700; line-height:1.15; color:var(--foreground,#0B1220); letter-spacing:-.01em; }
         .app-foot{ position:relative; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:22px; }
         .app-count{ font-size:11.5px; color:var(--muted-foreground,#5B6B7F); font-weight:500; font-variant-numeric:tabular-nums; }

@@ -199,7 +199,7 @@ export function PoliticasHorasExtra() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Políticas de horas extra</h2>
+        <h2 className="text-2xl font-bold tracking-tight">Políticas de horas extra</h2>
         <p className="text-muted-foreground">
           A partir de cuántas horas empieza a contar la hora extra, por puesto y por día.
         </p>

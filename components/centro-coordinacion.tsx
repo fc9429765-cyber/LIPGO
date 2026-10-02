@@ -1460,7 +1460,7 @@ function MuelleRow({
         className="grid w-full grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 p-2 text-left disabled:cursor-default sm:grid-cols-[64px_minmax(0,1fr)_auto_auto] sm:gap-3 sm:p-2.5"
       >
         <div className={`flex h-12 w-12 flex-col items-center justify-center rounded-xl sm:h-16 sm:w-16 ${badgeColor} ${badgeTextColor} shadow ${o?.slaEnRiesgo ? "animate-pulse" : ""}`}>
-          <div className="text-xl font-extrabold leading-none sm:text-2xl">{slot.muelle}</div>
+          <div className="text-xl font-bold leading-none sm:text-2xl">{slot.muelle}</div>
           <div className="mt-0.5 text-[7px] font-bold uppercase leading-tight tracking-wide sm:text-[8px]">
             {estado === "libre" ? "Libre" : estado === "vencido" ? "Fuera de tiempo" : o?.pausado ? "Pausado" : "Ocupado"}
           </div>
@@ -1528,7 +1528,7 @@ function MuelleRow({
             <div className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
               {o.pausado ? "En pausa" : "Finaliza aprox."}
             </div>
-            <div className={`text-base font-extrabold tabular-nums sm:text-lg ${estado === "vencido" ? "text-rose-700 dark:text-rose-400" : "text-emerald-700 dark:text-emerald-400"}`}>
+            <div className={`text-base font-bold tabular-nums sm:text-lg ${estado === "vencido" ? "text-rose-700 dark:text-rose-400" : "text-emerald-700 dark:text-emerald-400"}`}>
               {o.pausado ? "—" : eta || "—"}
             </div>
             <div className="text-[9px] text-muted-foreground">

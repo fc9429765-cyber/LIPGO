@@ -293,7 +293,7 @@ export function ProductTransferForm() {
   return (
     <div className="space-y-4 md:space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl md:text-3xl font-bold">Traslados de Producto</h1>
+        <h1 className="text-xl md:text-2xl font-bold">Traslados de Producto</h1>
       </div>
 
       <Tabs defaultValue="localizaciones" className="w-full">

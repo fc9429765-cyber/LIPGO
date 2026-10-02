@@ -82,7 +82,7 @@ export default function MiAportePage() {
           <Card className="overflow-hidden border-0 text-white shadow-md" style={{ background: `linear-gradient(120deg, #0A2540 0%, #0D3B6E 50%, ${C[data.nivel.color]} 140%)` }}>
             <CardContent className="flex flex-col items-center gap-2 p-5 text-center sm:flex-row sm:gap-5 sm:text-left">
               <div className="flex flex-col items-center">
-                <span className="text-5xl font-extrabold leading-none">{data.puntajeCompromiso}%</span>
+                <span className="text-5xl font-bold leading-none">{data.puntajeCompromiso}%</span>
                 <span className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-white/80">Mi compromiso</span>
               </div>
               <div className="min-w-0">
@@ -129,7 +129,7 @@ export default function MiAportePage() {
                     </div>
                     <p className="mt-1 text-sm font-medium text-foreground">{t.label}</p>
                     <div className="mt-1 flex items-end gap-1.5">
-                      <span className="text-3xl font-bold leading-none" style={{ color: C[t.estado] }}>
+                      <span className="text-2xl font-bold leading-none" style={{ color: C[t.estado] }}>
                         {t.valor.toLocaleString("es-CO")}
                       </span>
                       <span className="mb-0.5 text-xs font-medium text-muted-foreground">{t.unidad}</span>

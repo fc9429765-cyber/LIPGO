@@ -221,7 +221,7 @@ export function SoporteAnexo({ lineas }: { lineas: SoporteLinea[] }) {
       ))}
       <div className="flex items-center justify-between border-t-2 border-primary/40 pt-2">
         <span className="text-sm font-bold">TOTAL SOPORTE</span>
-        <span className="text-base font-extrabold tabular-nums text-primary">
+        <span className="text-base font-bold tabular-nums text-primary">
           {ton(totalTon)} t · {money(totalVal)}
         </span>
       </div>
@@ -1798,7 +1798,7 @@ export function CuadroControlFacturacion() {
                       </div>
                       <div className="flex items-center gap-4">
                         <span className="text-xs text-muted-foreground">Total período {money(prefSel.totalVal)}</span>
-                        <span className="flex items-center gap-1.5 text-xl font-extrabold tabular-nums text-emerald-600">
+                        <span className="flex items-center gap-1.5 text-xl font-bold tabular-nums text-emerald-600">
                           <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" />
                           {money(prefSel.totalPorFacturar)}
                         </span>

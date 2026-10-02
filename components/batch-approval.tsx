@@ -628,7 +628,7 @@ export function BatchApproval() {
   return (
     <div className="space-y-4 md:space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="text-xl md:text-3xl font-bold">Aprobación de Lotes</h1>
+        <h1 className="text-xl md:text-2xl font-bold">Aprobación de Lotes</h1>
         {groupedByCliente.length > 0 && (
           <Button onClick={autoAssign} variant="secondary" size="sm" className="h-8 md:h-9 text-xs md:text-sm">
             Auto asignar

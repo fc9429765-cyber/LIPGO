@@ -336,24 +336,21 @@ export function LipAiAssistant({ contextLabel, empresaLabel, onOpen, alertas, on
     >
       <style>{`
         @property --lipai-a{ syntax:'<angle>'; initial-value:0deg; inherits:false; }
-        .lipai{ position:relative; border-radius:20px; padding:1.6px;
-          background:conic-gradient(from var(--lipai-a), #00c2dc, #3fe0ee, #4f8ff0, #12233f, #00c2dc);
-          animation:lipai-spin 6s linear infinite;
-          box-shadow:0 0 34px rgba(0,194,220,.16), 0 16px 40px rgba(0,0,0,.28); }
-        @keyframes lipai-spin{ to{ --lipai-a:360deg; } }
-        @media (prefers-reduced-motion:reduce){ .lipai{ animation:none; background:linear-gradient(120deg,#00c2dc,#4f8ff0); } }
-        .lipai-in{ position:relative; overflow:hidden; border-radius:18.4px; padding:12px 14px 12px;
-          background:linear-gradient(180deg,#0c2140,#0a1a30); }
+        /* Pulido profesional (2026-10-02): borde estático con los colores de la
+           marca (turquesa → verde azulado), sin giro, sin halo pulsante ni punto
+           parpadeante. Fondo = verde azulado profundo del logo. */
+        .lipai{ position:relative; border-radius:16px; padding:1.4px;
+          background:linear-gradient(120deg,#00d4ce,#0f766e 60%,#0e3b3b);
+          box-shadow:0 8px 24px rgba(5,46,43,.18); }
+        .lipai-in{ position:relative; overflow:hidden; border-radius:14.6px; padding:12px 14px 12px;
+          background:linear-gradient(180deg,#0b3b3a,#07302e); }
         .lipai-in::after{ content:""; position:absolute; inset:0; pointer-events:none;
-          background:radial-gradient(70% 130% at 100% -10%, rgba(0,194,220,.20), transparent 55%); }
+          background:radial-gradient(70% 130% at 100% -10%, rgba(0,212,206,.16), transparent 55%); }
         .lipai-orb{ position:relative; width:38px; height:38px; flex:none; }
         .lipai-orb .core{ position:absolute; inset:6px; border-radius:50%;
-          background:radial-gradient(circle at 35% 30%, #b9f6ff, #00c2dc 55%, #0a6b7d); box-shadow:0 0 16px rgba(0,194,220,.8); }
-        .lipai-orb .halo{ position:absolute; inset:0; border-radius:50%; border:1.5px solid rgba(0,220,240,.5); animation:lipai-halo 2.6s ease-out infinite; }
-        @keyframes lipai-halo{ 0%{transform:scale(.7);opacity:.9} 100%{transform:scale(1.35);opacity:0} }
-        @media (prefers-reduced-motion:reduce){ .lipai-orb .halo{ animation:none } }
-        .lipai-live{ width:6px; height:6px; border-radius:50%; background:#37f5a0; box-shadow:0 0 8px #37f5a0; animation:lipai-blink 1.8s ease-in-out infinite; }
-        @keyframes lipai-blink{ 0%,100%{opacity:1} 50%{opacity:.35} }
+          background:radial-gradient(circle at 35% 30%, #b9fffb, #00d4ce 55%, #0f766e); box-shadow:0 0 10px rgba(0,212,206,.45); }
+        .lipai-orb .halo{ position:absolute; inset:0; border-radius:50%; border:1.5px solid rgba(0,212,206,.35); }
+        .lipai-live{ width:6px; height:6px; border-radius:50%; background:#2ee6a5; }
         .lipai-sug:hover{ background:rgba(0,194,220,.16) !important; border-color:rgba(0,194,220,.5) !important; }
         .lipai-ta{ background:transparent; border:0; outline:none; resize:none; color:#eaf7fb; font-size:14.5px; line-height:21px; width:100%; min-height:40px; max-height:150px; overflow-y:auto; }
         .lipai-ta::placeholder{ color:#7fbdcf; }
@@ -394,7 +391,7 @@ export function LipAiAssistant({ contextLabel, empresaLabel, onOpen, alertas, on
           </div>
           <div className="min-w-0">
             <div
-              className={`${hero ? "text-[19px]" : "text-[15px]"} font-extrabold tracking-tight`}
+              className={`${hero ? "text-[19px]" : "text-[15px]"} font-bold tracking-tight`}
               style={{ color: "#eaf7fb" }}
             >
               LIPbot

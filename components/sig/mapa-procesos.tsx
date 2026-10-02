@@ -139,7 +139,7 @@ export function MapaProcesos() {
             Sistema de Gestión Integral
           </div>
           <h1
-            className="mt-1 text-3xl font-bold uppercase leading-none tracking-wide sm:text-4xl"
+            className="mt-1 text-2xl font-bold uppercase leading-none tracking-wide sm:text-4xl"
             style={{ color: "#006666" }}
           >
             Mapa de Procesos

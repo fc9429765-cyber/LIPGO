@@ -61,7 +61,7 @@ function ScoreGauge({ score }: { score: number }) {
           </RadialBarChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-x-0 bottom-1 text-center">
-          <span className="text-3xl font-bold tabular-nums" style={{ color: fill }}>{score}</span>
+          <span className="text-2xl font-bold tabular-nums" style={{ color: fill }}>{score}</span>
           <span className="text-sm text-muted-foreground">/100</span>
         </div>
       </div>

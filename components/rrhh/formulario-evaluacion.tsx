@@ -862,14 +862,14 @@ function ResumenEvaluacion({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="rounded-lg border p-4">
               <div className="text-xs text-muted-foreground">Puntaje total</div>
-              <div className="text-3xl font-bold">{puntajeTotal} <span className="text-base text-muted-foreground font-normal">/ 60</span></div>
+              <div className="text-2xl font-bold">{puntajeTotal} <span className="text-base text-muted-foreground font-normal">/ 60</span></div>
               <div className="mt-3">
                 <Progress value={(puntajeTotal / 60) * 100} />
               </div>
             </div>
             <div className="rounded-lg border p-4">
               <div className="text-xs text-muted-foreground">Porcentaje de riesgo</div>
-              <div className={`text-3xl font-bold ${nivel.color}`}>{porcentajeRiesgo}%</div>
+              <div className={`text-2xl font-bold ${nivel.color}`}>{porcentajeRiesgo}%</div>
               <div className="mt-3">
                 <Progress value={porcentajeRiesgo} />
               </div>

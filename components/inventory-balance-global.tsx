@@ -147,7 +147,7 @@ export function InventoryBalanceGlobal() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold text-foreground">Saldos por Producto</h2>
+        <h2 className="text-2xl font-bold text-foreground">Saldos por Producto</h2>
         <Button onClick={handleExportToExcel} disabled={exporting} className="gap-2">
           <Download className="h-4 w-4" />
           {exporting ? "Exportando..." : "Exportar a Excel"}

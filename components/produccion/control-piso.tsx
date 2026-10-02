@@ -1176,7 +1176,7 @@ function LiveTab() {
             </div>
             <div className="flex flex-col items-center sm:items-end">
               <span
-                className={`text-3xl font-bold sm:text-4xl ${
+                className={`text-2xl font-bold sm:text-4xl ${
                   inactCritico
                     ? "animate-pulse text-destructive"
                     : maquina && !maquina.parada

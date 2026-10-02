@@ -525,7 +525,7 @@ export function InventoryTransactionsForm() {
     <div className="container mx-auto p-4 space-y-4 md:space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl md:text-3xl font-bold tracking-tight">Transacciones de Inventario</h2>
+          <h2 className="text-xl md:text-2xl font-bold tracking-tight">Transacciones de Inventario</h2>
           <p className="text-muted-foreground text-xs md:text-sm">Registra entradas y salidas de inventario</p>
         </div>
       </div>
