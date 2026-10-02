@@ -2688,7 +2688,13 @@ function retrocederStockAlCorte(
 ): StockPorLote {
   const deltaCorte: Record<string, number> = {}
   for (const r of filas) {
-    if (!String(r.status || "").toLowerCase().startsWith("aprob")) continue
+    // (2026-10-02) Una salida "por descontar" (picking sin confirmar) YA está
+    // descontada del stock vivo por la vista, aunque no esté aprobada. Para
+    // volver al amanecer del corte hay que devolverla igual que una aprobada;
+    // si no, el "sistema" del conteo nace sin esas unidades (caso real ID3,
+    // Conteo #8: 540 und en 4 productos) y el mes queda sin soporte.
+    const st = String(r.status || "").toLowerCase()
+    if (!st.startsWith("aprob") && st !== "por descontar") continue
     if (!r.creado) continue
     const fechaLocal = fechaColombiaDe(r.creado)
     if (fechaLocal < corte) continue
@@ -3708,6 +3714,10 @@ export async function crearCuadre(
       // una base que ya no las tenía: diferencia "sin explicar" igual a su
       // cantidad (caso real ID3, Conteo #8: 550 und en 4 productos). Se exige
       // confirmarlas antes (botón "Confirmar Picking" en Centro de Coordinación).
+      // Solo bloquean las pendientes de órdenes YA FINALIZADAS (el camión se
+      // fue sin confirmar el picking: anomalía que hay que resolver). Las de
+      // órdenes en curso son normales y el cálculo del amanecer ya las
+      // devuelve al stock (ver retrocederStockAlCorte).
       const { data: pendientes } = await supabase
         .from("invtrans")
         .select("ocargue, cantidad")
@@ -3716,12 +3726,18 @@ export async function crearCuadre(
         .limit(500)
       if (pendientes && pendientes.length > 0) {
         const ordenes = Array.from(new Set((pendientes as any[]).map((p) => String(p.ocargue || "").trim()).filter(Boolean)))
-        const und = (pendientes as any[]).reduce((s, p) => s + Math.abs(Number(p.cantidad) || 0), 0)
-        return {
-          success: false,
-          error:
-            `Hay ${pendientes.length} salida(s) de orden de cargue sin confirmar (${Math.round(und)} und) en ${ordenes.length} orden(es): ${ordenes.slice(0, 6).join(", ")}${ordenes.length > 6 ? "…" : ""}. ` +
-            `Confírmalas en Centro de Coordinación (Confirmar Picking) antes de crear el Conteo total; si no, quedarían como diferencia sin explicar del mes.`,
+        const { data: fin } = await supabase.from("cabeceraoc").select("ordendecargue").in("ordendecargue", ordenes).ilike("status", "finalizado")
+        const finalizadas = new Set((fin ?? []).map((f: any) => f.ordendecargue))
+        const bloquean = (pendientes as any[]).filter((p) => finalizadas.has(String(p.ocargue || "").trim()))
+        if (bloquean.length > 0) {
+          const ords = Array.from(new Set(bloquean.map((p) => String(p.ocargue).trim())))
+          const und = bloquean.reduce((s, p) => s + Math.abs(Number(p.cantidad) || 0), 0)
+          return {
+            success: false,
+            error:
+              `Hay ${bloquean.length} salida(s) de orden de cargue sin confirmar (${Math.round(und)} und) en ${ords.length} orden(es) ya finalizada(s): ${ords.slice(0, 6).join(", ")}${ords.length > 6 ? "…" : ""}. ` +
+              `Confírmalas en Centro de Coordinación (Confirmar Picking) antes de crear el Conteo total; si no, quedarían como diferencia sin soporte del mes.`,
+          }
         }
       }
       const corte = payload.fecha || fechaColombiaDe(new Date().toISOString())
