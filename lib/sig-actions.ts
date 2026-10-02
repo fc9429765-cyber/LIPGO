@@ -5857,6 +5857,12 @@ export async function getConciliacionMensualInventario(
       if (p.startsWith("EMP") || p.startsWith("MP")) return false
       return p.startsWith("PT") || p.startsWith("SP")
     }
+    // NOTA (2026-10-02): un producto con código PT pero subcategoría que no es
+    // "Producto Terminado" queda fuera de aquí aunque el Conteo y el Kardex lo
+    // incluyan (caso real: PT000172 "Repostería Premium 12,5 kg" con
+    // subcategoría "Arroba" → 57.608 vs 57.609 en ID3). Se corrige en el
+    // MAESTRO (subcategoría), no aquí: cambiar esta regla por el código también
+    // metería Huevos y Mogolla en la conciliación de ID2.
 
     const stockActual = saldosRows.reduce((s, r) => s + (incluir(r.idproducto) ? Number(r.stock_actual) || 0 : 0), 0)
 
