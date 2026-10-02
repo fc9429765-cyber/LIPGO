@@ -450,6 +450,10 @@ export async function getOperacionDia(
       auxiliares: [],
       porUnidad: { ordenes: 0, unidades: 0 },
       programacion: { usa: false, tiene: false, programados: 0, llegaron: 0, cumplidos: 0, porcentaje: null, aTiempo: null, enviadaEn: null, enviadaPorUsuario: null },
+      vehiculosRegistrados: 0,
+      porTipoVehiculo: [],
+      porDespacho: [],
+      sinCerrarDetalle: { placas: [], masAntiguoMin: null },
       disponible: false,
       mensaje: null,
     }
@@ -458,12 +462,38 @@ export async function getOperacionDia(
     const [progHoy, progManana] = await Promise.all([getProgramacionResumenDia(empresaId, fecha), getProgramacionResumenDia(empresaId, sumarDias(fecha, 1))])
     operacionHoy.programacion = progHoy
     try {
-      const [kpis, patio, ton, hoyRaw] = await Promise.all([
+      const [kpis, patio, ton, hoyRaw, citasHoy, abiertas] = await Promise.all([
         getDespachoKpis(empresaId),
         getVehiculosNoProcesados(empresaId),
         getControlToneladas(empresaId, fecha, fecha),
         sb.from("cabeceraoc").select("ordendecargue, pesovascula, pesoorden").eq("idempresa", empresaId).eq("fechacargue", fecha).not("fincargue", "is", null).limit(500),
+        // Vehículos registrados hoy en portería: por tipo y por tipo de despacho.
+        sb.from("citasvehiculos").select("id, tipovehiculo, tipodespacho").eq("idempresa", empresaId).gte("fechallegada", fecha).lte("fechallegada", `${fecha}T23:59:59`).order("id", { ascending: true }).limit(1000),
+        // Iniciados sin finalizar (de cualquier fecha), el más antiguo primero.
+        sb.from("cabeceraoc").select("placa, fechacargue, iniciocargue").eq("idempresa", empresaId).not("iniciocargue", "is", null).is("fincargue", null).order("fechacargue", { ascending: true }).order("iniciocargue", { ascending: true }).limit(50),
       ])
+      // Vehículos de hoy por tipo (Mula, Sencillo…) y por despacho (cargue propio, tercero, cliente recoge).
+      const cuentaPor = (filas: any[], campo: string) => {
+        const m = new Map<string, number>()
+        for (const r of filas) {
+          const k = String(r?.[campo] ?? "").trim() || "Sin dato"
+          m.set(k, (m.get(k) ?? 0) + 1)
+        }
+        return [...m.entries()].map(([tipo, n]) => ({ tipo, n })).sort((a, b) => b.n - a.n || a.tipo.localeCompare(b.tipo))
+      }
+      const citas: any[] = citasHoy?.data ?? []
+      operacionHoy.vehiculosRegistrados = citas.length
+      operacionHoy.porTipoVehiculo = cuentaPor(citas, "tipovehiculo")
+      operacionHoy.porDespacho = cuentaPor(citas, "tipodespacho")
+      const abiertasFilas: any[] = abiertas?.data ?? []
+      let masAntiguo: number | null = null
+      for (const o of abiertasFilas) {
+        const ts = Date.parse(`${String(o.fechacargue ?? "").slice(0, 10)}T${String(o.iniciocargue ?? "00:00:00").slice(0, 8)}-05:00`)
+        if (!Number.isFinite(ts)) continue
+        const min = Math.max(0, Math.round((Date.now() - ts) / 60000))
+        if (masAntiguo == null || min > masAntiguo) masAntiguo = min
+      }
+      operacionHoy.sinCerrarDetalle = { placas: abiertasFilas.map((o) => String(o.placa ?? "")).filter(Boolean).slice(0, 6), masAntiguoMin: masAntiguo }
       // Huevos / Empaque MP de hoy: por unidad, aparte de las toneladas.
       const hoyOrds: any[] = hoyRaw?.data ?? []
       const setUnidad = await codigosOrdenPorUnidad(sb, hoyOrds.map((o) => o.ordendecargue))
@@ -493,6 +523,37 @@ export async function getOperacionDia(
     } catch (e: any) {
       operacionHoy.mensaje = e?.message || "No se pudo leer la operación de hoy."
       console.error("[v0] getOperacionDia operacionHoy:", e?.message ?? e)
+    }
+
+    // --- BANDEJA: lo de vehículos también es "requiere atención" (2026-10-02) --
+    // Antes solo aparecía en las cifras y en el cierre; el coordinador debe
+    // verlo en la bandeja con placas y tiempo, para actuar desde ahí.
+    if (operacionHoy.disponible && operacionHoy.sinCerrar > 0) {
+      const det = operacionHoy.sinCerrarDetalle
+      const partes: string[] = []
+      if (det.masAntiguoMin != null) {
+        const m = det.masAntiguoMin
+        partes.push(`el más antiguo lleva ${m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min` : `${m} min`} en proceso`)
+      }
+      if (det.placas.length) partes.push(det.placas.join(", ") + (operacionHoy.sinCerrar > det.placas.length ? "…" : ""))
+      bandeja.push({
+        id: "vehiculos-sin-cerrar",
+        nivel: operacionHoy.sinCerrar >= 5 || (det.masAntiguoMin ?? 0) >= 180 ? "alto" : "medio",
+        titulo: `${operacionHoy.sinCerrar} vehículo${operacionHoy.sinCerrar === 1 ? "" : "s"} iniciado${operacionHoy.sinCerrar === 1 ? "" : "s"} sin finalizar`,
+        detalle: partes.join(" · ") || "Marca el fin de cargue en Centro de Coordinación",
+        moduloDestino: "Centro de Coordinación",
+        textoBoton: "Cerrar vehículos",
+      })
+    }
+    if (operacionHoy.disponible && operacionHoy.enPatio > 0) {
+      bandeja.push({
+        id: "vehiculos-en-patio",
+        nivel: operacionHoy.enPatio > 3 ? "medio" : "bajo",
+        titulo: `${operacionHoy.enPatio} vehículo${operacionHoy.enPatio === 1 ? "" : "s"} en patio sin procesar`,
+        detalle: "Llegaron hoy y siguen sin orden asignada",
+        moduloDestino: "Registrar Vehículos",
+        textoBoton: "Ver patio",
+      })
     }
 
     // --- CIERRE DEL DÍA: ¿ya se escribió la bitácora de hoy? ----------------

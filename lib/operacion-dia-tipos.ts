@@ -106,6 +106,13 @@ export interface OperacionHoy {
   porUnidad: { ordenes: number; unidades: number }
   /** Programación del cliente para HOY (vehículos programados vs. llegados). `usa` = la empresa registra programaciones. */
   programacion: ProgramacionResumenDia
+  /** Vehículos registrados HOY en portería (citasvehiculos.fechallegada = hoy). */
+  vehiculosRegistrados: number
+  /** Los mismos, por tipo de vehículo y por tipo de despacho (cargue propio / tercero / cliente recoge), de mayor a menor. */
+  porTipoVehiculo: { tipo: string; n: number }[]
+  porDespacho: { tipo: string; n: number }[]
+  /** Vehículos iniciados sin finalizar: placas (máx. 6) y minutos en proceso del más antiguo. */
+  sinCerrarDetalle: { placas: string[]; masAntiguoMin: number | null }
   disponible: boolean
   mensaje: string | null
 }

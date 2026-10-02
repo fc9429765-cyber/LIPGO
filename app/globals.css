@@ -5,39 +5,39 @@
 
 :root {
   /* Updated to LiPGO brand colors: #5bc0de accent, #F4F7FC background, #ffffff cards, #343a40 text, #dee2e6 borders */
-  --background: #F4F7FC;
-  --foreground: #343a40;
+  --background: #F4F6F8;
+  --foreground: #0B1220;
   --card: #ffffff;
-  --card-foreground: #343a40;
+  --card-foreground: #0B1220;
   --popover: #ffffff;
-  --popover-foreground: #343a40;
-  --primary: #5bc0de;
+  --popover-foreground: #0B1220;
+  --primary: #0F766E;
   --primary-foreground: #ffffff;
-  --secondary: #6c757d;
+  --secondary: #5B6B7F;
   --secondary-foreground: #ffffff;
-  --muted: #e9ecef;
-  --muted-foreground: #6c757d;
-  --accent: #5bc0de;
-  --accent-foreground: #ffffff;
-  --destructive: #dc3545;
+  --muted: #EEF2F6;
+  --muted-foreground: #5B6B7F;
+  --accent: #E6F4F2;
+  --accent-foreground: #0B1220;
+  --destructive: #B91C1C;
   --destructive-foreground: #ffffff;
-  --border: #dee2e6;
-  --input: #dee2e6;
-  --ring: #5bc0de;
-  --chart-1: #5bc0de;
-  --chart-2: #0dcaf0;
+  --border: #E3E8EE;
+  --input: #D7DEE6;
+  --ring: #0F766E;
+  --chart-1: #0F766E;
+  --chart-2: #0B2F57;
   --chart-3: #198754;
   --chart-4: #ffc107;
   --chart-5: #fd7e14;
-  --radius: 0.75rem;
+  --radius: 0.875rem;
   --sidebar: #ffffff;
-  --sidebar-foreground: #343a40;
-  --sidebar-primary: #5bc0de;
+  --sidebar-foreground: #0B1220;
+  --sidebar-primary: #0F766E;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e9ecef;
-  --sidebar-accent-foreground: #343a40;
-  --sidebar-border: #dee2e6;
-  --sidebar-ring: #5bc0de;
+  --sidebar-accent: #E6F4F2;
+  --sidebar-accent-foreground: #0B1220;
+  --sidebar-border: #E3E8EE;
+  --sidebar-ring: #0F766E;
 }
 
 .dark {
@@ -77,7 +77,7 @@
 }
 
 @theme inline {
-  --font-sans: 'Geist', 'Geist Fallback';
+  --font-sans: var(--font-plex), 'Geist', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono', 'Geist Mono Fallback';
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -294,3 +294,45 @@
   }
 }
 
+
+/* =====================================================================
+   SISTEMA VISUAL LIPgo (2026-10-02) — reglas compartidas por todos los
+   módulos. Color de estado único (ok · atención · crítico · info), marca y
+   acento, y utilidades: .lg-eyebrow, .lg-card, .lg-num. Las primitivas de
+   React viven en components/ui/lipgo.tsx.
+   ===================================================================== */
+@theme inline {
+  --color-ok-fg: #166534;
+  --color-ok-bg: #ECFDF5;
+  --color-ok-bd: #BBF7D0;
+  --color-atencion-fg: #9A3412;
+  --color-atencion-bg: #FFF7ED;
+  --color-atencion-bd: #FED7AA;
+  --color-critico-fg: #991B1B;
+  --color-critico-bg: #FEF2F2;
+  --color-critico-bd: #FECACA;
+  --color-info-fg: #1E40AF;
+  --color-info-bg: #EFF6FF;
+  --color-info-bd: #BFDBFE;
+  --color-marca: #0B2F57;
+  --color-acento: #0F766E;
+  --color-acento-tinte: #CCFBF1;
+}
+
+@layer components {
+  .lg-eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+  .lg-card {
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--card);
+  }
+  .lg-num {
+    font-variant-numeric: tabular-nums;
+  }
+}
