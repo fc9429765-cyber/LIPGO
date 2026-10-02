@@ -6,7 +6,7 @@ import { desdeDePeriodo, hoyBogotaISO, restarDiasISO, PERIODO_LISTADO_DEFECTO } 
 import { getColombiaDateTime, getColombiaDate, getColombiaTime, dateInputToColombiaDate } from "@/lib/date-utils"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import { getCurrentUser, getUserProfile } from "@/lib/auth-actions"
-import { getCurrentEmpresaId } from "@/lib/company-filter"
+import { getCurrentEmpresaId, getCurrentUserContext } from "@/lib/company-filter"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { autorizar } from "@/lib/autorizaciones-core"
 import { revalidatePath } from "next/cache"
@@ -2473,9 +2473,38 @@ async function eliminarClonesDeCargue(
 }
 
 export async function deleteLoadOrder(orderId: number) {
-  const supabase = await createClient()
+  // (2026-10-02) Eliminar una orden es delicado: debe quedar QUIÉN lo hizo.
+  // Con el cliente genérico la auditoría registraba actor "sistema" sin id
+  // (nueve órdenes eliminadas el 30-sep sin responsable identificable). El
+  // cliente admin por actor inyecta el usuario en sesión en cada escritura
+  // (header x-audit-user → trigger de auditoría): cabecera, líneas y clones
+  // quedan con nombre y hora. Además se deja una fila explícita de auditoría
+  // con el resumen de la orden antes de borrarla.
+  const supabase: any = await getSupabaseAdmin()
   try {
     console.log("[v0] Starting deleteLoadOrder for orderId:", orderId)
+    try {
+      const { data: resumen } = await supabase
+        .from("cabeceraoc")
+        .select("idempresa, ordendecargue, tipooperacion, placa, conductor, cliente, pesoorden, status, fechaorden")
+        .eq("id", orderId)
+        .maybeSingle()
+      if (resumen) {
+        const { usuario } = await getCurrentUserContext()
+        await supabase.from("auditoria").insert({
+          actor_nombre: usuario || "sistema",
+          idempresa: resumen.idempresa ?? null,
+          modulo: "Gestión de Ordenes",
+          tabla: "cabeceraoc",
+          operacion: "DELETE",
+          registro_id: String(orderId),
+          descripcion: `Eliminó la orden ${resumen.ordendecargue} (${resumen.tipooperacion ?? ""}, placa ${resumen.placa ?? "sin placa"}, ${resumen.conductor ?? "sin conductor"}, ${resumen.pesoorden ?? "?"} t, estado ${resumen.status ?? "en curso"}, fecha ${resumen.fechaorden ?? ""})`,
+          antes: resumen,
+        })
+      }
+    } catch (e: any) {
+      console.error("[v0] auditoría explícita de eliminación:", e?.message ?? e)
+    }
 
     // Step 1: Get the order to be deleted to get ordendecargue
     const { data: orderToDelete, error: fetchError } = await supabase
