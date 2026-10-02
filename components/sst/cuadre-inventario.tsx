@@ -30,12 +30,14 @@ import {
   aprobarAjusteInventario,
   getProductosInventario,
   getTiposMovimiento,
+  aplicarCorreccionesConteo,
 } from "@/lib/sig-actions"
+import { proponerCodigo, opcionesPara, opcionDe } from "@/lib/conteo-novedades"
 import { useAuth } from "@/components/auth-provider"
 import { SigHeader, SigFilterBar, SigKpi } from "@/components/sst/sig-ui"
 import { SignaturePad, type SignaturePadHandle } from "@/components/rrhh/signature-pad"
 import type { SigInventarioCuadre, SigInventarioCuadreDetalle, SigInventarioAjuste } from "@/lib/sig-types"
-import { Loader2, ClipboardCheck, Plus, Lock, Trash2, FileCheck2, ArrowLeft, Pencil, BookOpen, CheckCircle2, ArrowDownToLine, ArrowUpFromLine, PackageSearch, User, ChevronDown, ChevronRight } from "lucide-react"
+import { Loader2, ClipboardCheck, Plus, Lock, Trash2, FileCheck2, ArrowLeft, Pencil, BookOpen, CheckCircle2, ArrowDownToLine, ArrowUpFromLine, PackageSearch, User, ChevronDown, ChevronRight, ListChecks, Wand2 } from "lucide-react"
 
 const ESTADO_CUADRE: Record<string, { label: string; color: string }> = {
   borrador: { label: "Borrador", color: "#94a3b8" },
@@ -112,6 +114,12 @@ export function CuadreInventario() {
     try { localStorage.setItem("lipgo:conteo:agrupar", v) } catch {}
   }
   const ordenNatural = (a: string, b: string) => a.localeCompare(b, "es", { numeric: true, sensitivity: "base" })
+  // Vista del conteo abierto: la hoja de conteo (no cambia) o "Diferencias",
+  // donde el revisor ve la novedad de cada línea, el código propuesto y aplica.
+  const [vista, setVista] = useState<"conteo" | "diferencias">("conteo")
+  // Propuesta por línea (id del detalle → código y pareja), editable por el revisor.
+  const [propuestas, setPropuestas] = useState<Map<number, { codigo: string; parejaId: number | null; aviso: string | null; coincidencia: string | null }>>(new Map())
+  const [aplicando, setAplicando] = useState(false)
   const firmaPadRef = useRef<SignaturePadHandle | null>(null)
 
   async function abrirNomenclatura() {
@@ -276,6 +284,13 @@ export function CuadreInventario() {
     const n = Number(v)
     dirtyRef.current.add(id)
     setDetalle((prev) => prev.map((d) => (d.id === id ? { ...d, conteo: isNaN(n) ? 0 : n, diferencia: (isNaN(n) ? 0 : n) - (d.sistema ?? 0) } : d)))
+  }
+
+  // Novedad de la línea (la escribe el contador, lote por lote). Se guarda con
+  // la línea en el mismo onBlur que la cantidad; el revisor la lee en "Diferencias".
+  function setNovedad(id: number, v: string) {
+    dirtyRef.current.add(id)
+    setDetalle((prev) => prev.map((d) => (d.id === id ? { ...d, observacion: v } : d)))
   }
 
   // Guarda SOLO esta línea (upsert) al perder el foco — no toca las demás,
@@ -464,6 +479,78 @@ export function CuadreInventario() {
     return lista.sort((a, b) => (porUbic ? ordenNatural(a.producto, b.producto) : a.producto.localeCompare(b.producto)))
   }, [detalle, agrupar])
 
+  // ---------- Diferencias del conteo: novedad → código → aplicar ----------
+  // Una sola fuente: lo "aplicado" de una línea es la suma de las correcciones
+  // activas de este conteo para ese producto/lote/ubicación (tabla de
+  // correcciones); lo "pendiente" es su diferencia menos eso.
+  const claveLinea = (x: { codproducto?: string | null; lote?: string | null; location?: string | null }) => `${x.codproducto ?? ""}|${x.lote ?? ""}|${x.location ?? ""}`
+  const ajustesDelConteo = useMemo(() => (sel ? ajustes.filter((a) => a.cuadre_id === sel.id && a.activo !== false) : []), [ajustes, sel?.id])
+  const aplicadoPorClave = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const a of ajustesDelConteo) { const k = claveLinea(a); m.set(k, (m.get(k) ?? 0) + (Number(a.cantidad) || 0)) }
+    return m
+  }, [ajustesDelConteo])
+  const pendienteDe = (d: SigInventarioCuadreDetalle) => Math.round(((Number(d.diferencia) || 0) - (aplicadoPorClave.get(claveLinea(d)) ?? 0)) * 100) / 100
+  const lineasDif = useMemo(
+    () =>
+      detalle
+        .filter((d) => (Number(d.diferencia) || 0) !== 0 || (aplicadoPorClave.get(claveLinea(d)) ?? 0) !== 0)
+        .sort((a, b) => ordenNatural(a.location || "", b.location || "") || (a.producto || "").localeCompare(b.producto || "") || ordenNatural(a.lote || "", b.lote || "")),
+    [detalle, aplicadoPorClave],
+  )
+  const pendientesCount = lineasDif.filter((d) => pendienteDe(d) !== 0).length
+  // Líneas que pueden ser pareja de `d` para 309 (otro lote) o 311 (misma lote, otra ubicación).
+  const candidatasPareja = (d: SigInventarioCuadreDetalle, tipo: "lote" | "ubicacion") =>
+    lineasDif.filter((o) => o.id !== d.id && o.codproducto === d.codproducto && pendienteDe(o) !== 0 && Math.sign(pendienteDe(o)) !== Math.sign(pendienteDe(d)) && (tipo === "lote" ? o.lote !== d.lote : o.lote === d.lote && o.location !== d.location))
+
+  // Lee la novedad de cada línea pendiente y propone código (y pareja cuando aplica).
+  function interpretar(conservar = true) {
+    setPropuestas((prev) => {
+      const next = new Map(conservar ? prev : [])
+      for (const d of lineasDif) {
+        const pend = pendienteDe(d)
+        if (pend === 0) { next.delete(d.id); continue }
+        if (conservar && next.has(d.id)) continue
+        const p = proponerCodigo(d.observacion, pend)
+        let parejaId: number | null = null
+        if (p.pareja) {
+          const cands = candidatasPareja(d, p.pareja).sort((a, b) => Math.abs(Math.abs(pendienteDe(a)) - Math.abs(pend)) - Math.abs(Math.abs(pendienteDe(b)) - Math.abs(pend)))
+          parejaId = cands[0]?.id ?? null
+        }
+        next.set(d.id, { codigo: p.codigo, parejaId, aviso: p.aviso, coincidencia: p.coincidencia })
+      }
+      return next
+    })
+  }
+
+  async function abrirDiferencias() {
+    setVista("diferencias")
+    interpretar(false)
+  }
+
+  // Aplica las correcciones de las líneas indicadas con el código confirmado.
+  async function aplicarLineas(ids: number[]) {
+    if (!sel || ids.length === 0) return
+    const items = ids
+      .map((id) => ({ id, p: propuestas.get(id) }))
+      .filter((x) => x.p && opcionDe(x.p.codigo)?.aplicable)
+      .map((x) => ({ detalleId: x.id, codigo: x.p!.codigo, parejaDetalleId: x.p!.parejaId }))
+    if (items.length === 0) { toast({ title: "Nada para aplicar", description: "Las líneas elegidas no tienen un código aplicable desde el conteo." }); return }
+    const resumen = items.length === 1 ? "1 corrección" : `${items.length} correcciones`
+    if (!confirm(`Se contabilizarán ${resumen} con fecha ${sel.fecha ? fechaAnteriorTexto(sel.fecha) : "de la víspera"} (mueven el stock: faltantes salen, sobrantes entran) y quedarán registradas con su código y la novedad como motivo.\n\n¿Aplicar?`)) return
+    setAplicando(true)
+    const r = await aplicarCorreccionesConteo(sel.id, items, actor)
+    setAplicando(false)
+    if (r.aplicadas > 0) toast({ title: `${r.aplicadas} corrección(es) contabilizada(s)`, description: r.pendientes === 0 ? "No quedan diferencias pendientes: ya puedes firmar el acta y cerrar el mes." : `Quedan ${r.pendientes} línea(s) pendientes.` })
+    if (r.errores.length) toast({ title: `${r.errores.length} línea(s) no se aplicaron`, description: r.errores.slice(0, 3).join(" · "), variant: "destructive" as any })
+    else if (r.error && r.aplicadas === 0) toast({ title: "No se pudo aplicar", description: r.error })
+    await cargar()
+    const det = await getCuadreDetalle(sel.id)
+    if (det.success) setDetalle(det.data)
+    if (r.pendientes === 0 && r.aplicadas > 0 && sel.estado === "contado") setSel({ ...sel, estado: "cerrado" })
+    setPropuestas(new Map())
+  }
+
   // ---------- Vista DETALLE de un cuadre ----------
   if (sel) {
     const est = ESTADO_CUADRE[sel.estado ?? "borrador"] ?? ESTADO_CUADRE.borrador
@@ -475,6 +562,167 @@ export function CuadreInventario() {
     // Los campos guardados (sistema, diferencia) no se tocan: son el hallazgo
     // original y de ahí sale el ERI.
     const corregido = sel.estado === "aprobado"
+
+    // ---------- Vista DIFERENCIAS: novedad → código → aplicar ----------
+    if (vista === "diferencias") {
+      const aplicadasDe = (d: SigInventarioCuadreDetalle) => ajustesDelConteo.filter((a) => claveLinea(a) === claveLinea(d))
+      const idsAplicables = lineasDif.filter((d) => pendienteDe(d) !== 0).map((d) => d.id).filter((id) => { const p = propuestas.get(id); const o = p ? opcionDe(p.codigo) : undefined; return !!o?.aplicable && (!o.pareja || !!p?.parejaId) })
+      return (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setVista("conteo")}>
+                <ArrowLeft className="mr-1 h-4 w-4" /> Volver al conteo
+              </Button>
+              <h2 className="text-lg font-bold" style={{ color: SST_TOKENS.ink }}>
+                Diferencias · Conteo #{sel.id} · {sel.fecha}
+              </h2>
+              <Badge style={{ background: est.color, color: "white" }}>{est.label}</Badge>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => interpretar(false)} disabled={aplicando} title="Vuelve a leer la novedad de cada línea y propone el código">
+                <Wand2 className="mr-1 h-4 w-4" /> Interpretar novedades
+              </Button>
+              <Button size="sm" onClick={() => aplicarLineas(idsAplicables)} disabled={aplicando || idsAplicables.length === 0} style={{ background: SST_TOKENS.ok, color: "white" }} title="Aplica todas las líneas pendientes con el código confirmado">
+                {aplicando ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1 h-4 w-4" />} Aplicar todas ({idsAplicables.length})
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <SigKpi label="Líneas con diferencia" value={lineasDif.length} accent={SST_TOKENS.navy} />
+            <SigKpi label="Pendientes de aplicar" value={pendientesCount} accent={pendientesCount ? SST_TOKENS.bad : SST_TOKENS.ok} valueColor={pendientesCount ? SST_TOKENS.bad : SST_TOKENS.ok} />
+            <SigKpi label="Aplicadas" value={lineasDif.length - pendientesCount} accent={SST_TOKENS.ok} valueColor={SST_TOKENS.ok} />
+            <SigKpi label="Fecha de las correcciones" value={sel.fecha ? fechaAnteriorTexto(sel.fecha) : "víspera"} accent={SST_TOKENS.navy} />
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            El contador escribió la novedad en cada línea; el sistema propone el código y tú lo confirmas o lo cambias antes de aplicar. Sin novedad se propone 701 (sobrante) o 702 (faltante).
+            Un cruce de lote (309) o un mal ubicado (311) se aplica en pareja: sale del lote o ubicación que falta y entra al que sobra. Las cuarentenas (344) se hacen en Transacciones de Inventario.
+          </p>
+
+          <Card className="overflow-hidden">
+            <div className="max-h-[60vh] overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-background">
+                  <tr className="border-b text-left text-[11px] uppercase text-muted-foreground">
+                    <th className="px-3 py-2">Ubic.</th>
+                    <th className="px-3 py-2">Producto</th>
+                    <th className="px-3 py-2">Lote</th>
+                    <th className="px-3 py-2 text-right">Sistema</th>
+                    <th className="px-3 py-2 text-right">Físico</th>
+                    <th className="px-3 py-2 text-right">Pendiente</th>
+                    <th className="px-3 py-2">Novedad del contador</th>
+                    <th className="px-3 py-2">Código</th>
+                    <th className="px-3 py-2">Pareja</th>
+                    <th className="px-3 py-2">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lineasDif.map((d) => {
+                    const pend = pendienteDe(d)
+                    const p = propuestas.get(d.id)
+                    const opc = p ? opcionDe(p.codigo) : undefined
+                    const aplicadas = aplicadasDe(d)
+                    return (
+                      <tr key={d.id} className={`border-b last:border-0 align-top ${pend !== 0 ? "" : "bg-green-50/60"}`}>
+                        <td className="px-3 py-1.5 text-muted-foreground">{d.location || "—"}</td>
+                        <td className="px-3 py-1.5">
+                          {d.producto || d.codproducto}
+                          {d.codproducto && <span className="ml-1 text-[11px] text-muted-foreground">· {d.codproducto}</span>}
+                        </td>
+                        <td className="px-3 py-1.5 text-muted-foreground">{d.lote || "—"}</td>
+                        <td className="px-3 py-1.5 text-right">{fmt(d.sistema)}</td>
+                        <td className="px-3 py-1.5 text-right">{fmt(d.conteo)}</td>
+                        <td className="px-3 py-1.5 text-right font-semibold" style={{ color: pend === 0 ? SST_TOKENS.ok : pend > 0 ? SST_TOKENS.ok : SST_TOKENS.bad }}>
+                          {pend > 0 ? "+" : ""}{fmt(pend)}
+                        </td>
+                        <td className="px-3 py-1.5 text-[12px]">
+                          {d.observacion ? d.observacion : <span className="text-muted-foreground">sin novedad</span>}
+                          {p?.coincidencia && <div className="text-[11px] text-muted-foreground">coincide: “{p.coincidencia}”</div>}
+                          {p?.aviso && <div className="text-[11px]" style={{ color: SST_TOKENS.warn }}>{p.aviso}</div>}
+                        </td>
+                        <td className="px-3 py-1.5">
+                          {pend !== 0 ? (
+                            <select
+                              className="h-8 rounded-md border bg-background px-2 text-xs"
+                              value={p?.codigo ?? ""}
+                              disabled={aplicando}
+                              onChange={(e) => {
+                                const codigo = e.target.value
+                                const o = opcionDe(codigo)
+                                const parejaId = o?.pareja ? (candidatasPareja(d, o.pareja)[0]?.id ?? null) : null
+                                setPropuestas((prev) => new Map(prev).set(d.id, { codigo, parejaId, aviso: null, coincidencia: p?.coincidencia ?? null }))
+                              }}
+                            >
+                              {opcionesPara(pend).map((o) => (
+                                <option key={o.codigo} value={o.codigo}>{o.etiqueta}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-1.5">
+                          {pend !== 0 && opc?.pareja ? (
+                            (() => {
+                              const cands = candidatasPareja(d, opc.pareja)
+                              return cands.length === 0 ? (
+                                <span className="text-[11px]" style={{ color: SST_TOKENS.bad }}>sin pareja posible</span>
+                              ) : (
+                                <select
+                                  className="h-8 rounded-md border bg-background px-2 text-xs"
+                                  value={p?.parejaId ?? ""}
+                                  disabled={aplicando}
+                                  onChange={(e) => setPropuestas((prev) => new Map(prev).set(d.id, { ...(p as any), parejaId: e.target.value ? Number(e.target.value) : null }))}
+                                >
+                                  <option value="">elige la pareja</option>
+                                  {cands.map((c) => (
+                                    <option key={c.id} value={c.id}>{opc.pareja === "lote" ? `lote ${c.lote}` : c.location} · {pendienteDe(c) > 0 ? "+" : ""}{fmt(pendienteDe(c))}</option>
+                                  ))}
+                                </select>
+                              )
+                            })()
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-1.5">
+                          {pend !== 0 ? (
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs"
+                              disabled={aplicando || !opc?.aplicable || (!!opc?.pareja && !p?.parejaId)}
+                              onClick={() => aplicarLineas([d.id])}
+                              style={{ background: SST_TOKENS.navy, color: "white" }}
+                            >
+                              Aplicar
+                            </Button>
+                          ) : (
+                            <div className="text-[11px]" style={{ color: SST_TOKENS.ok }}>
+                              Aplicada
+                              {aplicadas.map((a) => (
+                                <div key={a.id} className="text-muted-foreground" title={a.soporte ?? ""}>
+                                  {a.cod_movimiento} {Number(a.cantidad) > 0 ? "+" : ""}{fmt(a.cantidad)}{a.invtrans_id ? ` · mov #${a.invtrans_id}` : ""}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {lineasDif.length === 0 && (
+                    <tr><td colSpan={10} className="px-3 py-6 text-center text-sm text-muted-foreground">Este conteo no tiene diferencias.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
+      )
+    }
+
     return (
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -498,9 +746,9 @@ export function CuadreInventario() {
                 Cada línea se guarda sola al contarla — varias personas pueden contar a la vez sin pisarse.
               </span>
             )}
-            {(sel.estado === "contado") && (
-              <Button size="sm" onClick={generar} style={{ background: SST_TOKENS.navy, color: "white" }}>
-                <FileCheck2 className="mr-1 h-4 w-4" /> Generar correcciones
+            {(sel.estado === "contado" || sel.estado === "cerrado") && lineasDif.length > 0 && (
+              <Button size="sm" onClick={abrirDiferencias} style={{ background: SST_TOKENS.navy, color: "white" }} title="Revisar cada diferencia con su novedad, confirmar el código (701/702/309/311/653/551) y aplicarla">
+                <ListChecks className="mr-1 h-4 w-4" /> Revisar diferencias{pendientesCount ? ` (${pendientesCount})` : ""}
               </Button>
             )}
             {sel.estado === "cerrado" && (
@@ -548,6 +796,7 @@ export function CuadreInventario() {
                     <th className="px-3 py-2 text-right">Diferencia</th>
                     {corregido && <th className="px-3 py-2 text-right" title="Lo que se encontró al contar; ya corregido con 701 (sobrante) o 702 (faltante) con fecha de la víspera">Hallazgo corregido</th>}
                     <th className="px-3 py-2">Contado por</th>
+                    <th className="px-3 py-2" title="La escribe el contador lote por lote: avería, cruce de lote, mal ubicado, devolución… El revisor la usa en Diferencias para elegir el código">Novedad</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -578,6 +827,7 @@ export function CuadreInventario() {
                             </td>
                           )}
                           <td className="px-3 py-1.5 text-right text-[11px] text-muted-foreground">{contadas}/{g.filas.length} líneas</td>
+                          <td className="px-3 py-1.5"></td>
                         </tr>
                         {!colapsado && g.filas.map((d) => {
                           const dif = Number(d.diferencia) || 0
@@ -627,6 +877,20 @@ export function CuadreInventario() {
                                   <span className="inline-flex items-center gap-1"><User className="h-3 w-3" />{d.contado_por}</span>
                                 ) : (
                                   "—"
+                                )}
+                              </td>
+                              <td className="px-3 py-1.5 text-[12px]">
+                                {editable ? (
+                                  <Input
+                                    type="text"
+                                    value={d.observacion ?? ""}
+                                    placeholder="novedad (avería, cruce de lote, mal ubicado…)"
+                                    onChange={(e) => setNovedad(d.id, e.target.value)}
+                                    onBlur={() => guardarLinea(d.id)}
+                                    className="h-7 w-56 text-[12px]"
+                                  />
+                                ) : (
+                                  <span className="text-muted-foreground">{d.observacion || "—"}</span>
                                 )}
                               </td>
                             </tr>

@@ -4127,6 +4127,123 @@ export async function generarAjustesCuadre(cuadreId: number): Promise<{ success:
   }
 }
 
+/**
+ * Aplica correcciones de un conteo LÍNEA POR LÍNEA con el código que el revisor
+ * confirmó (701/702/653/551, o 309/311 con pareja). Es el camino de
+ * "Diferencias" del conteo (gerencia 2026-10-02): el contador escribe la
+ * novedad, el sistema propone el código, el revisor aplica.
+ *
+ * Una sola fuente de información: usa la misma tabla de correcciones
+ * (`sig_inventario_ajuste`, con cuadre_id, código, motivo = novedad), el mismo
+ * posteo a invtrans (`postCorreccionInvtrans`, fechado la víspera del conteo)
+ * y el mismo marcado de aprobación que "Cerrar mes". Lo aplicado aquí queda
+ * con invtrans_id, así que el cierre del mes no lo vuelve a postear.
+ *
+ * Idempotente por línea: lo "pendiente" de una línea es su diferencia menos lo
+ * ya aplicado (suma de correcciones activas de ese producto/lote/ubicación en
+ * este conteo). Si no hay pendiente, se salta.
+ */
+export async function aplicarCorreccionesConteo(
+  cuadreId: number,
+  items: Array<{ detalleId: number; codigo: string; parejaDetalleId?: number | null }>,
+  actor: string,
+): Promise<{ success: boolean; aplicadas: number; saltadas: number; pendientes: number; errores: string[]; error?: string }> {
+  const vacio = { aplicadas: 0, saltadas: 0, pendientes: 0, errores: [] as string[] }
+  try {
+    const supabase: any = await getSupabaseAdmin()
+    const { data: cab } = await supabase.from("sig_inventario_cuadre").select("id,proyecto_id,fecha,estado,responsable").eq("id", cuadreId).single()
+    if (!cab) return { success: false, ...vacio, error: "Conteo no encontrado" }
+    if (!["contado", "cerrado"].includes(String(cab.estado))) return { success: false, ...vacio, error: `El conteo está "${cab.estado}"; solo se aplican correcciones a un conteo contado.` }
+    const proyectoId = Number(cab.proyecto_id)
+    // La corrección pertenece al mes que se cierra: víspera de la fecha del conteo (igual que generarAjustesCuadre).
+    let fechaCorreccion: string | null = cab.fecha ?? null
+    if (fechaCorreccion) {
+      const d = new Date(`${fechaCorreccion}T00:00:00Z`)
+      d.setUTCDate(d.getUTCDate() - 1)
+      fechaCorreccion = d.toISOString().slice(0, 10)
+    }
+    const { data: detalle } = await supabase.from("sig_inventario_cuadre_detalle").select("*").eq("cuadre_id", cuadreId)
+    const porId = new Map<number, any>((detalle ?? []).map((d: any) => [Number(d.id), d]))
+    const { data: ajustes } = await supabase.from("sig_inventario_ajuste").select("codproducto,lote,location,cantidad").eq("cuadre_id", cuadreId).eq("activo", true)
+    const clave = (x: any) => `${x.codproducto ?? ""}|${x.lote ?? ""}|${x.location ?? ""}`
+    const aplicado = new Map<string, number>()
+    for (const a of ajustes ?? []) aplicado.set(clave(a), (aplicado.get(clave(a)) ?? 0) + (Number(a.cantidad) || 0))
+    const pendienteDe = (d: any) => Math.round(((Number(d.diferencia) || 0) - (aplicado.get(clave(d)) ?? 0)) * 100) / 100
+
+    const CODIGOS: Record<string, { tipo: string; signo: "ingreso" | "salida" | "ambos"; pareja: "lote" | "ubicacion" | null }> = {
+      "701": { tipo: "sobrante", signo: "ingreso", pareja: null },
+      "702": { tipo: "faltante", signo: "salida", pareja: null },
+      "653": { tipo: "devolucion", signo: "ingreso", pareja: null },
+      "551": { tipo: "averia", signo: "salida", pareja: null },
+      "309": { tipo: "reclasificacion", signo: "ambos", pareja: "lote" },
+      "311": { tipo: "traslado", signo: "ambos", pareja: "ubicacion" },
+    }
+
+    let aplicadas = 0, saltadas = 0
+    const errores: string[] = []
+    const etiqueta = (d: any) => `${d.producto ?? d.codproducto} L${d.lote ?? ""} ${d.location ?? ""}`
+
+    // Inserta UNA corrección, la postea y la marca aprobada (mismo camino que aprobarAjusteInventario).
+    const aplicarUna = async (d: any, cod: string, tipo: string, cantidad: number, motivo: string, soporte: string) => {
+      const direccion = cantidad < 0 ? "salida" : "ingreso"
+      const { data: nuevo, error } = await supabase
+        .from("sig_inventario_ajuste")
+        .insert({ proyecto_id: proyectoId, cuadre_id: cuadreId, fecha: fechaCorreccion, codproducto: d.codproducto, producto: d.producto, lote: d.lote, location: d.location ?? null, direccion, cod_movimiento: cod, cantidad, tipo, motivo, soporte, responsable: cab.responsable ?? actor, estado: "registrado", activo: true })
+        .select("*")
+        .single()
+      if (error || !nuevo) throw new Error(error?.message || "No se pudo registrar la corrección")
+      const r = await postCorreccionInvtrans(supabase, nuevo, actor)
+      if (r.error) throw new Error(`No se pudo mover el stock: ${r.error}`)
+      const ok = await marcarAjusteAprobado(supabase, nuevo.id, actor, r.id)
+      if (ok.error) throw new Error(ok.error)
+      aplicado.set(clave(d), (aplicado.get(clave(d)) ?? 0) + cantidad)
+    }
+
+    for (const it of items) {
+      const d = porId.get(Number(it.detalleId))
+      if (!d) { errores.push(`Línea ${it.detalleId}: no existe en este conteo`); continue }
+      const def = CODIGOS[String(it.codigo)]
+      if (!def) { errores.push(`${etiqueta(d)}: código ${it.codigo} no se aplica desde el conteo`); continue }
+      const pend = pendienteDe(d)
+      if (pend === 0) { saltadas++; continue }
+      const novedad = String(d.observacion ?? "").trim()
+      const motivo = novedad ? `Conteo: ${novedad}` : "Ajuste por conteo físico (cuadre)"
+      try {
+        if (!def.pareja) {
+          const direccion = pend < 0 ? "salida" : "ingreso"
+          if (def.signo !== "ambos" && def.signo !== direccion) { errores.push(`${etiqueta(d)}: el código ${it.codigo} es de ${def.signo} y la línea es un ${direccion === "salida" ? "faltante" : "sobrante"}`); continue }
+          await aplicarUna(d, it.codigo, def.tipo, pend, motivo, `Conteo #${cuadreId} · línea ${d.id}`)
+          aplicadas++
+        } else {
+          const p = it.parejaDetalleId ? porId.get(Number(it.parejaDetalleId)) : null
+          if (!p) { errores.push(`${etiqueta(d)}: el código ${it.codigo} necesita una línea pareja`); continue }
+          if (p.codproducto !== d.codproducto) { errores.push(`${etiqueta(d)}: la pareja debe ser del mismo producto`); continue }
+          if (def.pareja === "lote" && (p.lote === d.lote)) { errores.push(`${etiqueta(d)}: para 309 la pareja debe ser otro lote`); continue }
+          if (def.pareja === "ubicacion" && (p.lote !== d.lote || p.location === d.location)) { errores.push(`${etiqueta(d)}: para 311 la pareja debe ser el mismo lote en otra ubicación`); continue }
+          const pendP = pendienteDe(p)
+          if (pendP === 0 || Math.sign(pendP) === Math.sign(pend)) { errores.push(`${etiqueta(d)}: la pareja (${etiqueta(p)}) no tiene una diferencia de signo contrario pendiente`); continue }
+          const x = Math.min(Math.abs(pend), Math.abs(pendP))
+          const sale = pend < 0 ? d : p, entra = pend < 0 ? p : d
+          const sop = `Conteo #${cuadreId} · ${it.codigo} pareja: ${def.pareja === "lote" ? `lote ${sale.lote} → lote ${entra.lote}` : `${sale.location} → ${entra.location}`} (${x})`
+          await aplicarUna(sale, it.codigo, def.tipo, -x, motivo, sop)
+          await aplicarUna(entra, it.codigo, def.tipo, x, motivo, sop)
+          aplicadas++
+        }
+      } catch (e: any) {
+        errores.push(`${etiqueta(d)}: ${e?.message || "error al aplicar"}`)
+      }
+    }
+    const pendientes = (detalle ?? []).filter((d: any) => pendienteDe(d) !== 0).length
+    // Todo aplicado → el conteo queda "cerrado" (listo para el acta y "Cerrar mes", que lo deja aprobado).
+    if (pendientes === 0 && aplicadas > 0 && cab.estado === "contado") {
+      await supabase.from("sig_inventario_cuadre").update({ estado: "cerrado", updated_at: new Date().toISOString() }).eq("id", cuadreId)
+    }
+    return { success: errores.length === 0, aplicadas, saltadas, pendientes, errores, error: errores.length ? `${errores.length} línea(s) no se aplicaron` : undefined }
+  } catch (err: any) {
+    return { success: false, ...vacio, error: err?.message || "Error desconocido" }
+  }
+}
+
 export async function getAjustesInventario(
   proyectoId: number,
 ): Promise<{ success: boolean; data: SigInventarioAjuste[]; error?: string }> {
