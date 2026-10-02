@@ -2425,27 +2425,29 @@ async function _computeIndicadoresValores(
     // contra el stock vivo (saldoinvdetalle = verdad física). El faltante de kardex frente
     // al físico es la inexactitud → ERI = 1 − |faltante| / físico. Cuadra 100% si no hay
     // diferencias sin explicar. Reutiliza getConciliacionMensualInventario (una por sitio).
+    // (2026-10-02) ERI = exactitud de los CONTEOS FÍSICOS aprobados o cerrados
+    // (ítems sin diferencia / ítems contados), consolidado sobre los sitios.
+    // Antes salía del cruce libro-vs-lote de la Conciliación mensual (otra
+    // definición y, además, 3-4 s por sitio). Los conteos en borrador o solo
+    // "contados" no cuentan: todavía no son una verdad validada.
     let invEri = 100
-    let eriBase = "sin lotes para conciliar"
+    let eriBase = "sin conteos físicos aprobados"
     try {
-      let exactosTot = 0
-      let evaluadosTot = 0
-      let lotesRevisarTot = 0
-      for (const cli of clientes) {
-        const r = await getConciliacionMensualInventario(cli, null)
-        if (r.success && r.data?.resumen) {
-          exactosTot += Number(r.data.resumen.lotesExactos) || 0
-          evaluadosTot += Number(r.data.resumen.lotesEvaluados) || 0
-          lotesRevisarTot += Number(r.data.resumen.lotesRevisar) || 0
-        }
+      const { data: cuad } = await supabase
+        .from("sig_inventario_cuadre")
+        .select("items,items_con_diferencia")
+        .eq("activo", true)
+        .in("estado", ESTADOS_CONTEO_BASE)
+        .in("proyecto_id", clientes)
+      let items = 0
+      let conDif = 0
+      for (const r of cuad ?? []) {
+        items += Number(r.items) || 0
+        conDif += Number(r.items_con_diferencia) || 0
       }
-      if (evaluadosTot > 0) {
-        // ERI consolidado = Σ lotes exactos / Σ lotes evaluados (no promedio de sitios).
-        invEri = Math.round((exactosTot / evaluadosTot) * 1000) / 10
-        const desc = evaluadosTot - exactosTot
-        eriBase = desc > 0
-          ? `${exactosTot}/${evaluadosTot} lotes exactos · ${desc} con diferencia (${lotesRevisarTot} a revisar)`
-          : `${exactosTot}/${evaluadosTot} lotes exactos`
+      if (items > 0) {
+        invEri = Math.round(((items - conDif) / items) * 1000) / 10
+        eriBase = `${items - conDif}/${items} ítems exactos en ${(cuad ?? []).length} conteos aprobados`
       }
     } catch {}
 
@@ -2543,91 +2545,10 @@ export async function getClientesLIP(): Promise<{ id: number; nombre: string }[]
 }
 
 // ---------------------------------------------------------------------------
-// Saldo REAL de un producto — fuente ÚNICA reutilizada por getKardexInventario,
-// getPanelInventarioLIP y getMovimientosProducto, para que las 3 pantallas de
-// inventario SIEMPRE muestren el mismo número para el mismo producto (pedido
-// explícito del usuario: "saldo detalle, saldo por producto e inventario
-// global deben estar alineados"). Es saldo inicial (o el último cierre físico
-// real congelado en `sig_inventario_cierre_mes.fisico_snapshot`) + ingresos −
-// salidas, tal cual quedaron registrados en invtrans — NUNCA se fuerza a
-// coincidir con `saldoinvdetalle` (ese es un número aparte, mantenido por su
-// cuenta); si el cálculo puro no cuadra con él, esa diferencia es información
-// real que hay que investigar, no ocultar. `stockVivoFallback` solo se usa
-// para el back-solve del arranque cuando el producto no tiene ningún cierre
-// físico real (ninguna ancla) — único caso sin otra verdad de referencia.
-// ---------------------------------------------------------------------------
-interface FilaInvtransParaSaldo {
-  tipomov: string
-  cantidad: any
-  status: any
-  creado: any
-  cod_movimiento: any
-}
-
-function calcularSaldoReal<T extends FilaInvtransParaSaldo>(
-  filasProducto: T[],
-  anclasProducto: Array<{ mes: string; valor: number }>,
-  stockVivoFallback: number,
-): { porFila: Map<T, { antes: number; despues: number }>; saldoFinal: number } {
-  const aprobado = (r: T) => String(r.status || "").toLowerCase().startsWith("aprob")
-  const mesDeFila = (r: T) => (r.creado ? fechaColombiaDe(r.creado).slice(0, 7) : null)
-  const cronologico = [...filasProducto].sort((a, b) => String(a.creado || "").localeCompare(String(b.creado || "")))
-  const anclasOrdenadas = [...anclasProducto].sort((a, b) => a.mes.localeCompare(b.mes))
-  // Mismo criterio EXACTO que ya usa `getOrCrearActaCruce` para calcular este
-  // mismo `fisico_snapshot`: una Entrada fechada el mismo día del corte
-  // (primer día del mes que abre la ancla) es "algo que ya existía al corte"
-  // — el archivo real la cuenta como parte de la apertura, NO como
-  // movimiento nuevo. Si el recorrido la vuelve a sumar aparte, queda
-  // contada DOBLE contra la ancla (esto explica huecos grandes en el saldo
-  // corrido — verificado con datos reales: PT000037 tenía un hueco de 1006,
-  // exacto al tamaño de un ingreso del día del corte).
-  const corteDeAncla = new Set(
-    anclasOrdenadas.map((a) => {
-      const [y, m] = a.mes.split("-").map(Number)
-      const d = new Date(y, m, 1) // día 1 del mes SIGUIENTE al de la ancla
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-    }),
-  )
-  const yaContadaEnAncla = (r: T) => r.tipomov === "Entrada" && r.creado && corteDeAncla.has(fechaColombiaDe(r.creado))
-  // Para cada ancla, el índice de la ÚLTIMA fila con mes DENTRO O ANTES del
-  // mes anclado. OJO con el significado de `mes` en esta tabla:
-  // `sig_inventario_cierre_mes.mes` etiqueta el mes que se está CERRANDO
-  // (verificado con datos reales: mes="2026-07" trae el físico de fin de
-  // julio = apertura de agosto) — es lo OPUESTO a `sig_inventario_acta_cruce`
-  // (esa etiqueta el mes que se está ABRIENDO). Por eso aquí el corte es
-  // "<=" (incluye las filas del propio mes cerrado) y no "<".
-  const idxDeAncla: number[] = anclasOrdenadas.map((a) => {
-    let idx = -1
-    for (let i = 0; i < cronologico.length; i++) {
-      const m = mesDeFila(cronologico[i])
-      if (m && m <= a.mes) idx = i
-    }
-    return idx
-  })
-  const netoCero = (r: T) => esCodigoTrasladoNetoCero(r.cod_movimiento)
-  const sumaDeltas = cronologico.reduce((s, r) => {
-    if (!aprobado(r) || yaContadaEnAncla(r) || netoCero(r)) return s
-    const c = Math.abs(Number(r.cantidad) || 0)
-    return s + (r.tipomov === "Entrada" ? c : -c)
-  }, 0)
-  let saldoAcumulado = 0
-  for (let k = 0; k < anclasOrdenadas.length; k++) if (idxDeAncla[k] === -1) saldoAcumulado = stockVivoFallback - sumaDeltas
-  if (!anclasOrdenadas.length) saldoAcumulado = stockVivoFallback - sumaDeltas
-
-  const porFila = new Map<T, { antes: number; despues: number }>()
-  for (let i = 0; i < cronologico.length; i++) {
-    const r = cronologico[i]
-    const antes = saldoAcumulado
-    if (aprobado(r) && !yaContadaEnAncla(r) && !netoCero(r)) {
-      const c = Math.abs(Number(r.cantidad) || 0)
-      saldoAcumulado += r.tipomov === "Entrada" ? c : -c
-    }
-    for (let k = 0; k < anclasOrdenadas.length; k++) if (idxDeAncla[k] === i) saldoAcumulado = anclasOrdenadas[k].valor
-    porFila.set(r, { antes: Math.round(antes), despues: Math.round(saldoAcumulado) })
-  }
-  const saldoFinal = cronologico.length > 0 ? porFila.get(cronologico[cronologico.length - 1])!.despues : Math.round(saldoAcumulado)
-  return { porFila, saldoFinal }
-}
+// (2026-10-02) `calcularSaldoReal` (saldo reconstruido desde el "físico
+// congelado" de sig_inventario_cierre_mes) se retiró: Kardex, detalle por
+// producto y Panel ahora parten de la base fija del mes (obtenerBaseDelMes)
+// y avanzan transacción por transacción — una sola fuente con el stock vivo.
 
 // ---------------------------------------------------------------------------
 // Panel LIP · Inventario — Exactitud y merma (ISO 9001 8.5.1). Cuadre
@@ -2676,6 +2597,257 @@ async function traerPaginasEnParalelo<T = any>(
     desde += lote.length * tamano
   }
   return { data: filas, error: null }
+}
+
+// ---------------------------------------------------------------------------
+// BASE FIJA DEL MES — regla de gerencia (2026-10-02): "la fuente de
+// información debe ser la misma y lo debe calcular por cada transacción,
+// salvo el Conteo total, que es la base fija con la que inicia el mes". El
+// saldo inicial de un producto es con el que amanece el día 1 del mes y lo
+// FIJA el Conteo total aprobado de ese mes (la realización del inventario;
+// sus diferencias ya quedaron posteadas en invtrans como ajustes). Si el mes
+// no tiene Conteo total aprobado, la base es el SISTEMA AL CORTE del día 1
+// (stock vivo retrocedido por las transacciones aprobadas), que es
+// exactamente el "sistema" con el que nace un Conteo total.
+//
+// Convención de fechas: la base es el stock "con el que amanece" el día de
+// la base (fin del día anterior). TODO movimiento fechado ese día, entradas
+// y salidas, es movimiento del periodo. Un periodo [base, cierre) toma los
+// movimientos con fecha ≥ base.fecha y < cierre.fecha, y así
+// base + movimientos = cierre, exacto. (La excepción vieja "una Entrada del
+// día del corte pertenece a la apertura" se conserva SOLO en el Acta de
+// cruce, que nació con archivos de físico; el Conteo total y estas bases no
+// la usan — por eso crearCuadre calcula el "sistema" también a fin del día
+// anterior.)
+//
+// Una sola fuente para Kardex, detalle por producto, Cuadre diario,
+// Conciliación mensual y el Panel: transacciones (invtrans) + esta base.
+// `sig_inventario_cierre_mes.fisico_snapshot` (el "físico congelado" que
+// se alimentaba con archivos) ya NO es fuente de ningún saldo.
+// ---------------------------------------------------------------------------
+type BaseDelMes = {
+  mes: string // "YYYY-MM"
+  fecha: string // "YYYY-MM-DD": día del conteo o día 1 del mes (corte)
+  fuente: "conteo" | "corte"
+  cuadreId: number | null
+  descripcion: string
+  porProducto: Record<string, number>
+  porLote: Record<string, number> // "cod||lote||location"
+  nombrePorCod: Record<string, string>
+}
+
+type StockPorLote = Record<string, { codproducto: string; producto: string; lote: string; location: string; valor: number }>
+
+const ESTADOS_CONTEO_BASE = ["aprobado", "cerrado"]
+const MESES_CORTOS_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+
+function fechaLargaEs(fecha: string): string {
+  const [y, m, d] = String(fecha).slice(0, 10).split("-").map(Number)
+  if (!y || !m || !d) return String(fecha)
+  return `${d} ${MESES_CORTOS_ES[m - 1]} ${y}`
+}
+
+function mesSiguienteDe(mes: string): string {
+  const [y, m] = mes.split("-").map(Number)
+  const d = new Date(Date.UTC(y, m, 1))
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`
+}
+
+function mesActualColombia(): string {
+  return fechaColombiaDe(new Date().toISOString()).slice(0, 7)
+}
+
+// ¿La transacción cae dentro del periodo [base, cierre)? Ver la convención de
+// fechas arriba. `cierreFecha` null = hasta hoy (periodo en curso).
+function enPeriodoBase(r: { tipomov?: string | null; creado?: string | null }, baseFecha: string | null, cierreFecha: string | null): boolean {
+  if (!r.creado) return false
+  const f = fechaColombiaDe(r.creado)
+  if (baseFecha && f < baseFecha) return false
+  if (cierreFecha && f >= cierreFecha) return false
+  return true
+}
+
+// Retrocede el stock vivo (por lote/ubicación) hasta el corte dado, en
+// memoria: solo transacciones aprobadas con fecha Colombia ≥ corte. Dos
+// convenciones, ver los parámetros.
+function retrocederStockAlCorte(
+  stockHoy: StockPorLote,
+  filas: Array<{ codproducto: string; lote?: string | null; location?: string | null; tipomov?: string | null; cantidad?: any; status?: string | null; creado?: string | null }>,
+  corte: string,
+  nombrePorCod: Record<string, string>,
+  // true (acta de cruce): un lote no puede quedar negativo, se pisa en 0.
+  // false (base del mes / Conteo total): valor exacto por lote, negativo
+  // incluido, para que base(mes) + movimientos = base(mes siguiente) sin
+  // residuos artificiales (el recorte por lote rompía esa suma).
+  recortarNegativos = true,
+  // true (acta de cruce, convención vieja acordada 2026-08-08 para archivos
+  // de físico): una Entrada fechada el día del corte pertenece a la
+  // apertura y no se retrocede. false (base del mes / Conteo total): el
+  // corte es el fin del día anterior, se retrocede TODO lo del día.
+  entradasDelDiaSonApertura = true,
+): StockPorLote {
+  const deltaCorte: Record<string, number> = {}
+  for (const r of filas) {
+    if (!String(r.status || "").toLowerCase().startsWith("aprob")) continue
+    if (!r.creado) continue
+    const fechaLocal = fechaColombiaDe(r.creado)
+    if (fechaLocal < corte) continue
+    if (entradasDelDiaSonApertura && r.tipomov === "Entrada" && fechaLocal === corte) continue
+    const key = `${r.codproducto}||${r.lote ?? ""}||${r.location ?? ""}`
+    const c = Math.abs(Number(r.cantidad) || 0)
+    deltaCorte[key] = (deltaCorte[key] || 0) + (r.tipomov === "Entrada" ? c : -c)
+  }
+  const keys = new Set([...Object.keys(stockHoy), ...Object.keys(deltaCorte)])
+  const porLote: StockPorLote = {}
+  for (const key of keys) {
+    const [cod, lote, location] = key.split("||")
+    const base = stockHoy[key]?.valor ?? 0
+    const exacto = Math.round((base - (deltaCorte[key] || 0)) * 100) / 100
+    const valor = recortarNegativos ? Math.max(0, exacto) : exacto
+    porLote[key] = { codproducto: stockHoy[key]?.codproducto ?? cod, producto: stockHoy[key]?.producto || nombrePorCod[cod] || "", lote, location, valor }
+  }
+  return porLote
+}
+
+async function obtenerBaseDelMes(
+  supabase: any,
+  proyectoId: number,
+  mes: string,
+  // Opcional: stock vivo y transacciones ya cargadas (evita volver a la base
+  // cuando se calculan varios meses seguidos, p. ej. la Conciliación mensual).
+  precargado?: { stockHoy: StockPorLote; filas: any[]; nombrePorCod: Record<string, string> },
+): Promise<BaseDelMes> {
+  const primerDia = `${mes}-01`
+  const dia7 = `${mes}-07`
+  // 1) Conteo total aprobado en la primera semana del mes = la base oficial.
+  const { data: conteos } = await supabase
+    .from("sig_inventario_cuadre")
+    .select("id, fecha, estado")
+    .eq("proyecto_id", proyectoId)
+    .eq("tipo", "total")
+    .eq("activo", true)
+    .in("estado", ESTADOS_CONTEO_BASE)
+    .gte("fecha", primerDia)
+    .lte("fecha", dia7)
+    .order("fecha", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(1)
+  const conteo = conteos?.[0]
+  if (conteo) {
+    const porLote: Record<string, number> = {}
+    const porProducto: Record<string, number> = {}
+    const nombrePorCod: Record<string, string> = {}
+    const rDet = await traerPaginasEnParalelo((desde, hasta) =>
+      supabase
+        .from("sig_inventario_cuadre_detalle")
+        .select("codproducto,producto,lote,location,sistema,conteo")
+        .eq("cuadre_id", conteo.id)
+        .order("id", { ascending: true })
+        .range(desde, hasta),
+    )
+    for (const d of rDet.data) {
+      // Línea sin digitar en un conteo aprobado = se dio por buena la del sistema.
+      const valor = d.conteo === null || d.conteo === undefined ? Number(d.sistema) || 0 : Number(d.conteo) || 0
+      const key = `${d.codproducto}||${d.lote ?? ""}||${d.location ?? ""}`
+      porLote[key] = (porLote[key] || 0) + valor
+      porProducto[d.codproducto] = (porProducto[d.codproducto] || 0) + valor
+      if (d.producto && !nombrePorCod[d.codproducto]) nombrePorCod[d.codproducto] = d.producto
+    }
+    return {
+      mes,
+      fecha: String(conteo.fecha).slice(0, 10),
+      fuente: "conteo",
+      cuadreId: conteo.id,
+      descripcion: `Conteo total #${conteo.id} del ${fechaLargaEs(conteo.fecha)} (${conteo.estado})`,
+      porProducto,
+      porLote,
+      nombrePorCod,
+    }
+  }
+  // 2) Sin conteo: sistema al corte del día 1 = stock vivo retrocedido hasta
+  // el fin del día anterior, sin recortar lotes negativos (ver retrocederStockAlCorte).
+  const corte = precargado
+    ? { porLote: retrocederStockAlCorte(precargado.stockHoy, precargado.filas, primerDia, precargado.nombrePorCod, false, false), nombrePorCod: precargado.nombrePorCod }
+    : await calcularStockAlCorte(supabase, proyectoId, primerDia, { recortarNegativos: false, entradasDelDiaSonApertura: false })
+  const porLote: Record<string, number> = {}
+  const porProducto: Record<string, number> = {}
+  for (const [key, v] of Object.entries(corte.porLote)) {
+    porLote[key] = v.valor
+    porProducto[v.codproducto] = (porProducto[v.codproducto] || 0) + v.valor
+  }
+  return {
+    mes,
+    fecha: primerDia,
+    fuente: "corte",
+    cuadreId: null,
+    descripcion: `Sistema al corte del ${fechaLargaEs(primerDia)} (ese mes no tiene Conteo total aprobado)`,
+    porProducto,
+    porLote,
+    nombrePorCod: corte.nombrePorCod,
+  }
+}
+
+// Periodo que piden las pantallas (año y mes, solo año, o nada) traducido a
+// mes de base y mes de cierre (exclusivo). `esEnCurso` = el periodo llega
+// hasta hoy, así que su cierre es el stock vivo.
+function periodoDeFiltros(anio?: string | null, mes?: string | null): { mesBase: string | null; mesCierre: string | null; esEnCurso: boolean } {
+  if (!anio) return { mesBase: null, mesCierre: null, esEnCurso: true }
+  const mesBase = mes ? `${anio}-${String(mes).padStart(2, "0")}` : `${anio}-01`
+  const mesCierre = mes ? mesSiguienteDe(mesBase) : `${Number(anio) + 1}-01`
+  const esEnCurso = mesCierre > mesActualColombia()
+  return { mesBase, mesCierre, esEnCurso }
+}
+
+// Base y cierre de un periodo, sumados sobre los proyectos pedidos (la vista
+// consolidada de LIP suma varios). Devuelve también las descripciones.
+async function baseYCierreDelPeriodo(
+  supabase: any,
+  clientes: number[],
+  anio?: string | null,
+  mes?: string | null,
+): Promise<{
+  base: { fecha: string | null; descripcion: string; porProducto: Record<string, number>; porLote: Record<string, number>; nombrePorCod: Record<string, string> } | null
+  cierre: { fecha: string | null; descripcion: string; porProducto: Record<string, number> | null; porLote: Record<string, number> | null } // porProducto null = stock vivo
+  periodo: { mesBase: string | null; mesCierre: string | null; esEnCurso: boolean }
+}> {
+  const periodo = periodoDeFiltros(anio, mes)
+  if (!periodo.mesBase) {
+    return { base: null, cierre: { fecha: null, descripcion: "Stock vivo (hoy)", porProducto: null, porLote: null }, periodo }
+  }
+  const sumar = (bases: BaseDelMes[]) => {
+    const porProducto: Record<string, number> = {}
+    const porLote: Record<string, number> = {}
+    const nombrePorCod: Record<string, string> = {}
+    for (const b of bases) {
+      for (const [k, v] of Object.entries(b.porProducto)) porProducto[k] = (porProducto[k] || 0) + v
+      for (const [k, v] of Object.entries(b.porLote)) porLote[k] = (porLote[k] || 0) + v
+      Object.assign(nombrePorCod, b.nombrePorCod)
+    }
+    return { porProducto, porLote, nombrePorCod }
+  }
+  const basesInicio = await Promise.all(clientes.map((c) => obtenerBaseDelMes(supabase, c, periodo.mesBase!)))
+  const bI = sumar(basesInicio)
+  const base = {
+    // Con varios proyectos las fechas pueden diferir (conteos en días distintos): se usa el día 1 como referencia.
+    fecha: basesInicio.length === 1 ? basesInicio[0].fecha : `${periodo.mesBase}-01`,
+    descripcion: basesInicio.length === 1 ? basesInicio[0].descripcion : `Suma de ${basesInicio.length} proyectos: ${basesInicio.map((b) => b.descripcion).join(" · ")}`,
+    ...bI,
+  }
+  if (periodo.esEnCurso) {
+    return { base, cierre: { fecha: null, descripcion: "Stock vivo (hoy)", porProducto: null, porLote: null }, periodo }
+  }
+  const basesCierre = await Promise.all(clientes.map((c) => obtenerBaseDelMes(supabase, c, periodo.mesCierre!)))
+  const bC = sumar(basesCierre)
+  return {
+    base,
+    cierre: {
+      fecha: basesCierre.length === 1 ? basesCierre[0].fecha : `${periodo.mesCierre}-01`,
+      descripcion: basesCierre.length === 1 ? basesCierre[0].descripcion : `Suma de ${basesCierre.length} proyectos`,
+      porProducto: bC.porProducto,
+      porLote: bC.porLote,
+    },
+    periodo,
+  }
 }
 
 export async function getPanelInventarioLIP(
@@ -2756,55 +2928,10 @@ export async function getPanelInventarioLIP(
       inv.push(...rInv.data)
     }
 
-    // Anclas físicas reales (fisico_snapshot) — se traen ANTES del segundo
-    // fetch de invtrans porque el saldo real (más abajo) necesita saber desde
-    // qué mes acotar sin perder ninguna ancla. Movido más arriba desde donde
-    // estaba (justo antes de usarlo) por esta misma razón.
-    const anclasPorEmpresaProductoGlobal: Record<number, Record<string, Array<{ mes: string; valor: number }>>> = {}
-    let anclaMesMin: string | null = null
-    try {
-      const { data: cierresGlobal } = await supabase
-        .from("sig_inventario_cierre_mes")
-        .select("proyecto_id, mes, fisico_snapshot")
-        .in("proyecto_id", clientes)
-        .not("fisico_snapshot", "is", null)
-      for (const c of cierresGlobal ?? []) {
-        const porEmp = (anclasPorEmpresaProductoGlobal[c.proyecto_id] ||= {})
-        for (const [cod, valor] of Object.entries(c.fisico_snapshot || {})) {
-          if (valor === undefined || valor === null) continue
-          ;(porEmp[cod] ||= []).push({ mes: c.mes, valor: Number(valor) })
-        }
-        if (!anclaMesMin || c.mes < anclaMesMin) anclaMesMin = c.mes
-      }
-    } catch { /* tabla aún no creada o sin cierres con físico */ }
-
-    // Movimientos PARA EL CÁLCULO DE SALDO REAL — fetch APARTE de `inv`
-    // (arriba, acotado al mes elegido por el usuario). `calcularSaldoReal`
-    // necesita, para cada producto, ver los movimientos desde su última
-    // ancla física real hasta HOY (no solo los del mes que se está viendo) —
-    // igual que getKardexInventario/getMovimientosProducto, que por eso NUNCA
-    // acotan por año/mes para este cálculo (ver su comentario). Si `inv` se
-    // usara aquí (como quedó en el primer intento del fix de rendimiento),
-    // el saldo se "resetea" a ciegas al valor crudo de `saldoinvdetalle`
-    // cada vez que la ancla queda fuera de la ventana filtrada — verificado
-    // con datos reales: hasta 5.405 unidades de diferencia en un proyecto.
-    // Se acota SOLO por la ancla más antigua encontrada (no por `rangoDesde`
-    // del filtro de pantalla) y SIN límite superior (hasta hoy) — sigue
-    // siendo mucho menos que el histórico completo.
-    const invParaSaldo: any[] = []
-    {
-      const saldoDesde = anclaMesMin ? new Date(Date.UTC(Number(anclaMesMin.slice(0, 4)), Number(anclaMesMin.slice(5, 7)) - 1, 1)).toISOString() : null
-      const rSaldo = await traerPaginasEnParalelo((desde, hasta) => {
-        let q = supabase
-          .from("invtrans")
-          .select("idempresa,tipomov,status,cantidad,creado,codproducto,cod_movimiento")
-          .in("idempresa", clientes)
-        if (saldoDesde) q = q.gte("creado", saldoDesde)
-        return q.order("id", { ascending: true }).range(desde, hasta)
-      })
-      if (rSaldo.error) return { success: false, error: rSaldo.error.message }
-      invParaSaldo.push(...rSaldo.data)
-    }
+    // (2026-10-02) El "físico congelado" de sig_inventario_cierre_mes ya no
+    // es fuente de ningún saldo: el stock del panel es el stock vivo, que la
+    // base recalcula con cada transacción (regla de gerencia: una sola fuente,
+    // con el Conteo total aprobado como base fija del mes — ver obtenerBaseDelMes).
 
     // Reprocesos (daños en proceso).
     const { data: repro } = await supabase
@@ -2826,26 +2953,12 @@ export async function getPanelInventarioLIP(
     for (const r of saldosRows) stockVivoPorProducto[r.codproducto] = (stockVivoPorProducto[r.codproducto] || 0) + (Number(r.stock_actual) || 0)
     const skusConStock = new Set(saldosRows.filter((r) => (Number(r.stock_actual) || 0) > 0).map((r) => r.codproducto)).size
 
-    // Saldo físico GLOBAL = suma del saldo REAL de cada producto
-    // (`calcularSaldoReal`, la misma fuente que ya usan Kardex y el detalle
-    // por producto) — no la suma cruda de `saldoinvdetalle` — para que el
-    // total del Panel esté siempre alineado con esas dos pantallas (pedido
-    // explícito del usuario). Usa `invParaSaldo` (desde la ancla más
-    // antigua, sin acotar por el mes elegido en pantalla) — ver más arriba.
-    const filasPorProductoGlobal: Record<string, any[]> = {}
-    const idempresaPorProductoGlobal: Record<string, number> = {}
-    for (const r of invParaSaldo) {
-      const cod = r.codproducto || "(sin código)"
-      ;(filasPorProductoGlobal[cod] ||= []).push(r)
-      if (idempresaPorProductoGlobal[cod] === undefined) idempresaPorProductoGlobal[cod] = r.idempresa
-    }
-    let saldoFisico = 0
-    for (const cod of Object.keys(filasPorProductoGlobal)) {
-      const idemp = idempresaPorProductoGlobal[cod]
-      const anclas = anclasPorEmpresaProductoGlobal[idemp]?.[cod] ?? []
-      const { saldoFinal } = calcularSaldoReal(filasPorProductoGlobal[cod], anclas, stockVivoPorProducto[cod] || 0)
-      saldoFisico += saldoFinal
-    }
+    // Stock del panel = STOCK VIVO (saldoinvdetalle), la misma cifra de Saldos
+    // de inventario y del Conteo total: una sola fuente, recalculada por la
+    // base con cada transacción. Kardex y detalle por producto arrancan en la
+    // base fija del mes y llegan a este mismo número; si no, muestran la
+    // diferencia como "sin explicar".
+    const saldoFisico = Object.values(stockVivoPorProducto).reduce((s, v) => s + v, 0)
 
     const yr = (s: any) => (s ? fechaColombiaDe(s).slice(0, 4) : null)
     const mo = (s: any) => (s ? fechaColombiaDe(s).slice(5, 7) : null)
@@ -2938,7 +3051,7 @@ export async function getPanelInventarioLIP(
     // ---- ERI (Exactitud del Registro de Inventario): físico vs libro por conteo ----
     // Faltante (diferencia negativa, mov. 701/702) = lo ÚNICO que se cobra a LIP.
     // La merma de proceso (551 reproceso) NO se cobra. Resiliente si no existe la tabla.
-    let faltante = 0, sobrante = 0, itemsContados = 0, itemsConDif = 0
+    let faltante = 0, sobrante = 0, itemsContados = 0, itemsConDif = 0, conteosAprobados = 0
     try {
       const { data: aj } = await supabase.from("sig_inventario_ajuste").select("cantidad,tipo").eq("activo", true).in("proyecto_id", clientes)
       for (const r of aj ?? []) {
@@ -2948,30 +3061,22 @@ export async function getPanelInventarioLIP(
         else if (c < 0) faltante += Math.abs(c)
         else if (c > 0) sobrante += c
       }
-      const { data: cuad } = await supabase.from("sig_inventario_cuadre").select("items,items_con_diferencia").eq("activo", true).in("proyecto_id", clientes)
+      // (2026-10-02) Solo conteos APROBADOS o CERRADOS: un conteo en borrador
+      // (p. ej. el Conteo total del día 1 antes de digitar el físico) entraba
+      // con todos sus ítems "sin diferencia" e inflaba la exactitud.
+      const { data: cuad } = await supabase
+        .from("sig_inventario_cuadre")
+        .select("items,items_con_diferencia")
+        .eq("activo", true)
+        .in("estado", ESTADOS_CONTEO_BASE)
+        .in("proyecto_id", clientes)
+      conteosAprobados = (cuad ?? []).length
       for (const r of cuad ?? []) { itemsContados += Number(r.items) || 0; itemsConDif += Number(r.items_con_diferencia) || 0 }
     } catch { /* tablas de cuadre aún no creadas */ }
-    // ERI: 1) si hay conteos físicos reales, % de ítems sin diferencia (máxima fidelidad);
-    //      2) si no, ERI AUTOMÁTICO del CRUCE MENSUAL (lotes exactos / evaluados) — misma
-    //         verdad que la BSC (IND-AI-03), no un 100% inflado por tabla de cuadre vacía.
-    let eri: number
-    if (itemsContados > 0) {
-      eri = Math.round((1 - itemsConDif / itemsContados) * 1000) / 10
-    } else {
-      let exCruce = 0, evCruce = 0
-      try {
-        for (const cli of clientes) {
-          const rc = await getConciliacionMensualInventario(cli, null)
-          if (rc.success && rc.data?.resumen) {
-            exCruce += Number(rc.data.resumen.lotesExactos) || 0
-            evCruce += Number(rc.data.resumen.lotesEvaluados) || 0
-          }
-        }
-      } catch { /* si el cruce falla, se usa la inferencia por faltante */ }
-      eri = evCruce > 0
-        ? Math.round((exCruce / evCruce) * 1000) / 10
-        : (saldoFisico > 0 ? Math.round((1 - faltante / saldoFisico) * 1000) / 10 : 100)
-    }
+    // ERI = ítems sin diferencia / ítems contados en los conteos físicos
+    // aprobados. Sin conteos aprobados no hay exactitud que mostrar (null):
+    // ya no se infiere del cruce libro-vs-lote ni del faltante.
+    const eri: number | null = itemsContados > 0 ? Math.round((1 - itemsConDif / itemsContados) * 1000) / 10 : null
 
     const NOMBRE_MES = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
     const porMes = Object.entries(meses)
@@ -2993,7 +3098,9 @@ export async function getPanelInventarioLIP(
         anios,
         anio: anioSel,
         kpis: {
-          eri,                                  // exactitud de registro (ERI)
+          eri,                                  // exactitud de los conteos físicos aprobados (null = sin conteos)
+          eriBase: itemsContados > 0 ? `${itemsContados - itemsConDif}/${itemsContados} ítems exactos · ${conteosAprobados} conteos aprobados` : "sin conteos físicos aprobados",
+          conteosAprobados,
           faltante: Math.round(faltante),       // mov. 701/702 negativo → se cobra a LIP
           sobrante: Math.round(sobrante),
           saldoFisico: Math.round(saldoFisico), // stock libro (perpetuo)
@@ -3022,7 +3129,14 @@ export async function getCuadreDiario(
   proyectoId?: number | null,
   anio?: string | null,
   mes?: string | null,
-): Promise<{ success: boolean; data: any[]; error?: string }> {
+): Promise<{
+  success: boolean
+  data: any[]
+  base?: { fecha: string | null; descripcion: string; saldo: number } | null
+  cierre?: { fecha: string | null; descripcion: string; esVivo: boolean; saldo: number }
+  saldoFinalCalculado?: number
+  error?: string
+}> {
   try {
     const supabase: any = await getSupabaseAdmin()
     const clientes: number[] = proyectoId ? [proyectoId] : SIG_CLIENTES_LIP
@@ -3035,6 +3149,15 @@ export async function getCuadreDiario(
       if (rInv.error) return { success: false, data: [], error: rInv.error.message }
       inv.push(...rInv.data)
     }
+    // BASE FIJA del periodo (Conteo total aprobado o sistema al corte): el
+    // día 1 arranca en la base y cada día avanza transacción por transacción
+    // (regla de gerencia 2026-10-02). Sin periodo pedido, arranca en 0 desde
+    // la primera transacción (histórico), como antes.
+    const { base, cierre } = await baseYCierreDelPeriodo(supabase, clientes, anio, mes)
+    const baseFecha = base?.fecha ?? null
+    const cierreFecha = cierre.porProducto ? cierre.fecha : null
+    const saldoBase = base ? Math.round(Object.values(base.porProducto).reduce((s, v) => s + v, 0)) : 0
+
     // Agrupar por día — DÍA CALENDARIO DE COLOMBIA (invtrans.creado está en
     // UTC, 5h adelante: un movimiento de las 8pm caía en el día siguiente y
     // el cuadre diario se veía "atrasado").
@@ -3043,6 +3166,7 @@ export async function getCuadreDiario(
       // Un ingreso SIN aprobar no es inventario todavía — no debe mover el
       // cuadre diario (mismo criterio que Kardex/Panel).
       if (!String(r.status || "").toLowerCase().startsWith("aprob")) continue
+      if (base && !enPeriodoBase(r, baseFecha, cierreFecha)) continue
       const d = r.creado ? fechaColombiaDe(r.creado) : ""
       if (!d) continue
       // 309/311/312/344/343 son pareja neta 0 igual que el traslado clásico
@@ -3057,9 +3181,9 @@ export async function getCuadreDiario(
       else if (has(r.origen, "inicial")) byDay[d].otros += c
       else byDay[d].otros += r.tipomov === "Salida" ? -c : c // ajuste manual
     }
-    // Running balance por fecha ascendente
+    // Running balance por fecha ascendente, arrancando en la base del periodo.
     const dias = Object.keys(byDay).sort()
-    let saldo = 0
+    let saldo = saldoBase
     const todas = dias.map((d) => {
       const v = byDay[d]
       const inicial = saldo
@@ -3074,9 +3198,17 @@ export async function getCuadreDiario(
         saldoFinal: Math.round(saldo),
       }
     })
-    // Filtrar a año/mes para mostrar
-    const filas = todas.filter((r) => (!anio || r.fecha.slice(0, 4) === anio) && (!mes || r.fecha.slice(5, 7) === mes)).reverse()
-    return { success: true, data: filas }
+    // Con base, las filas ya vienen acotadas al periodo (una Entrada del día
+    // del cierre pertenece al mes y se muestra con su fecha). Sin base,
+    // filtrar a año/mes para mostrar, como antes.
+    const filas = (base ? todas : todas.filter((r) => (!anio || r.fecha.slice(0, 4) === anio) && (!mes || r.fecha.slice(5, 7) === mes))).reverse()
+    return {
+      success: true,
+      data: filas,
+      base: base ? { fecha: base.fecha, descripcion: base.descripcion, saldo: saldoBase } : null,
+      cierre: { fecha: cierre.fecha, descripcion: cierre.descripcion, esVivo: !cierre.porProducto, saldo: Math.round(cierre.porProducto ? Object.values(cierre.porProducto).reduce((s, v) => s + v, 0) : NaN) },
+      saldoFinalCalculado: Math.round(saldo),
+    }
   } catch (err: any) {
     return { success: false, data: [], error: err?.message || "Error desconocido" }
   }
@@ -3158,7 +3290,17 @@ export async function getMovimientosProducto(
   proyectoId?: number | null,
   anio?: string | null,
   mes?: string | null,
-): Promise<{ success: boolean; data: any[]; saldoInicialPeriodo?: number; saldoFinalPeriodo?: number; error?: string }> {
+): Promise<{
+  success: boolean
+  data: any[]
+  saldoInicialPeriodo?: number
+  saldoFinalPeriodo?: number
+  saldoCierre?: number
+  descuadre?: number
+  baseDescripcion?: string | null
+  cierreDescripcion?: string
+  error?: string
+}> {
   try {
     if (!codproducto) return { success: true, data: [] }
     const supabase: any = await getSupabaseAdmin()
@@ -3202,42 +3344,29 @@ export async function getMovimientosProducto(
       .in("idempresa", clientes)
     const stockVivo = (saldoRows ?? []).reduce((s: number, r: any) => s + (Number(r.stock_actual) || 0), 0)
 
-    // Ancla física real POR PRODUCTO: si el cierre mensual ya congeló la
-    // apertura de un mes con archivo real (getOrCrearActaCruce /
-    // guardarCierreMesInventario), ESE número es la verdad para todo el
-    // producto — no la suma cruda del kardex (que puede arrastrar errores de
-    // digitación). Solo aplica con un proyecto puntual seleccionado.
-    let anclasProducto: Array<{ mes: string; valor: number }> = []
-    if (proyectoId) {
-      try {
-        const { data: cierres } = await supabase
-          .from("sig_inventario_cierre_mes")
-          .select("mes, fisico_snapshot")
-          .eq("proyecto_id", proyectoId)
-          .not("fisico_snapshot", "is", null)
-        anclasProducto = (cierres ?? [])
-          .map((c: any) => ({ mes: c.mes, valor: c.fisico_snapshot?.[codproducto] }))
-          .filter((a: any) => a.valor !== undefined && a.valor !== null)
-          .map((a: any) => ({ mes: a.mes, valor: Number(a.valor) }))
-          .sort((a: any, b: any) => String(a.mes).localeCompare(String(b.mes)))
-      } catch { /* tabla aún no creada o sin cierres con físico */ }
-    }
-    const anclaPorMes = new Map(anclasProducto.map((a) => [a.mes, a.valor]))
-
-    // Saldo REAL — mismo cálculo que usan getKardexInventario y
-    // getPanelInventarioLIP (`calcularSaldoReal`), para que las 3 pantallas
-    // muestren siempre el MISMO número por producto: saldo inicial (o el
-    // último cierre físico real) + ingresos − salidas, tal cual quedaron
-    // registrados — NUNCA forzado a coincidir con `saldoinvdetalle` (ese es
-    // un número aparte). Forzarlo escondía diferencias reales: casos reales
-    // encontrados así (ID3, PT HARINA PREC MAIZ 24LB: 9 unidades de
-    // diferencia; PT FIDEO 250*24PQ: 212 por una reclasificación errónea) —
-    // si el cálculo puro no cuadra con el stock vivo, esa diferencia es
-    // información real que hay que investigar, no ocultar. `stockVivo` solo
-    // se usa como respaldo del arranque cuando el producto no tiene ningún
-    // cierre físico real (ninguna ancla).
-    const { porFila: saldosPorFila } = calcularSaldoReal(rows ?? [], anclasProducto, stockVivo)
+    // BASE FIJA del periodo (Conteo total aprobado o sistema al corte) y su
+    // cierre — ver obtenerBaseDelMes (regla de gerencia 2026-10-02). El
+    // saldo corrido arranca en la base del producto y avanza transacción por
+    // transacción dentro del periodo. Es el MISMO cálculo de la fila del
+    // Kardex, así que ambas pantallas muestran siempre el mismo número; si
+    // no cuadra con el stock al cierre, la diferencia se muestra como "sin
+    // explicar" — información real para investigar, nunca se esconde.
+    const { base, cierre } = await baseYCierreDelPeriodo(supabase, clientes, anio, mes)
+    const baseFecha = base?.fecha ?? null
+    const cierreFecha = cierre.porProducto ? cierre.fecha : null
+    const dentroPeriodo = (r: any) => (base ? enPeriodoBase(r, baseFecha, cierreFecha) : (!anio || yr(r.creado) === anio) && (!mes || mo(r.creado) === mes))
+    const esAprobada = (r: any) => String(r.status || "").toLowerCase().startsWith("aprob")
     const cronologico = [...(rows ?? [])].sort((a: any, b: any) => String(a.creado || "").localeCompare(String(b.creado || "")))
+    const saldosPorFila = new Map<any, { antes: number; despues: number }>()
+    let corrido = base ? Math.round(base.porProducto[codproducto] ?? 0) : 0
+    for (const r of cronologico) {
+      if (!dentroPeriodo(r)) continue
+      const antes = corrido
+      if (esAprobada(r) && !netoCeroProducto(r)) {
+        corrido = Math.round((corrido + (r.tipomov === "Entrada" ? 1 : -1) * Math.abs(Number(r.cantidad) || 0)) * 100) / 100
+      }
+      saldosPorFila.set(r, { antes, despues: corrido })
+    }
 
     // Un ingreso SIN aprobar (ej. el auto-descargue antes de que alguien lo
     // confirme con su ubicación/lote/cantidad real) no es inventario todavía
@@ -3245,10 +3374,7 @@ export async function getMovimientosProducto(
     // de ingreso). No debe mezclarse con el Kardex/inventario confirmado:
     // se excluye del listado por completo (ya estaba excluido del saldo,
     // ahora tampoco aparece como fila).
-    const aprobadoParaListado = (r: any) => String(r.status || "").toLowerCase().startsWith("aprob")
-    const movs = (rows ?? []).filter(
-      (r: any) => aprobadoParaListado(r) && (!anio || yr(r.creado) === anio) && (!mes || mo(r.creado) === mes),
-    )
+    const movs = (rows ?? []).filter((r: any) => esAprobada(r) && dentroPeriodo(r))
 
     // Resolver PDFs de las órdenes de cargue
     const ocargues = Array.from(new Set(movs.map((r: any) => r.ocargue).filter(Boolean)))
@@ -3305,48 +3431,23 @@ export async function getMovimientosProducto(
       })
       .sort((a: any, b: any) => String(b.fecha || "").localeCompare(String(a.fecha || "")))
 
-    // Bordes del periodo visible (para el resumen "empecé con X, quedo con Y").
-    // Se extraen del MISMO array cronológico (único, ascendente) usado para
-    // calcular saldosPorFila — no de `data` (reordenada desc por fecha, donde
-    // empates de fecha pueden quedar en otro orden y desalinear el borde).
-    const cronologicoFiltrado = cronologico.filter((r: any) => (!anio || yr(r.creado) === anio) && (!mes || mo(r.creado) === mes))
+    // Bordes del periodo: "empecé con" = base fija; "quedo con" = base +
+    // movimientos (el mismo número de la última fila del corrido). El cierre
+    // real (base del mes siguiente o stock vivo) va aparte como control.
+    const saldoInicialPeriodo = base ? Math.round(base.porProducto[codproducto] ?? 0) : undefined
+    const saldoFinalPeriodo = base ? Math.round(corrido) : undefined
+    const saldoCierre = Math.round((cierre.porProducto ? cierre.porProducto[codproducto] : stockVivo) ?? 0)
 
-    // Un borde solo se expone como número si está RESPALDADO por una verdad
-    // física real — no basta con "hay un mes seleccionado" (eso fue el bug:
-    // julio mostraba un "empezó con 1.985" back-solveado del kardex crudo,
-    // sin ningún cierre físico detrás, solo porque había un mes elegido).
-    // Verificado = el cierre/apertura de ESE mes coincide con un cierre
-    // congelado real (`fisico_snapshot`), o el borde es HOY (stock vivo,
-    // siempre verdad). Reutiliza `anclaPorMes` (ya calculado arriba para el
-    // saldo corrido — mismo dato, un solo cálculo).
-    const mesSeleccionado = anio && mes ? `${anio}-${String(mes).padStart(2, "0")}` : null
-    let mesAnteriorKey: string | null = null
-    if (mesSeleccionado) {
-      const d = new Date(Number(anio), Number(mes) - 1, 1)
-      d.setMonth(d.getMonth() - 1)
-      mesAnteriorKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+    return {
+      success: true,
+      data,
+      saldoInicialPeriodo,
+      saldoFinalPeriodo,
+      saldoCierre,
+      descuadre: saldoFinalPeriodo === undefined ? undefined : saldoFinalPeriodo - saldoCierre,
+      baseDescripcion: base?.descripcion ?? null,
+      cierreDescripcion: cierre.descripcion,
     }
-
-    // Estos bordes son el AGREGADO del producto completo para el resumen
-    // "empecé con X, quedo con Y" (mismo `anclaPorMes` de arriba — un solo
-    // cálculo, ya no hay mapa por lote que reconciliar aparte). El borde de
-    // HOY es el resultado PURO del cálculo (inicial/ancla + ingresos −
-    // salidas), el mismo que ya se ve en la última fila de la tabla — no
-    // `stockVivo` directo, que es un número aparte y puede diferir si hay
-    // algo por reconciliar (ver nota en el cálculo del saldo corrido).
-    const finalEsHoy = !mesSeleccionado || (cronologicoFiltrado.length > 0 && cronologico.length > 0 && cronologicoFiltrado[cronologicoFiltrado.length - 1] === cronologico[cronologico.length - 1])
-    const finalVerificado = finalEsHoy || (mesSeleccionado ? anclaPorMes.has(mesSeleccionado) : false)
-    const saldoCalculadoHoy = cronologico.length > 0 ? saldosPorFila.get(cronologico[cronologico.length - 1])?.despues : undefined
-    const saldoFinalPeriodo = !finalVerificado
-      ? undefined
-      : finalEsHoy
-        ? saldoCalculadoHoy
-        : anclaPorMes.get(mesSeleccionado!)
-
-    const inicialVerificado = !!(mesAnteriorKey && anclaPorMes.has(mesAnteriorKey))
-    const saldoInicialPeriodo = inicialVerificado ? anclaPorMes.get(mesAnteriorKey!) : undefined
-
-    return { success: true, data, saldoInicialPeriodo, saldoFinalPeriodo }
   } catch (err: any) {
     return { success: false, data: [], error: err?.message || "Error desconocido" }
   }
@@ -3383,47 +3484,27 @@ export async function getKardexInventario(
       inv.push(...rInv.data)
     }
 
-    // Saldo actual por producto (saldoinvdetalle) — solo se usa como
-    // respaldo del arranque en `calcularSaldoReal` (productos sin ningún
-    // cierre físico real todavía), NUNCA como el "Saldo" mostrado.
-    const saldos: Record<string, number> = {}
+    // Stock vivo por producto (saldoinvdetalle): es el cierre REAL del periodo
+    // en curso y la referencia de control contra lo que dicen las transacciones.
+    const vivo: Record<string, number> = {}
+    const nombrePorCod: Record<string, string> = {}
     {
       const rS = await traerPaginasEnParalelo((desde, hasta) =>
-        supabase.from("saldoinvdetalle").select("codproducto,stock_actual").in("idempresa", clientes).order("codproducto").order("lote").order("location").range(desde, hasta),
+        supabase.from("saldoinvdetalle").select("codproducto,nombreproducto,stock_actual").in("idempresa", clientes).order("codproducto").order("lote").order("location").range(desde, hasta),
       )
-      for (const r of rS.data) saldos[r.codproducto] = (saldos[r.codproducto] || 0) + (Number(r.stock_actual) || 0)
-    }
-
-    // Anclas físicas reales por (empresa, producto) — mismo mecanismo que
-    // getMovimientosProducto, para que el "Saldo" de esta tabla sea EXACTO
-    // al de esa pantalla de detalle.
-    const anclasPorEmpresaProducto: Record<number, Record<string, Array<{ mes: string; valor: number }>>> = {}
-    try {
-      const { data: cierres } = await supabase
-        .from("sig_inventario_cierre_mes")
-        .select("proyecto_id, mes, fisico_snapshot")
-        .in("proyecto_id", clientes)
-        .not("fisico_snapshot", "is", null)
-      for (const c of cierres ?? []) {
-        const porEmp = (anclasPorEmpresaProducto[c.proyecto_id] ||= {})
-        for (const [cod, valor] of Object.entries(c.fisico_snapshot || {})) {
-          if (valor === undefined || valor === null) continue
-          ;(porEmp[cod] ||= []).push({ mes: c.mes, valor: Number(valor) })
-        }
+      for (const r of rS.data) {
+        vivo[r.codproducto] = (vivo[r.codproducto] || 0) + (Number(r.stock_actual) || 0)
+        if (r.nombreproducto && !nombrePorCod[r.codproducto]) nombrePorCod[r.codproducto] = r.nombreproducto
       }
-    } catch { /* tabla aún no creada o sin cierres con físico */ }
-
-    // Filas completas por producto (SIN filtrar por año/mes — el saldo real
-    // necesita la historia entera, igual que getMovimientosProducto; el
-    // filtro de periodo solo aplica a los buckets de entradas/salidas/etc.
-    // que se muestran para ESE mes).
-    const filasPorProducto: Record<string, any[]> = {}
-    const idempresaPorProducto: Record<string, number> = {}
-    for (const r of inv) {
-      const cod = r.codproducto || "(sin código)"
-      ;(filasPorProducto[cod] ||= []).push(r)
-      if (idempresaPorProducto[cod] === undefined) idempresaPorProducto[cod] = r.idempresa
     }
+
+    // BASE FIJA del periodo (Conteo total aprobado o sistema al corte) y su
+    // CIERRE (la base del mes siguiente, o el stock vivo si el periodo llega
+    // a hoy) — ver obtenerBaseDelMes. Regla de gerencia 2026-10-02.
+    const { base, cierre, periodo } = await baseYCierreDelPeriodo(supabase, clientes, anio, mes)
+    const baseFecha = base?.fecha ?? null
+    const cierreFecha = cierre.porProducto ? cierre.fecha : null
+    const dentro = (r: any) => (base ? enPeriodoBase(r, baseFecha, cierreFecha) : (!anio || yr(r.creado) === anio) && (!mes || mo(r.creado) === mes))
 
     const map: Record<string, any> = {}
     for (const r of inv) {
@@ -3433,68 +3514,59 @@ export async function getKardexInventario(
       // tabla resumen (ya tiene su propio lugar: Producción › Aprobación de
       // ingreso).
       if (!String(r.status || "").toLowerCase().startsWith("aprob")) continue
-      if (anio && yr(r.creado) !== anio) continue
-      if (mes && mo(r.creado) !== mes) continue
+      if (!dentro(r)) continue
       const cod = r.codproducto || "(sin código)"
       if (!map[cod]) map[cod] = { codproducto: cod, producto: r.nombreproducto || "", entradas: 0, salidas: 0, ajustes: 0, traslados: 0, merma: 0 }
-      const c = Number(r.cantidad) || 0
+      const c = Math.abs(Number(r.cantidad) || 0)
       if (r.nombreproducto && !map[cod].producto) map[cod].producto = r.nombreproducto
-      // Prioriza el código real (309/311/312/344/343 = pareja neta 0, NO es
-      // un ajuste real) sobre el heurístico de texto — ver
-      // esCodigoTrasladoNetoCero en lib/transacciones-codigo.ts. La función
-      // de estos códigos es siempre "reclasificar/trasladar" (nunca
-      // "ajuste", el catch-all de 701/702) — por eso van SIEMPRE a
-      // "Traslados" en esta tabla resumen. El "Saldo" de esta tabla se
-      // calcula aparte con `calcularSaldoReal` (más abajo) — la misma
-      // función que usa getMovimientosProducto — para que ambas pantallas
-      // muestren siempre el mismo número.
-      if (esCodigoTrasladoNetoCero(r.cod_movimiento)) map[cod].traslados += c
-      else if (r.tipomov === "Reproceso" || has(r.origen, "reproceso")) map[cod].merma += c
-      else if (has(r.origen, "traslado entre localizaciones")) map[cod].traslados += c
-      else if (r.tipomov === "Entrada" && (has(r.origen, "producc") || has(r.origen, "aprob") || has(r.origen, "descarg") || has(r.origen, "logo"))) map[cod].entradas += c
+      // Clasificación con SIGNO EXACTO respecto al stock: el saldo de la fila
+      // es base + entradas − salidas + ajustes − merma, transacción por
+      // transacción. 309/311/312/344/343 (reclasificar/trasladar/bloquear)
+      // son pareja neta 0 y van a "Traslados" sin tocar el saldo — si un 309
+      // cruzó de producto, la diferencia aparece en "Sin explicar" en vez de
+      // esconderse dentro del cálculo (caso real ID3, PT000080, confirmado
+      // por el usuario como error de digitación).
+      if (esCodigoTrasladoNetoCero(r.cod_movimiento) || has(r.origen, "traslado entre localizaciones")) map[cod].traslados += c
+      else if (r.tipomov === "Reproceso" || (r.tipomov === "Salida" && has(r.origen, "reproceso"))) map[cod].merma += c
+      else if (r.tipomov === "Entrada" && (has(r.origen, "producc") || has(r.origen, "aprob") || has(r.origen, "descarg") || has(r.origen, "logo") || has(r.origen, "reproceso"))) map[cod].entradas += c
       else if (r.tipomov === "Salida" && has(r.origen, "orden de cargue")) map[cod].salidas += c
-      else map[cod].ajustes += r.tipomov === "Salida" ? -c : c
-    }
-    // Saldo inicial del mes (por producto), SOLO cuando se pide un mes/año/
-    // proyecto puntual (si no, "inicio de mes" no tiene un único significado).
-    // Sale del físico congelado del mes ANTERIOR (`sig_inventario_cierre_mes`,
-    // mismo mecanismo que Conciliación Mensual) — así el Kardex arranca el mes
-    // con el mismo número que la conciliación, y de ahí en adelante los
-    // movimientos siguen exactamente igual que siempre.
-    let saldoInicialPorProducto: Record<string, number> | null = null
-    if (proyectoId && anio && mes) {
-      const d = new Date(Number(anio), Number(mes) - 1, 1)
-      d.setMonth(d.getMonth() - 1)
-      const mesAnteriorKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
-      try {
-        const { data: cierreAnterior } = await supabase
-          .from("sig_inventario_cierre_mes")
-          .select("fisico_snapshot")
-          .eq("proyecto_id", proyectoId)
-          .eq("mes", mesAnteriorKey)
-          .maybeSingle()
-        if (cierreAnterior?.fisico_snapshot) saldoInicialPorProducto = cierreAnterior.fisico_snapshot
-      } catch { /* tabla aún no creada o sin cierre ese mes */ }
+      else map[cod].ajustes += r.tipomov === "Entrada" ? c : -c // 701/702, devoluciones 653, inicial 561, otros
     }
 
-    const filas = Object.values(map)
-      .map((p: any) => {
-        const idemp = idempresaPorProducto[p.codproducto]
-        const anclasProducto = anclasPorEmpresaProducto[idemp]?.[p.codproducto] ?? []
-        const { saldoFinal } = calcularSaldoReal(filasPorProducto[p.codproducto] ?? [], anclasProducto, saldos[p.codproducto] || 0)
+    // Filas = unión de productos con base, con movimientos o con cierre/stock.
+    const codigos = new Set<string>([...Object.keys(map), ...Object.keys(base?.porProducto ?? {}), ...Object.keys(cierre.porProducto ?? vivo)])
+    const filas = [...codigos]
+      .map((cod) => {
+        const p = map[cod] ?? { codproducto: cod, producto: "", entradas: 0, salidas: 0, ajustes: 0, traslados: 0, merma: 0 }
+        const saldoInicial = base ? Math.round(base.porProducto[cod] ?? 0) : null
+        const saldo = Math.round((saldoInicial ?? 0) + p.entradas - p.salidas + p.ajustes - p.merma)
+        const saldoCierre = Math.round((cierre.porProducto ? cierre.porProducto[cod] : vivo[cod]) ?? 0)
         return {
           ...p,
+          producto: p.producto || base?.nombrePorCod[cod] || nombrePorCod[cod] || "",
           entradas: Math.round(p.entradas),
           salidas: Math.round(p.salidas),
           ajustes: Math.round(p.ajustes),
+          traslados: Math.round(p.traslados),
           merma: Math.round(p.merma),
-          saldo: saldoFinal,
-          saldoInicial: saldoInicialPorProducto ? Math.round(saldoInicialPorProducto[p.codproducto] ?? 0) : null,
+          saldoInicial, // base fija del periodo (null si no se pidió periodo)
+          saldo, // base + movimientos del periodo (transacción por transacción)
+          saldoCierre, // base del mes siguiente, o stock vivo si el periodo llega a hoy
+          descuadre: saldo - saldoCierre, // ≠ 0 = hay transacciones que el stock no refleja (o al revés): revisar
         }
       })
+      .filter((f) => f.saldoInicial || f.entradas || f.salidas || f.ajustes || f.traslados || f.merma || f.saldoCierre)
       .sort((a: any, b: any) => (a.producto || "").localeCompare(b.producto || ""))
 
-    return { success: true, data: { filas } }
+    return {
+      success: true,
+      data: {
+        filas,
+        base: base ? { fecha: base.fecha, descripcion: base.descripcion } : null,
+        cierre: { fecha: cierre.fecha, descripcion: cierre.descripcion, esVivo: !cierre.porProducto },
+        periodo,
+      },
+    }
   } catch (err: any) {
     return { success: false, error: err?.message || "Error desconocido" }
   }
@@ -3573,8 +3645,39 @@ export async function crearCuadre(
     const esConteoTotalCompleto = (payload.tipo ?? "total") === "total" && !payload.codproductoUnico
     let lineasBase: Array<{ codproducto: string; nombreproducto: string | null; lote: string | null; location: string | null; stock_actual: number }>
     if (esConteoTotalCompleto) {
+      // (2026-10-02) CONTROL: un Conteo total es la base fija del mes, y una
+      // salida de orden de cargue que sigue "por descontar" (el camión ya se
+      // fue, el picking no se confirmó) está descontada del stock vivo pero
+      // aún no es una transacción aprobada. Si se crea el conteo con esas
+      // líneas pendientes, el "sistema" las ignora, el físico tampoco las
+      // tiene, y cuando se aprueban quedan como salida del mes nuevo contra
+      // una base que ya no las tenía: diferencia "sin explicar" igual a su
+      // cantidad (caso real ID3, Conteo #8: 550 und en 4 productos). Se exige
+      // confirmarlas antes (botón "Confirmar Picking" en Centro de Coordinación).
+      const { data: pendientes } = await supabase
+        .from("invtrans")
+        .select("ocargue, cantidad")
+        .eq("idempresa", proyectoId)
+        .eq("status", "por descontar")
+        .limit(500)
+      if (pendientes && pendientes.length > 0) {
+        const ordenes = Array.from(new Set((pendientes as any[]).map((p) => String(p.ocargue || "").trim()).filter(Boolean)))
+        const und = (pendientes as any[]).reduce((s, p) => s + Math.abs(Number(p.cantidad) || 0), 0)
+        return {
+          success: false,
+          error:
+            `Hay ${pendientes.length} salida(s) de orden de cargue sin confirmar (${Math.round(und)} und) en ${ordenes.length} orden(es): ${ordenes.slice(0, 6).join(", ")}${ordenes.length > 6 ? "…" : ""}. ` +
+            `Confírmalas en Centro de Coordinación (Confirmar Picking) antes de crear el Conteo total; si no, quedarían como diferencia sin explicar del mes.`,
+        }
+      }
       const corte = payload.fecha || fechaColombiaDe(new Date().toISOString())
-      const { porLote } = await calcularStockAlCorte(supabase, proyectoId, corte)
+      // (2026-10-02) "Sistema" = stock con el que AMANECE el día del conteo
+      // (fin del día anterior): se retrocede TODO lo fechado ese día, entradas
+      // incluidas. Antes una Entrada del día del conteo se dejaba dentro del
+      // "sistema" (convención del acta de cruce) y, si se aprobaba después
+      // de crear el conteo, el mes quedaba con una diferencia "sin explicar"
+      // del tamaño de esa entrada (caso real ID3, Conteo #8: 1.015 + 667 und).
+      const { porLote } = await calcularStockAlCorte(supabase, proyectoId, corte, { entradasDelDiaSonApertura: false })
       lineasBase = Object.values(porLote)
         .filter((r) => r.valor !== 0)
         .map((r) => ({ codproducto: r.codproducto, nombreproducto: r.producto || null, lote: r.lote || null, location: r.location || null, stock_actual: r.valor }))
@@ -5270,7 +5373,7 @@ export async function getConciliacionMensualInventario(
     {
       const rS = await traerPaginasEnParalelo(
         (desde, hasta) =>
-          supabase.from("saldoinvdetalle").select("idproducto, nombreproducto, codproducto, categoria, subcategoria, lote, stock_actual").in("idempresa", clientes).order("codproducto").order("lote").order("location").range(desde, hasta),
+          supabase.from("saldoinvdetalle").select("idproducto, nombreproducto, codproducto, categoria, subcategoria, lote, location, stock_actual").in("idempresa", clientes).order("codproducto").order("lote").order("location").range(desde, hasta),
         { tope: 100000 },
       )
       saldosRows.push(...rS.data)
@@ -5307,27 +5410,32 @@ export async function getConciliacionMensualInventario(
 
     const stockActual = saldosRows.reduce((s, r) => s + (incluir(r.idproducto) ? Number(r.stock_actual) || 0 : 0), 0)
 
-    const mesDe = (oc: any, creado: any): string | null => {
-      const m = RE_ORDEN.exec(String(oc || "").trim())
-      if (m) return `${m[1]}-${m[2]}`
-      // Fallback (sin código de orden estándar, ej. ajustes manuales): hora
-      // Colombia real, no el timestamp UTC crudo (5h adelante).
-      return creado ? fechaColombiaDe(creado).slice(0, 7) : null
-    }
-
     // ============================================================
-    // A) ROLL MENSUAL OPERACIONAL
-    //    Apertura del periodo = Inventario Inicial (cód 561).
-    //    Cada mes: saldo inicial + ingresos − despachos = saldo final,
-    //    y ese saldo final es el inicial del mes siguiente.
-    //    Ingresos = producción/recepción + devoluciones.
-    //    SALIDAS = SOLO órdenes de cargue (601). Bodega/reproceso/ajustes
-    //    NO interfieren en el roll (se sacan al cuadre físico/lista a revisar).
-    //    Traslados internos, tolva y proyección se excluyen.
+    // A) ROLL MENSUAL — regla de gerencia (2026-10-02): base fija del mes
+    //    (Conteo total aprobado; si no hay, sistema al corte del día 1) +
+    //    ingresos − cargue − reproceso + ajustes = base del mes siguiente
+    //    (o stock vivo para el mes en curso). Todo transacción por
+    //    transacción, por su FECHA (hora Colombia) — ya no por el código de la
+    //    orden. Lo que no cierre queda como "sin explicar": se muestra tal
+    //    cual, nunca se fuerza a cuadrar.
+    //    Ingresos = producción/recepción + devoluciones + inventario inicial (561).
+    //    Traslados internos (neto 0), tolva y proyección se excluyen.
     // ============================================================
     const aniosSet = new Set<string>()
     let invInicial = 0
-    const map: Record<string, any> = {}
+    const idpPorCod: Record<string, any> = {}
+    for (const r of saldosRows) if (r.codproducto) idpPorCod[String(r.codproducto).toUpperCase()] = r.idproducto
+    for (const r of inv) if (r.codproducto && idpPorCod[String(r.codproducto).toUpperCase()] === undefined) idpPorCod[String(r.codproducto).toUpperCase()] = r.idproducto
+    const incluirCod = (cod: string): boolean => {
+      const idp = idpPorCod[String(cod || "").toUpperCase()]
+      if (idp !== undefined) return incluir(idp)
+      const p = String(cod || "").toUpperCase()
+      if (p.startsWith("EMP") || p.startsWith("MP")) return false
+      return p.startsWith("PT") || p.startsWith("SP")
+    }
+    // Transacciones que cuentan en el roll (mismas exclusiones de siempre).
+    const filasRoll: any[] = []
+    let primerMes: string | null = null
     for (const r of inv) {
       if (!incluir(r.idproducto)) continue // solo Producto Terminado + Sub Producto
       const st = String(r.status || "").toLowerCase()
@@ -5336,57 +5444,78 @@ export async function getConciliacionMensualInventario(
       const tieneOC = !!(r.ocargue && String(r.ocargue).trim())
       // lote paralelo/alterno SIN orden de cargue: no es una salida real
       if ((st.includes("altern") || st.includes("paralel") || has(r.origen, "altern") || has(r.origen, "paralel")) && !tieneOC) continue
+      // 309/311/312/344/343: parejas neto 0 (reclasificar/trasladar/bloquear), nunca ingreso ni salida real.
+      if (esCodigoTrasladoNetoCero(r.cod_movimiento) || has(r.origen, "traslado entre localizaciones")) continue
+      if (r.ordentolva || has(r.ocargue, "tolva") || has(r.ocargue, "proyec") || has(r.origen, "tolva") || has(r.origen, "proyec")) continue
+      if (!r.creado) continue
+      const mk = fechaColombiaDe(r.creado).slice(0, 7)
+      aniosSet.add(mk.slice(0, 4))
+      if (!primerMes || mk < primerMes) primerMes = mk
+      filasRoll.push(r)
+    }
+    // Meses a mostrar: del primer mes con movimientos (o del año pedido) al mes en curso.
+    const mesEnCursoKey = mesActualColombia()
+    const meses: string[] = []
+    if (primerMes) {
+      let m = anio && `${anio}-01` > primerMes ? `${anio}-01` : primerMes
+      const tope = anio && `${anio}-12` < mesEnCursoKey ? `${anio}-12` : mesEnCursoKey
+      while (m <= tope) {
+        meses.push(m)
+        m = mesSiguienteDe(m)
+      }
+    }
+    // Bases: una por mes mostrado + la del mes siguiente al último (su cierre).
+    // Los cortes se calculan en memoria con el stock vivo y las transacciones
+    // ya cargadas; los Conteos totales aprobados se leen de la base.
+    const stockHoy: StockPorLote = {}
+    const nombrePorCodVivo: Record<string, string> = {}
+    for (const r of saldosRows) {
+      const key = `${r.codproducto}||${r.lote ?? ""}||${r.location ?? ""}`
+      if (!stockHoy[key]) stockHoy[key] = { codproducto: r.codproducto, producto: r.nombreproducto ?? "", lote: r.lote ?? "", location: r.location ?? "", valor: 0 }
+      stockHoy[key].valor += Number(r.stock_actual) || 0
+      if (r.nombreproducto && !nombrePorCodVivo[r.codproducto]) nombrePorCodVivo[r.codproducto] = r.nombreproducto
+    }
+    const precargado = { stockHoy, filas: inv, nombrePorCod: nombrePorCodVivo }
+    const mesesBase = meses.length ? [...meses, mesSiguienteDe(meses[meses.length - 1])] : []
+    const basesCalc = await Promise.all(mesesBase.map((m) => obtenerBaseDelMes(supabase, empresaId, m, precargado)))
+    const basePorMes: Record<string, BaseDelMes> = {}
+    mesesBase.forEach((m, i) => { basePorMes[m] = basesCalc[i] })
+    const totalBaseExacto = (b: BaseDelMes | undefined): number => {
+      if (!b) return 0
+      let s = 0
+      for (const [cod, v] of Object.entries(b.porProducto)) if (incluirCod(cod)) s += v
+      return s
+    }
+    // Cada transacción cae en el mes cuya ventana [base_m, base_m+1) la contiene
+    // (convención de Entradas del día del corte — ver enPeriodoBase).
+    const map: Record<string, any> = {}
+    for (const m of meses) map[m] = { mes: m, produccion: 0, devolucion: 0, inicial: 0, cargue: 0, merma: 0, ajuste: 0 }
+    const ventanas = meses.map((m) => ({ m, desde: basePorMes[m]?.fecha ?? `${m}-01`, hasta: basePorMes[mesSiguienteDe(m)]?.fecha ?? null }))
+    for (const r of filasRoll) {
+      const v = ventanas.find((w) => enPeriodoBase(r, w.desde, w.hasta))
+      if (!v) continue // anterior a la primera base (ya está dentro de ella) o fuera del año pedido
+      const a = map[v.m]
       const c = Math.abs(Number(r.cantidad) || 0)
       const esInicial = r.cod_movimiento === "561" || has(r.origen, "inventario inicial")
-      if (esInicial) { invInicial += c; continue } // apertura, no es flujo del mes
-      // 309 (reclasificación de lote/producto/ubicación), 311 (traslado),
-      // 312 (reverso de traslado), 344/343 (bloqueo/desbloqueo a cuarentena):
-      // parejas salida+entrada neto 0, SIEMPRE — es la función misma del
-      // código, nunca un ingreso/salida real, sin excepción aunque un 309
-      // cambie de producto (un caso real así resultó ser un error de
-      // digitación sin respaldo físico, confirmado por el usuario — no algo
-      // que el reporte deba tratar como ingreso genuino). Antes solo se
-      // excluía 311 por texto ("traslado entre localizaciones") — el resto,
-      // creado por "Transacciones por Código" con origen="transaccion
-      // manual", caía al catch-all de `esDev` de abajo y se contaba como una
-      // devolución fantasma (verificado con datos reales: ID3, PT FIDEO
-      // 250*24PQ).
-      if (esCodigoTrasladoNetoCero(r.cod_movimiento) || has(r.origen, "traslado entre localizaciones")) continue // neto 0
-      if (r.ordentolva || has(r.ocargue, "tolva") || has(r.ocargue, "proyec") || has(r.origen, "tolva") || has(r.origen, "proyec")) continue
-      const mk = mesDe(r.ocargue, r.creado)
-      if (!mk) continue
-      const yyyy = mk.slice(0, 4)
-      aniosSet.add(yyyy)
-      if (anio && yyyy !== anio) continue
-      if (!map[mk]) map[mk] = { mes: mk, produccion: 0, devolucion: 0, cargue: 0, merma: 0, ajuste: 0 }
-      const a = map[mk]
       // Regla del cliente (2026-08-08): TODA salida CON orden de cargue es un
-      // despacho real — incluye las "BODEGA GENERAL" de la migración de ID1
-      // (traen orden IND2026xx aunque quedaron con cod 702).
+      // despacho real — incluye las "BODEGA GENERAL" de la migración de ID1.
       const esCargue =
         r.tipomov === "Salida" &&
         (r.cod_movimiento === "601" || has(r.origen, "orden de cargue") || (has(r.origen, "bodega general") && !!(r.ocargue && String(r.ocargue).trim())))
-      // MERMA = lo ENVIADO a reproceso / avería (tipomov 'Reproceso', mov 551 salida).
-      // El "ingreso por reproceso" (tipomov Entrada) NO es merma: es el retorno → ingreso.
-      const esMerma = r.tipomov === "Reproceso"
-      const esIngRepro = r.tipomov === "Entrada" && has(r.origen, "reproceso") // retorno de reproceso
-      const esProd = r.cod_movimiento === "101" || (r.tipomov === "Entrada" && (has(r.origen, "producc") || has(r.origen, "aprob") || has(r.origen, "descarg") || has(r.origen, "logo")))
-      // Antes CUALQUIER entrada manual sin otro match cabía aquí (catch-all
-      // "tipomov Entrada && transaccion manual") — eso conflaba con 653
-      // (devolución real) a cualquier otro código nuevo de "Transacciones
-      // por Código" (ej. 701, que además se revisaba DESPUÉS de esDev en
-      // este if/else-if, así que un 701 real terminaba contado como
-      // devolución). Ahora solo 653 (su código explícito) y el retorno de
-      // reproceso cuentan como devolución.
-      const esDev = r.cod_movimiento === "653" || esIngRepro || has(r.origen, "devoluc")
-      const esAjuste = r.cod_movimiento === "701" || r.cod_movimiento === "702"
-      if (esCargue) a.cargue += c
+      // MERMA = lo ENVIADO a reproceso / avería (tipomov 'Reproceso', 551). El
+      // retorno de reproceso (tipomov Entrada) es un ingreso (devolución).
+      const esMerma = r.tipomov === "Reproceso" || (r.tipomov === "Salida" && has(r.origen, "reproceso"))
+      const esIngRepro = r.tipomov === "Entrada" && has(r.origen, "reproceso")
+      const esProd = r.tipomov === "Entrada" && (r.cod_movimiento === "101" || has(r.origen, "producc") || has(r.origen, "aprob") || has(r.origen, "descarg") || has(r.origen, "logo"))
+      const esDev = r.tipomov === "Entrada" && (r.cod_movimiento === "653" || esIngRepro || has(r.origen, "devoluc"))
+      if (esInicial) { invInicial += c; a.inicial += c }
+      else if (esCargue) a.cargue += c
       else if (esMerma) a.merma += c
       else if (esProd) a.produccion += c
       else if (esDev) a.devolucion += c
-      // AJUSTE CON SIGNO: una salida 702 RESTA inventario (antes sumaba en
-      // valor absoluto y una salida de ajuste inflaba la cadena — bug real).
-      else if (esAjuste) a.ajuste += r.tipomov === "Salida" ? -c : c
+      // AJUSTE CON SIGNO (701/702 y cualquier otro movimiento aprobado que
+      // mueva stock): una salida RESTA, una entrada SUMA.
+      else a.ajuste += r.tipomov === "Entrada" ? c : -c
     }
 
     // ============================================================
@@ -5450,12 +5579,10 @@ export async function getConciliacionMensualInventario(
     const eri = lotesEvaluados > 0 ? Math.round((lotesExactos / lotesEvaluados) * 1000) / 10 : 100
     revisar.sort((a, b) => Math.abs(b.diferencia) - Math.abs(a.diferencia))
 
-    // Cierres guardados (acta + físico congelado). Se trae ANTES del roll
-    // porque un mes con `fisico_congelado` reemplaza el ajuste lote-a-lote en
-    // vivo (ver abajo) — necesario para que meses YA CERRADOS no seteen se
-    // recalculen contra `saldoinvdetalle` de HOY (esa mezcla de fechas es la
-    // causa de que el cuadre de un mes cerrado "se mueva" con la operación de
-    // los días siguientes; confirmado 2026-08-08 con datos reales de ID3).
+    // Cierres guardados (acta PDF firmada por mes): solo para anotar
+    // documento_url / cierre_id / estado en cada fila. Su "físico congelado"
+    // ya NO manda sobre ningún cálculo (regla de gerencia 2026-10-02: la base
+    // fija es el Conteo total aprobado; lo demás, transacción por transacción).
     let cierresPrevios: SigInventarioCierreMes[] = []
     try {
       const { data: cData } = await supabase
@@ -5469,129 +5596,79 @@ export async function getConciliacionMensualInventario(
     for (const c of cierresPrevios) cierrePorMes[c.mes] = c
 
     // ============================================================
-    // A) ROLL MENSUAL — cierre de un mes = inicial del siguiente.
-    //    Apertura = Inventario Inicial (561). Reconoce la MERMA DE PROCESO
-    //    (diferencia libro-vs-físico por lote, mesProc) para que el saldo
-    //    conciliado cuadre EXACTO contra el stock vivo (la verdad física).
-    //    Si el mes tiene `fisico_congelado` (acta cerrada con físico real
-    //    capturado ESE día), se usa ese valor como saldoFinal en vez del
-    //    ajuste lote-a-lote en vivo — el resto de meses (incl. el actual)
-    //    sigue exactamente igual que antes.
+    // ROLL: base del mes + ingresos + ajustes − cargue − reproceso = base del
+    // mes siguiente (o stock vivo en el mes en curso). La diferencia que las
+    // transacciones no explican va en `mermaProceso` (nombre histórico de la
+    // columna "Sin explicar") y se muestra tal cual: NO se fuerza la apertura
+    // ni se lleva ningún residual al último mes.
     // ============================================================
-    const meses = Object.values(map).sort((x: any, y: any) => x.mes.localeCompare(y.mes))
-    let saldo = Math.round(invInicial)
-    const filas = meses.map((a: any) => {
-      const ingresos = a.produccion + a.devolucion
-      // Los AJUSTES REALES de la app (701/702, transacción manual) SÍ entran
-      // a la cadena del mes — son los únicos ajustes legítimos ("solo lo que
-      // esté en la app", regla del cliente 2026-08-08). Antes quedaban fuera
-      // del roll y aparecían como residuo falso en "Ajuste/Depuración".
+    const filas = meses.map((m) => {
+      const a = map[m]
+      const baseM = basePorMes[m]
+      const esEnCurso = m >= mesEnCursoKey
+      const cierreM = basePorMes[mesSiguienteDe(m)]
+      // "Sin explicar" se calcula con los valores EXACTOS (sin redondear cada
+      // sumando) y se redondea al final: así un mes que cierra exacto da 0 y
+      // no ±1 por redondeos de lotes con decimales.
+      const saldoInicialExacto = totalBaseExacto(baseM)
+      const saldoFinalExacto = esEnCurso ? stockActual : totalBaseExacto(cierreM)
+      const saldoInicial = Math.round(saldoInicialExacto)
+      const saldoFinal = Math.round(saldoFinalExacto)
+      const ingresos = Math.round(a.produccion + a.devolucion + a.inicial)
       const ajusteReal = Math.round(a.ajuste || 0)
-      const congelado = cierrePorMes[a.mes]?.fisico_congelado
-      const saldoInicial = saldo
-      let mermaProceso: number, reproceso: number, merma: number, salidas: number, saldoFinal: number
-      if (congelado !== null && congelado !== undefined) {
-        // Físico real de ese mes (capturado ese día) manda: se resuelve la
-        // merma de proceso como residuo, igual que el plug del mes en curso
-        // contra stock vivo (líneas más abajo), pero anclado al congelado.
-        reproceso = Math.round(a.merma)
-        saldoFinal = Math.round(congelado)
-        salidas = Math.round(saldoInicial + ingresos + ajusteReal - saldoFinal)
-        merma = salidas - Math.round(a.cargue)
-        mermaProceso = merma - reproceso
-      } else {
-        mermaProceso = Math.round(difMes[a.mes] || 0) // cuadre físico del mes (por lote, en vivo)
-        reproceso = Math.round(a.merma)               // reproceso/avería registrado (551)
-        merma = reproceso + mermaProceso              // merma total = reproceso + cuadre
-        salidas = a.cargue + merma
-        saldoFinal = saldoInicial + ingresos + ajusteReal - salidas
-      }
-      saldo = saldoFinal
+      const reproceso = Math.round(a.merma)
+      const cargue = Math.round(a.cargue)
+      const sinExplicar = Math.round(saldoInicialExacto + (a.produccion + a.devolucion + a.inicial) + (a.ajuste || 0) - a.cargue - a.merma - saldoFinalExacto)
+      const mermaProceso = sinExplicar
+      const merma = reproceso + mermaProceso
+      const salidas = cargue + merma
       return {
-        mes: a.mes,
-        saldoInicial: Math.round(saldoInicial),
-        ingresos: Math.round(ingresos),
+        mes: m,
+        saldoInicial,
+        ingresos,
         recepcion: Math.round(a.produccion),
         produccion: Math.round(a.produccion),
         devolucion: Math.round(a.devolucion),
-        cargue: Math.round(a.cargue),
+        inicial: Math.round(a.inicial),
+        cargue,
         reproceso,
-        mermaProceso,
+        mermaProceso, // = sin explicar (saldo por transacciones − stock al cierre)
         merma: Math.round(merma),
         salidas: Math.round(salidas),
-        saldoFinal: Math.round(saldoFinal),
+        saldoFinal,
         faltante: 0,
-        ajuste: Math.round(a.ajuste),
+        ajuste: ajusteReal,
+        baseDescripcion: baseM?.descripcion ?? null,
+        baseFuente: baseM?.fuente ?? null,
+        cierreDescripcion: esEnCurso ? "Stock vivo (hoy)" : cierreM?.descripcion ?? null,
         documento_url: null as string | null,
         cierre_id: null as number | null,
         estadoCierre: null as string | null,
       }
     })
-    // APERTURA DE MIGRACIÓN: si el PRIMER mes está congelado y quedó con
-    // residuo, ese residuo es exactamente "lo que no se subió en la
-    // migración" (regla del cliente) — se absorbe en la APERTURA del
-    // periodo (inventario inicial efectivo), no como ajuste del mes. Solo si
-    // la apertura resultante no queda negativa (guarda anti-imposibles).
-    let invInicialEfectivo = Math.round(invInicial)
-    let aperturaAjustada = false
-    if (filas.length) {
-      const f0 = filas[0]
-      const congelado0 = cierrePorMes[f0.mes]?.fisico_congelado
-      if (congelado0 !== null && congelado0 !== undefined && f0.mermaProceso !== 0) {
-        const aperturaNecesaria = Math.round(invInicial - f0.mermaProceso)
-        if (aperturaNecesaria >= 0) {
-          const delta = f0.mermaProceso
-          f0.saldoInicial = aperturaNecesaria
-          f0.salidas -= delta
-          f0.merma -= delta
-          f0.mermaProceso = 0
-          invInicialEfectivo = aperturaNecesaria
-          aperturaAjustada = true
-        }
-      }
-    }
-
-    // Cuadre exacto contra el físico: el residual (lotes sin fecha, 702/otros,
-    // redondeos) se lleva al último mes como merma de proceso → saldo final = stock vivo.
-    if (filas.length) {
-      const last = filas[filas.length - 1]
-      const residual = Math.round(last.saldoFinal - stockActual)
-      if (residual !== 0) {
-        last.mermaProceso += residual
-        last.merma += residual
-        last.salidas += residual
-        last.saldoFinal -= residual
-      }
-    }
-    const saldoTeorico = filas.length ? filas[filas.length - 1].saldoFinal : Math.round(invInicial)
+    const saldoTeorico = filas.length ? filas[filas.length - 1].saldoFinal : Math.round(stockActual)
     const mermaProcesoTotal = filas.reduce((s: number, f: any) => s + (f.mermaProceso || 0), 0)
-    // MERMA = lo enviado a reproceso / avería (tipomov 'Reproceso'). El cuadre
-    // libro-vs-físico (mermaProceso) es depuración/ajuste, hoy ~0.
     const reprocesoTotal = filas.reduce((s: number, f: any) => s + (f.reproceso || 0), 0)
-    // La tarjeta muestra la ACUMULACIÓN del MES EN CURSO (se cierra mes a mes).
-    // Mes calendario de COLOMBIA (en UTC, de 7pm a medianoche del último día
-    // del mes ya sería "el mes siguiente").
-    const mesEnCurso = fechaColombiaDe(new Date().toISOString()).slice(0, 7)
-    const filaMesEnCurso = filas.find((f: any) => f.mes === mesEnCurso) || (filas.length ? filas[filas.length - 1] : null)
+    const filaMesEnCurso = filas.find((f: any) => f.mes === mesEnCursoKey) || (filas.length ? filas[filas.length - 1] : null)
 
     const resumen = {
-      invInicial: invInicialEfectivo, // apertura efectiva (incluye lo no subido en la migración si aplicó)
+      invInicial: filas.length ? filas[0].saldoInicial : 0, // base fija del primer mes mostrado
       invInicial561: Math.round(invInicial), // lo digitado como 561 (referencia)
-      aperturaAjustada, // true = la apertura absorbió la diferencia de migración
-      saldoTeorico,                                        // = stock vivo tras conciliar
+      aperturaAjustada: false, // ya no se fuerza ninguna apertura
+      saldoTeorico,                                        // cierre del último mes (stock vivo en el mes en curso)
       saldoVivo: Math.round(stockActual),
-      diferencia: Math.round(saldoTeorico - stockActual),  // ~0 tras conciliar
-      reproceso: Math.round(reprocesoTotal),               // reproceso/avería acumulado del año (referencia)
+      diferencia: Math.round(saldoTeorico - stockActual),
+      reproceso: Math.round(reprocesoTotal),               // reproceso/avería acumulado (referencia)
       mermaMesEnCurso: Math.round(filaMesEnCurso?.reproceso || 0), // merma del mes en curso (tarjeta)
       mesMerma: filaMesEnCurso?.mes || null,
-      mermaProceso: Math.round(mermaProcesoTotal),         // cuadre físico por lote / depuración (acumulado del año)
-      ajusteMesEnCurso: Math.round(filaMesEnCurso?.mermaProceso || 0), // ajuste/depuración SOLO del mes en curso (tarjeta)
+      mermaProceso: Math.round(mermaProcesoTotal),         // Σ sin explicar de todos los meses mostrados
+      ajusteMesEnCurso: Math.round(filaMesEnCurso?.mermaProceso || 0), // sin explicar SOLO del mes en curso (tarjeta)
       sobranteKardex: Math.round(sobrante),
       faltanteKardex: Math.round(Math.abs(faltante)),
       lotesRevisar: revisar.length,
-      lotesEvaluados,   // universo del ERI (lotes con actividad)
+      lotesEvaluados,   // universo del cruce por lote (lotes con actividad)
       lotesExactos,     // lotes que cuadran exacto libro-vs-físico
-      eri,              // Exactitud del Registro de Inventario (%)
+      eri,              // exactitud del cruce por lote (referencia; la ERI oficial sale de los conteos aprobados)
     }
 
     // `cierresPrevios`/`cierrePorMes` ya se trajeron ANTES del roll (arriba)
@@ -5751,6 +5828,7 @@ export async function calcularStockAlCorte(
   supabase: any,
   proyectoId: number,
   corte: string, // 'YYYY-MM-DD' — primer día SIN incluir (el corte retrocede hasta el final del día anterior)
+  opciones: { recortarNegativos?: boolean; entradasDelDiaSonApertura?: boolean } = {},
 ): Promise<{
   porLote: Record<string, { codproducto: string; producto: string; lote: string; location: string; valor: number }>
   nombrePorCod: Record<string, string>
@@ -5792,42 +5870,20 @@ export async function calcularStockAlCorte(
   // horario y se filtra la fecha real en JS con fechaColombiaDe.
   const corteConsulta = new Date(`${corte}T00:00:00Z`)
   corteConsulta.setUTCDate(corteConsulta.getUTCDate() - 1)
-  const deltaCorte: Record<string, number> = {}
-  let from2 = 0
-  while (true) {
-    const { data } = await supabase
+  const rMov = await traerPaginasEnParalelo((desde, hasta) =>
+    supabase
       .from("invtrans")
       .select("id,codproducto,lote,location,tipomov,cantidad,status,creado")
       .eq("idempresa", proyectoId)
       .gte("creado", corteConsulta.toISOString())
       .order("id", { ascending: true }) // paginación determinista
-      .range(from2, from2 + 999)
-    for (const r of data ?? []) {
-      if (!String(r.status || "").toLowerCase().startsWith("aprob")) continue
-      const fechaLocal = fechaColombiaDe(r.creado)
-      if (fechaLocal < corte) continue // cayó en el margen de 1 día, es anterior al corte real
-      const esEntradaDelDiaDelCorte = r.tipomov === "Entrada" && fechaLocal === corte
-      if (esEntradaDelDiaDelCorte) continue
-      const key = `${r.codproducto}||${r.lote ?? ""}||${r.location ?? ""}`
-      const c = Math.abs(Number(r.cantidad) || 0)
-      deltaCorte[key] = (deltaCorte[key] || 0) + (r.tipomov === "Entrada" ? c : -c)
-    }
-    if (!data || data.length < 1000) break
-    from2 += 1000
-    if (from2 > 60000) break
-  }
+      .range(desde, hasta),
+  )
 
   // Valor real por lote: stock vivo de hoy retrocedido por lo movido desde
   // el corte. SIN inventar — nada de repartir/escalar un total a los lotes.
-  // Se pisa en 0 si da negativo (el físico no puede ser negativo).
-  const keys = new Set([...Object.keys(stockHoy), ...Object.keys(deltaCorte)])
-  const porLote: Record<string, { codproducto: string; producto: string; lote: string; location: string; valor: number }> = {}
-  for (const key of keys) {
-    const [cod, lote, location] = key.split("||")
-    const base = stockHoy[key]?.valor ?? 0
-    const valor = Math.max(0, Math.round((base - (deltaCorte[key] || 0)) * 100) / 100)
-    porLote[key] = { codproducto: stockHoy[key]?.codproducto ?? cod, producto: stockHoy[key]?.producto || nombrePorCod[cod] || "", lote, location, valor }
-  }
+  // La lógica vive en retrocederStockAlCorte (compartida con la base del mes).
+  const porLote = retrocederStockAlCorte(stockHoy, rMov.data, corte, nombrePorCod, opciones.recortarNegativos ?? true, opciones.entradasDelDiaSonApertura ?? true)
   return { porLote, nombrePorCod }
 }
 

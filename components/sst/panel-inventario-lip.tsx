@@ -52,6 +52,9 @@ export function PanelInventarioLIP() {
   const [anio, setAnio] = useState<string>(String(hoyDefault.getFullYear()))
   const [mes, setMes] = useState<string>(String(hoyDefault.getMonth() + 1).padStart(2, "0"))
   const [kardex, setKardex] = useState<any[]>([])
+  // Base fija y cierre del periodo que explican el Kardex (Conteo total aprobado / sistema al corte / stock vivo).
+  const [kardexInfo, setKardexInfo] = useState<{ base: { fecha: string; descripcion: string } | null; cierre: { fecha: string | null; descripcion: string; esVivo: boolean } } | null>(null)
+  const [cuadreInfo, setCuadreInfo] = useState<{ base: { fecha: string | null; descripcion: string; saldo: number } | null; cierre?: { descripcion: string; esVivo: boolean; saldo: number }; saldoFinalCalculado?: number } | null>(null)
   const [loadingKardex, setLoadingKardex] = useState(false)
   const [filtroProd, setFiltroProd] = useState<string>("")
   const [drill, setDrill] = useState<{
@@ -59,6 +62,10 @@ export function PanelInventarioLIP() {
     movs: any[]
     saldoInicialPeriodo?: number
     saldoFinalPeriodo?: number
+    saldoCierre?: number
+    descuadre?: number
+    baseDescripcion?: string | null
+    cierreDescripcion?: string
     resumen?: { entradas: number; salidas: number; traslados: number; ajustes: number; merma: number }
   } | null>(null)
   const [loadingDrill, setLoadingDrill] = useState(false)
@@ -142,8 +149,10 @@ export function PanelInventarioLIP() {
   async function cargarKardex() {
     setLoadingKardex(true)
     const r = await getKardexInventario(selectedEmpresaId ?? null, anio || null, mes || null)
-    if (r.success) setKardex(r.data.filas)
-    else toast({ title: "No se pudo cargar el kardex", description: r.error })
+    if (r.success) {
+      setKardex(r.data.filas)
+      setKardexInfo({ base: r.data.base ?? null, cierre: r.data.cierre })
+    } else toast({ title: "No se pudo cargar el kardex", description: r.error })
     setLoadingKardex(false)
   }
 
@@ -163,6 +172,10 @@ export function PanelInventarioLIP() {
         movs: r.data,
         saldoInicialPeriodo: r.saldoInicialPeriodo,
         saldoFinalPeriodo: r.saldoFinalPeriodo,
+        saldoCierre: r.saldoCierre,
+        descuadre: r.descuadre,
+        baseDescripcion: r.baseDescripcion,
+        cierreDescripcion: r.cierreDescripcion,
         resumen,
       })
     } else toast({ title: "No se pudo cargar el detalle", description: r.error })
@@ -179,8 +192,10 @@ export function PanelInventarioLIP() {
   async function cargarCuadreDiario() {
     setLoadingCD(true)
     const r = await getCuadreDiario(selectedEmpresaId ?? null, anio || null, mes || null)
-    if (r.success) setCuadreD(r.data)
-    else toast({ title: "No se pudo cargar el cuadre diario", description: r.error })
+    if (r.success) {
+      setCuadreD(r.data)
+      setCuadreInfo({ base: r.base ?? null, cierre: r.cierre, saldoFinalCalculado: r.saldoFinalCalculado })
+    } else toast({ title: "No se pudo cargar el cuadre diario", description: r.error })
     setLoadingCD(false)
   }
   async function cargarPreservacion() {
@@ -553,10 +568,10 @@ export function PanelInventarioLIP() {
 
           {/* KPIs de gestión de almacén (alto nivel) */}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            <KPI label="ERI — Exactitud de registro" valor={k.eri} unidad="%" Icon={Boxes} color={colorExact(k.eri)} sub="lotes exactos / evaluados (cruce)" />
+            <KPI label="ERI — Exactitud de registro" valor={k.eri === null || k.eri === undefined ? "—" : k.eri} unidad={k.eri === null || k.eri === undefined ? undefined : "%"} Icon={Boxes} color={k.eri === null || k.eri === undefined ? SST_TOKENS.navy : colorExact(k.eri)} sub={k.eriBase || "conteos físicos aprobados"} />
             <KPI label="Rotación de inventario" valor={k.rotacion} unidad="x" Icon={RefreshCw} color={SST_TOKENS.navy} sub="despacho / stock" />
             <KPI label="Días de inventario" valor={fmt(k.diasInventario)} unidad="días" Icon={CalendarClock} color={k.diasInventario > 60 ? SST_TOKENS.warn : SST_TOKENS.ok} sub="cobertura de stock" />
-            <KPI label="Stock (libro)" valor={fmt(k.saldoFisico)} unidad="und" Icon={Boxes} color={SST_TOKENS.navy} sub={`${fmt(k.skusConStock)} SKUs con stock`} />
+            <KPI label="Stock (sistema)" valor={fmt(k.saldoFisico)} unidad="und" Icon={Boxes} color={SST_TOKENS.navy} sub={`${fmt(k.skusConStock)} SKUs con stock · stock vivo`} />
             <KPI label="SKUs activos" valor={fmt(k.skusActivos)} Icon={Layers} color={SST_TOKENS.navy} sub="con movimiento en el periodo" />
             <KPI label="SKUs sin movimiento" valor={fmt(k.skusSinMovimiento)} Icon={AlertTriangle} color={k.skusSinMovimiento ? SST_TOKENS.warn : SST_TOKENS.ok} sub="stock sin rotar (slow movers)" />
           </div>
@@ -630,7 +645,7 @@ export function PanelInventarioLIP() {
 
           <Card className="p-3">
             <p className="text-[11px] text-muted-foreground">
-              <b>Nomenclatura LIPgo:</b> stock perpetuo (recepción 101, despacho 601, traslado 311, ajuste 701/702, inicial 561, merma 551). <b>ERI</b> por conteo físico (Cuadre). <b>Rotación</b> = despacho/stock; <b>días de inventario</b> = cobertura. <b>ABC</b> = Pareto por salidas. <b>Ingresos</b> = aprobación de producción (PT) / órdenes de descargue (Cedis) / devoluciones. <b>Salidas</b> = órdenes de cargue / reproceso (avería). Los traslados internos no alteran el stock. Las diferencias del cuadre se concilian; el residual se ajusta con documento soporte.
+              <b>Una sola fuente:</b> el stock es el stock vivo que la base recalcula con cada transacción (recepción 101, despacho 601, traslado 311, ajuste 701/702, inicial 561, merma 551). El <b>Conteo total aprobado</b> es la base fija con la que arranca cada mes; Kardex, detalle y cuadre diario parten de ahí y avanzan transacción por transacción. <b>ERI</b> = ítems exactos / contados en los conteos físicos aprobados. <b>Rotación</b> = despacho/stock; <b>días de inventario</b> = cobertura. <b>ABC</b> = Pareto por salidas. <b>Ingresos</b> = aprobación de ingresos (producción / descargue) y devoluciones. <b>Salidas</b> = órdenes de cargue, averías y reprocesos. Los traslados internos no alteran el stock.
             </p>
           </Card>
         </>
@@ -647,7 +662,7 @@ export function PanelInventarioLIP() {
             <>
               <p className="text-xs text-muted-foreground">
                 <ClipboardList className="mr-1 inline h-3.5 w-3.5" />
-                <b>{selectedEmpresaNombre}</b> · solo <b>Producto Terminado + Sub Producto</b> (el empaque y la materia prima se concilian aparte). El inventario y los despachos se llevan <b>por lote</b>. Apertura = <b>inventario inicial (561)</b>; el cierre de cada mes es el inicial del siguiente. <b>Ingresos</b> = producción/descargue + devoluciones · <b>Salidas</b> = cargue (601) + <b>merma de proceso</b> (reproceso 551 + cuadre físico por lote). Traslados, proyección y tolva NO se cuentan. El <b>saldo final conciliado coincide con el stock físico</b>. Cada mes genera un acta PDF en <code>inventario/cierres/{selectedEmpresaId}/AAAA-MM/</code>.
+                <b>{selectedEmpresaNombre}</b> · solo <b>Producto Terminado + Sub Producto</b> (el empaque y la materia prima se concilian aparte). <b>Saldo inicial</b> de cada mes = su <b>Conteo total aprobado</b> (si no hay, el sistema al corte del día 1). <b>Ingresos</b> = aprobación de ingresos + devoluciones · <b>Salidas</b> = cargue (601) + reproceso/avería (551) · <b>Ajustes</b> = 701/702. <b>Saldo final</b> = base del mes siguiente (stock vivo en el mes en curso). Todo por la fecha de cada transacción; traslados, proyección y tolva no se cuentan. Lo que las transacciones no explican queda en <b>"Sin explicar"</b>, tal cual, sin forzar el cuadre. Cada mes genera un acta PDF en <code>inventario/cierres/{selectedEmpresaId}/AAAA-MM/</code>.
               </p>
               {loadingConc ? (
                 <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" style={{ color: SST_TOKENS.navy }} /></div>
@@ -657,19 +672,19 @@ export function PanelInventarioLIP() {
                 <>
                 {conc?.resumen && (
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-                    <KPI label={conc.resumen.aperturaAjustada ? "Inventario inicial (apertura real)" : "Inventario inicial (561)"} valor={fmt(conc.resumen.invInicial)} unidad="und" Icon={ArrowDownToLine} color={SST_TOKENS.navy} sub={conc.resumen.aperturaAjustada ? `incluye migración · digitado 561: ${fmt(conc.resumen.invInicial561)}` : "apertura del periodo"} />
+                    <KPI label="Saldo inicial del periodo" valor={fmt(conc.resumen.invInicial)} unidad="und" Icon={ArrowDownToLine} color={SST_TOKENS.navy} sub={concFilas[0]?.baseDescripcion || "base fija del primer mes"} />
                     <KPI label="Merma de proceso" valor={fmt(conc.resumen.mermaMesEnCurso ?? 0)} unidad="und" Icon={AlertTriangle} color={SST_TOKENS.warn} sub={`reproceso/avería · mes ${conc.resumen.mesMerma ?? "—"}`} />
                     <KPI
-                      label="Ajuste / depuración (meses cerrados)"
+                      label="Sin explicar (meses cerrados)"
                       valor={fmt((conc.resumen.mermaProceso ?? 0) - (conc.resumen.ajusteMesEnCurso ?? 0))}
                       unidad="und"
                       Icon={RefreshCw}
-                      color={Math.abs((conc.resumen.mermaProceso ?? 0) - (conc.resumen.ajusteMesEnCurso ?? 0)) < 50 ? SST_TOKENS.ok : SST_TOKENS.warn}
-                      sub={`mes en curso por asentarse: ${fmt(conc.resumen.ajusteMesEnCurso ?? 0)} (cierra con el inventario del día 1)`}
+                      color={(conc.resumen.mermaProceso ?? 0) - (conc.resumen.ajusteMesEnCurso ?? 0) === 0 ? SST_TOKENS.ok : SST_TOKENS.bad}
+                      sub={`mes en curso: ${fmt(conc.resumen.ajusteMesEnCurso ?? 0)} (frente al stock vivo de hoy)`}
                     />
-                    <KPI label="Saldo conciliado" valor={fmt(conc.resumen.saldoTeorico)} unidad="und" Icon={Boxes} color={SST_TOKENS.navy} sub="cierre del roll" />
-                    <KPI label="Stock físico (sistema)" valor={fmt(conc.resumen.saldoVivo)} unidad="und" Icon={Boxes} color={SST_TOKENS.ok} sub="saldoinvdetalle" />
-                    <KPI label="Diferencia" valor={fmt(conc.resumen.diferencia)} unidad="und" Icon={TrendingDown} color={Math.abs(conc.resumen.diferencia) < 5 ? SST_TOKENS.ok : SST_TOKENS.bad} sub={Math.abs(conc.resumen.diferencia) < 5 ? "✓ cuadra" : "revisar"} />
+                    <KPI label="Saldo por transacciones" valor={fmt(conc.resumen.saldoTeorico)} unidad="und" Icon={Boxes} color={SST_TOKENS.navy} sub="cierre del último mes" />
+                    <KPI label="Stock vivo (sistema)" valor={fmt(conc.resumen.saldoVivo)} unidad="und" Icon={Boxes} color={SST_TOKENS.ok} sub="saldoinvdetalle · PT + SP" />
+                    <KPI label="Lotes a revisar" valor={fmt(conc.resumen.lotesRevisar ?? 0)} Icon={TrendingDown} color={(conc.resumen.lotesRevisar ?? 0) ? SST_TOKENS.bad : SST_TOKENS.ok} sub="libro vs stock por lote, |dif| > 100" />
                   </div>
                 )}
                 <Card className="overflow-hidden">
@@ -682,9 +697,10 @@ export function PanelInventarioLIP() {
                           <th className="px-3 py-2 text-right">Saldo inicial</th>
                           <th className="px-3 py-2 text-right">Ingresos</th>
                           <th className="px-3 py-2 text-right">Cargue (601)</th>
-                          <th className="px-3 py-2 text-right">Merma proceso (551)</th>
-                          <th className="px-3 py-2 text-right">Ajuste / depuración</th>
-                          <th className="px-3 py-2 text-right">Saldo final (físico)</th>
+                          <th className="px-3 py-2 text-right">Reproceso (551)</th>
+                          <th className="px-3 py-2 text-right">Ajustes (701/702)</th>
+                          <th className="px-3 py-2 text-right">Sin explicar</th>
+                          <th className="px-3 py-2 text-right">Saldo final</th>
                           <th className="px-3 py-2 text-center">Soporte</th>
                         </tr>
                       </thead>
@@ -701,12 +717,13 @@ export function PanelInventarioLIP() {
                                 <Badge variant="outline" className="text-[10px]">Sin acta</Badge>
                               )}
                             </td>
-                            <td className="px-3 py-1.5 text-right text-muted-foreground">{fmt(f.saldoInicial)}</td>
-                            <td className="px-3 py-1.5 text-right" style={{ color: SST_TOKENS.ok }} title={`Prod. ${fmt(f.recepcion ?? 0)} · Dev. ${fmt(f.devolucion ?? 0)}`}>{fmt(f.ingresos)}</td>
+                            <td className="px-3 py-1.5 text-right text-muted-foreground" title={f.baseDescripcion || ""}>{fmt(f.saldoInicial)}</td>
+                            <td className="px-3 py-1.5 text-right" style={{ color: SST_TOKENS.ok }} title={`Prod./recepción ${fmt(f.recepcion ?? 0)} · Dev. ${fmt(f.devolucion ?? 0)}${f.inicial ? ` · Inicial 561 ${fmt(f.inicial)}` : ""}`}>{fmt(f.ingresos)}</td>
                             <td className="px-3 py-1.5 text-right" style={{ color: SST_TOKENS.navy }}>{fmt(f.cargue)}</td>
                             <td className="px-3 py-1.5 text-right" style={{ color: (f.reproceso ?? 0) ? SST_TOKENS.warn : "inherit" }} title="Reproceso / avería registrada (mov 551) — merma real de proceso">{fmt(f.reproceso)}</td>
-                            <td className="px-3 py-1.5 text-right text-muted-foreground" title="Cuadre libro vs físico por lote (ajustes 702, lotes sin fecha, redondeos). ~0 tras depurar la base.">{fmt(f.mermaProceso)}</td>
-                            <td className="px-3 py-1.5 text-right font-semibold">{fmt(f.saldoFinal)}</td>
+                            <td className="px-3 py-1.5 text-right text-muted-foreground" title="Ajustes 701/702 aprobados en el mes (con signo)">{fmt(f.ajuste ?? 0)}</td>
+                            <td className="px-3 py-1.5 text-right font-semibold" style={{ color: f.mermaProceso ? SST_TOKENS.bad : SST_TOKENS.ok }} title="Saldo inicial + ingresos + ajustes − cargue − reproceso − saldo final. ≠ 0 = transacciones que el stock no refleja (o al revés): revisar">{f.mermaProceso ? fmt(f.mermaProceso) : "✓"}</td>
+                            <td className="px-3 py-1.5 text-right font-semibold" title={f.cierreDescripcion || ""}>{fmt(f.saldoFinal)}</td>
                             <td className="px-3 py-1.5 text-center">
                               {f.documento_url ? (
                                 <a href={f.documento_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] hover:underline" style={{ color: SST_TOKENS.navy }}>
@@ -746,7 +763,7 @@ export function PanelInventarioLIP() {
               )}
 
               <p className="text-[11px] text-muted-foreground">
-                La <b>merma de proceso</b> (reproceso 551 + cuadre físico por lote) se documenta en el cierre y NO se cobra a LIP. El saldo final conciliado <b>coincide con el stock físico</b> del sistema. Regenerar el acta sobrescribe el PDF en la carpeta del mes.
+                La <b>merma de proceso</b> (reproceso 551) se documenta en el cierre y NO se cobra a LIP. Una cifra en <b>"Sin explicar"</b> no se absorbe en el cálculo: señala transacciones que el stock no refleja (o stock sin transacción) y se corrige donde nació. Regenerar el acta sobrescribe el PDF en la carpeta del mes.
               </p>
             </>
           )}
@@ -760,6 +777,14 @@ export function PanelInventarioLIP() {
             </p>
             <Input value={filtroProd} onChange={(e) => setFiltroProd(e.target.value)} placeholder="Buscar producto/código" className="h-9 w-64" />
           </div>
+          {kardexInfo && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+              <span><span className="text-muted-foreground">Saldo inicial =</span> <b>{kardexInfo.base ? kardexInfo.base.descripcion : "sin periodo (acumulado histórico)"}</b></span>
+              <span><span className="text-muted-foreground">Saldo =</span> inicial + entradas − salidas + ajustes − merma, transacción por transacción</span>
+              <span><span className="text-muted-foreground">Stock al cierre =</span> <b>{kardexInfo.cierre?.descripcion}</b></span>
+              <span><span className="text-muted-foreground">Sin explicar =</span> saldo − stock al cierre (≠ 0: transacciones que el stock no refleja, o al revés)</span>
+            </div>
+          )}
           {loadingKardex ? (
             <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" style={{ color: SST_TOKENS.navy }} /></div>
           ) : kardex.length === 0 ? (
@@ -778,7 +803,9 @@ export function PanelInventarioLIP() {
                       <th className="px-3 py-2 text-right">Traslados</th>
                       <th className="px-3 py-2 text-right">Ajustes</th>
                       <th className="px-3 py-2 text-right">Merma</th>
-                      <th className="px-3 py-2 text-right">Saldo actual</th>
+                      <th className="px-3 py-2 text-right">Saldo</th>
+                      <th className="px-3 py-2 text-right">Stock al cierre</th>
+                      <th className="px-3 py-2 text-right">Sin explicar</th>
                       <th className="px-3 py-2"></th>
                     </tr>
                   </thead>
@@ -796,6 +823,10 @@ export function PanelInventarioLIP() {
                           <td className="px-3 py-1.5 text-right text-muted-foreground">{fmt(p.ajustes)}</td>
                           <td className="px-3 py-1.5 text-right" style={{ color: SST_TOKENS.warn }}>{fmt(p.merma)}</td>
                           <td className="px-3 py-1.5 text-right font-semibold">{fmt(p.saldo)}</td>
+                          <td className="px-3 py-1.5 text-right tabular-nums">{fmt(p.saldoCierre)}</td>
+                          <td className="px-3 py-1.5 text-right font-semibold tabular-nums" style={{ color: p.descuadre ? SST_TOKENS.bad : SST_TOKENS.ok }} title={p.descuadre ? "El saldo por transacciones no coincide con el stock al cierre: revisar este producto" : "Cuadra"}>
+                            {p.descuadre ? fmt(p.descuadre) : "✓"}
+                          </td>
                           <td className="px-3 py-1.5 text-right"><ZoomIn className="h-3.5 w-3.5 text-muted-foreground" /></td>
                         </tr>
                       ))}
@@ -813,6 +844,15 @@ export function PanelInventarioLIP() {
             <ClipboardList className="mr-1 inline h-3.5 w-3.5" />
             Control diario: <b>saldo inicial</b> (con que inicia el día) + <b>ingresos</b> (recepción/descargue/aprobación) − <b>salidas</b> (órdenes de cargue) = <b>saldo final</b>. {anio}{mes ? ` · mes ${mes}` : ""}
           </p>
+          {cuadreInfo?.base && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+              <span><span className="text-muted-foreground">Arranca en</span> <b>{fmt(cuadreInfo.base.saldo)}</b> <span className="text-muted-foreground">= {cuadreInfo.base.descripcion}</span></span>
+              {cuadreInfo.cierre && !Number.isNaN(cuadreInfo.cierre.saldo) && (
+                <span><span className="text-muted-foreground">Cierra en</span> <b>{fmt(cuadreInfo.cierre.saldo)}</b> <span className="text-muted-foreground">= {cuadreInfo.cierre.descripcion}</span>{cuadreInfo.saldoFinalCalculado !== undefined && cuadreInfo.saldoFinalCalculado !== cuadreInfo.cierre.saldo && (<span className="ml-1 font-semibold" style={{ color: SST_TOKENS.bad }}>· sin explicar {fmt(cuadreInfo.saldoFinalCalculado - cuadreInfo.cierre.saldo)}</span>)}</span>
+              )}
+              {cuadreInfo.cierre?.esVivo && <span className="text-muted-foreground">Cierre = {cuadreInfo.cierre.descripcion}</span>}
+            </div>
+          )}
           {loadingCD ? (
             <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" style={{ color: SST_TOKENS.navy }} /></div>
           ) : cuadreD.length === 0 ? (
@@ -1248,15 +1288,27 @@ export function PanelInventarioLIP() {
                   <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs">
                     <span className="text-muted-foreground">Empezó con</span>
                     <span className="font-semibold tabular-nums">
-                      {drill.saldoInicialPeriodo === undefined ? "— (sin cierre físico del mes anterior)" : fmt(drill.saldoInicialPeriodo)}
+                      {drill.saldoInicialPeriodo === undefined ? "— (sin periodo elegido)" : fmt(drill.saldoInicialPeriodo)}
                     </span>
-                    <span className="text-muted-foreground">→ va quedando con</span>
+                    <span className="text-muted-foreground">→ queda con</span>
                     <span className="font-semibold tabular-nums" style={{ color: SST_TOKENS.navy }}>
-                      {drill.saldoFinalPeriodo === undefined ? "— (sin cierre físico de este mes)" : fmt(drill.saldoFinalPeriodo)}
+                      {drill.saldoFinalPeriodo === undefined ? "—" : fmt(drill.saldoFinalPeriodo)}
                     </span>
+                    {drill.saldoCierre !== undefined && (
+                      <>
+                        <span className="text-muted-foreground">· stock al cierre</span>
+                        <span className="font-semibold tabular-nums">{fmt(drill.saldoCierre)}</span>
+                        {drill.descuadre ? (
+                          <span className="font-semibold" style={{ color: SST_TOKENS.bad }}>· sin explicar {fmt(drill.descuadre)}</span>
+                        ) : drill.descuadre === 0 ? (
+                          <span className="font-semibold" style={{ color: SST_TOKENS.ok }}>· cuadra</span>
+                        ) : null}
+                      </>
+                    )}
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Saldo corrido único del producto, de comienzo a fin — el lote y la ubicación de cada movimiento se ven en sus propias columnas (y en el soporte PDF), pero ya no cortan el hilo del saldo.
+                    {drill.baseDescripcion ? <>Base: <b>{drill.baseDescripcion}</b> · cierre: <b>{drill.cierreDescripcion}</b>. </> : null}
+                    Saldo corrido único del producto, transacción por transacción — el lote y la ubicación de cada movimiento se ven en sus propias columnas (y en el soporte PDF), pero no cortan el hilo del saldo.
                   </p>
                   <div className="max-h-[78vh] overflow-auto rounded-md border">
                     <table className="w-full min-w-[1000px] text-sm">
