@@ -452,12 +452,14 @@ export function CuadreInventario() {
               </Button>
             )}
             {sel.estado === "cerrado" && (
-              <Button size="sm" disabled={saving} onClick={cerrarMes} style={{ background: SST_TOKENS.ok, color: "white" }}>
-                {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Lock className="mr-1 h-4 w-4" />} Cerrar mes (ajusta stock)
+              <Button size="sm" disabled={saving} onClick={cerrarMes} style={{ background: SST_TOKENS.ok, color: "white" }} title={sel.tipo === "total" ? "Aprueba las correcciones de este conteo y las registra como transacciones. Este conteo queda como inventario inicial del mes." : "Aprueba las correcciones de este conteo cíclico y las registra como transacciones del mes. No modifica el inventario inicial (Conteo total)."}>
+                {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Lock className="mr-1 h-4 w-4" />} {sel.tipo === "total" ? "Cerrar mes (ajusta stock)" : "Cerrar conteo cíclico (ajusta stock)"}
               </Button>
             )}
             {sel.estado === "aprobado" && (
-              <Badge style={{ background: SST_TOKENS.ok, color: "white" }} className="self-center">Mes cerrado · stock ajustado</Badge>
+              <Badge style={{ background: SST_TOKENS.ok, color: "white" }} className="self-center">
+                {sel.tipo === "total" ? "Mes cerrado · inventario inicial del mes" : "Conteo cíclico cerrado · stock ajustado"}
+              </Badge>
             )}
           </div>
         </div>

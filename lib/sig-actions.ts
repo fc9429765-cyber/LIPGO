@@ -3715,6 +3715,30 @@ export async function crearCuadre(
         }
       }
       const corte = payload.fecha || fechaColombiaDe(new Date().toISOString())
+      // (2026-10-02) UN SOLO Conteo total por mes (regla de gerencia): es el
+      // inventario inicial del mes y no se repite. Si ya existe uno activo en
+      // el mismo mes (en cualquier estado salvo anulado), no se crea otro.
+      {
+        const mesCorte = corte.slice(0, 7)
+        const { data: existentes } = await supabase
+          .from("sig_inventario_cuadre")
+          .select("id, fecha, estado")
+          .eq("proyecto_id", proyectoId)
+          .eq("tipo", "total")
+          .eq("activo", true)
+          .neq("estado", "anulado")
+          .gte("fecha", `${mesCorte}-01`)
+          .lte("fecha", `${mesCorte}-31`)
+          .order("id", { ascending: true })
+          .limit(3)
+        if (existentes && existentes.length > 0) {
+          const e = existentes[0]
+          return {
+            success: false,
+            error: `Ya existe el Conteo total #${e.id} del ${fechaLargaEs(e.fecha)} (${e.estado}) para este mes. Solo puede haber un Conteo total por mes: es el inventario inicial. Si quedó mal, anúlalo primero; para verificaciones durante el mes usa el conteo cíclico.`,
+          }
+        }
+      }
       // (2026-10-02) "Sistema" = stock con el que AMANECE el día del conteo
       // (fin del día anterior): se retrocede TODO lo fechado ese día, entradas
       // incluidas. Antes una Entrada del día del conteo se dejaba dentro del
