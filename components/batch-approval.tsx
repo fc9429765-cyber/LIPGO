@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Loader2, AlertTriangle } from "lucide-react"
 import {
   getAvailableLoadOrders,
+  getLoadOrderById,
   getOrderProducts,
   getInventoryForProduct,
   approveBatchAllocation,
@@ -332,7 +333,45 @@ export function BatchApproval() {
     if (order) {
       setSelectedOrderCode(order.ordendecargue)
       setSelectedOrderPlaca(order.placa || "Sin vehículo asignado")
+    } else {
+      // La orden ya no está en la lista (se eliminó o la lista quedó vieja):
+      // nunca dejar un número anterior en memoria.
+      setSelectedOrderCode("")
+      setSelectedOrderPlaca("")
+      void loadAvailableOrders()
     }
+  }
+
+  // BLINDAJE (2026-10-02): antes de guardar, el número de orden se resuelve
+  // en la base por el id seleccionado. Caso real ID3, 30-sep: la asignación
+  // de MOL202609309719 se guardó con las líneas de MOL202609309720 porque la
+  // pantalla conservó un número en memoria que ya no correspondía (la orden
+  // se había creado y eliminado dos veces esa mañana). Si la orden no
+  // existe, no se guarda nada; si el número difiere, se usa el de la base.
+  const resolverOrdenSeleccionada = async (): Promise<string | null> => {
+    const id = Number.parseInt(selectedOrderId)
+    const orden = Number.isFinite(id) ? await getLoadOrderById(id) : null
+    if (!orden) {
+      toast({
+        title: "Orden no encontrada",
+        description: "La orden seleccionada ya no existe (pudo eliminarse). Recarga la lista y vuelve a elegirla.",
+        variant: "destructive",
+      })
+      setSelectedOrderId("")
+      setSelectedOrderCode("")
+      setSelectedOrderPlaca("")
+      await loadAvailableOrders()
+      return null
+    }
+    if (orden.ordendecargue !== selectedOrderCode) {
+      toast({
+        title: "Orden corregida",
+        description: `El número en pantalla (${selectedOrderCode || "vacío"}) no coincidía con la orden seleccionada (${orden.ordendecargue}). Se guarda con ${orden.ordendecargue}.`,
+      })
+      setSelectedOrderCode(orden.ordendecargue)
+      setSelectedOrderPlaca(orden.placa || "Sin vehículo asignado")
+    }
+    return orden.ordendecargue
   }
 
   const handleApproveBatch = async () => {
@@ -344,6 +383,8 @@ export function BatchApproval() {
       })
       return
     }
+    const codigoOrden = await resolverOrdenSeleccionada()
+    if (!codigoOrden) return
 
     const lineRequiringAlterno = lotAllocations.find((allocation) => lineNeedsAlterno(allocation))
     if (lineRequiringAlterno) {
@@ -433,7 +474,7 @@ export function BatchApproval() {
     try {
       const result = await approveBatchAllocation(
         {
-          ordendecargue: selectedOrderCode,
+          ordendecargue: codigoOrden,
           allocations: allocationsToApprove,
         },
         selectedEmpresaId,
@@ -485,6 +526,8 @@ export function BatchApproval() {
       })
       return
     }
+    const codigoOrden = await resolverOrdenSeleccionada()
+    if (!codigoOrden) return
 
     // Check for negative remaining quantities
     const lineRequiringAlterno = lotAllocations.find((allocation) => lineNeedsAlterno(allocation))
@@ -578,7 +621,7 @@ export function BatchApproval() {
     try {
       const result = await approveBatchAllocation(
         {
-          ordendecargue: selectedOrderCode,
+          ordendecargue: codigoOrden,
           allocations: allocationsToApprove,
         },
         selectedEmpresaId,

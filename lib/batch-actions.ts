@@ -67,6 +67,24 @@ export interface UpdateBatchHistoryData {
   placa: string | null
 }
 
+// BLINDAJE (2026-10-02): la orden con la que se guardan las salidas de
+// inventario se resuelve en la base por su id, en el momento de aprobar.
+// Caso real ID3, 30-sep: la asignación de la orden MOL202609309719 se
+// guardó con las líneas de MOL202609309720 (la orden de HERMARLY se había
+// creado y eliminado dos veces esa mañana y la pantalla quedó con un
+// número en memoria que ya no correspondía): 9720 quedó registrada dos
+// veces y 9719 nunca. Devuelve null si la orden ya no existe.
+export async function getLoadOrderById(id: number): Promise<{ id: number; ordendecargue: string; placa: string | null } | null> {
+  try {
+    const supabase = await createClient()
+    const { data, error } = await supabase.from("cabeceraoc").select("id, ordendecargue, placa").eq("id", id).maybeSingle()
+    if (error || !data) return null
+    return { id: data.id, ordendecargue: data.ordendecargue, placa: data.placa ?? null }
+  } catch {
+    return null
+  }
+}
+
 export async function getAvailableLoadOrders(selectedEmpresaId?: number | null): Promise<LoadOrder[]> {
   try {
     // Use selectedEmpresaId if provided, otherwise fall back to current user's empresa_id
