@@ -663,33 +663,38 @@ export function Sidebar({
           (no cambia el resto de la app), + hero animado de logística. No toca
           permisos ni rutas. */}
       <style>{`
+        /* Marca LIP (2026-10-02): el fondo oscuro es el verde azulado profundo
+           del rombo del logo (#052e2b → #0b3b3a), no azul marino; el acento es
+           el turquesa del logo (#00d4ce). */
         .lipgo-sb{
-          --card:#0b2138; --card-foreground:#ffffff; --foreground:#ffffff;
-          --background:#0e2b46; --muted-foreground:#d6e6f5;
-          --accent:#1c4a72; --accent-foreground:#ffffff;
-          --border:#1b3350; --input:#1b3350; --primary:#00c2dc; --ring:#00c2dc;
-          background-image:linear-gradient(180deg,#0b2138,#071a30);
+          --card:#06302e; --card-foreground:#ffffff; --foreground:#ffffff;
+          --background:#0b3b3a; --muted-foreground:#cfe9e6;
+          --accent:#115454; --accent-foreground:#ffffff;
+          --border:#164a49; --input:#164a49; --primary:#00d4ce; --ring:#00d4ce;
+          background-image:linear-gradient(180deg,#07302e,#041f1e);
         }
         /* Letras del menú en BLANCO con alto contraste (peticion de diseño). */
         .lipgo-sb nav button span{ color:#ffffff; }
-        .lipgo-sb nav button{ color:#eaf4ff; }
-        .lipgo-sb .bg-primary{ box-shadow:0 0 12px rgba(0,194,220,.65); }
+        .lipgo-sb nav button{ color:#eafaf9; }
+        .lipgo-sb .bg-primary{ box-shadow:0 0 12px rgba(0,212,206,.6); }
         .lipgo-hero-bg{ background:
-          radial-gradient(120% 90% at 82% 0%, color-mix(in srgb, var(--hero,#00c2dc) 34%, transparent), transparent 58%),
-          radial-gradient(95% 85% at 0% 100%, rgba(28,86,150,.42), transparent 55%);
+          radial-gradient(120% 90% at 82% 0%, color-mix(in srgb, var(--hero,#00d4ce) 34%, transparent), transparent 58%),
+          radial-gradient(95% 85% at 0% 100%, rgba(14,124,120,.45), transparent 55%);
           transition: background .5s ease; }
-        .lipgo-tag{ font:600 10px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.14em; text-transform:uppercase; color:#7fe6f4; display:flex; align-items:center; gap:6px; }
+        .lipgo-tag{ font:600 10px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.14em; text-transform:uppercase; color:#8ff0ec; display:flex; align-items:center; gap:6px; }
         .lipgo-live{ width:6px; height:6px; border-radius:50%; background:#37f5a0; box-shadow:0 0 8px #37f5a0; }
-        .lipgo-logo-mark{ width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,#0a3f6e,#00c2dc); display:flex; align-items:center; justify-content:center; font:800 15px/1 sans-serif; color:#fff; box-shadow:0 0 14px rgba(0,194,220,.5); }
-        .lipgo-word{ font:800 19px/1 sans-serif; letter-spacing:-.02em; color:#fff; }
-        .lipgo-tile{ display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:8px; background:#123650; border:1px solid #22456a; flex:none; }
+        /* El rombo REAL del logo (public/lipgo-icon.png), con un halo turquesa suave. */
+        .lipgo-logo-img{ width:32px; height:32px; flex:none; filter:drop-shadow(0 0 10px rgba(0,212,206,.45)); }
+        .lipgo-word{ font:800 19px/1 var(--font-plex),sans-serif; letter-spacing:-.02em; color:#fff; }
+        .lipgo-word em{ font-style:normal; color:#21e3dd; }
+        .lipgo-tile{ display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:8px; background:#0d4341; border:1px solid #176461; flex:none; }
         .lipgo-route{ stroke: color-mix(in srgb, var(--hero,#82c8eb) 58%, transparent); stroke-width:1.6; fill:none; stroke-linecap:round; stroke-dasharray:5 6; transition: stroke .5s ease; }
         .lipgo-route.b{ stroke: color-mix(in srgb, var(--hero,#82c8eb) 26%, transparent); }
         .lipgo-node{ fill:#cfeff8; } .lipgo-node.hub{ fill: var(--hero,#00c2dc); transition: fill .5s ease; }
         /* Actor temático del héroe (adaptativo por módulo). El color viene de --hero. */
         .hero-light{ fill:#dff2fb; } .hero-accent{ fill: var(--hero,#00c2dc); }
         .hero-lightstroke{ stroke:#dff2fb; } .hero-accent-stroke{ stroke: var(--hero,#00c2dc); }
-        .lipgo-sect{ font:700 9.5px/1 sans-serif; letter-spacing:.16em; text-transform:uppercase; color:#5f7c96; padding:13px 14px 5px; }
+        .lipgo-sect{ font:700 9.5px/1 sans-serif; letter-spacing:.16em; text-transform:uppercase; color:#8fc9c5; padding:13px 14px 5px; }
         @media (prefers-reduced-motion: no-preference){
           .lipgo-route{ animation: lipgo-flow 1.1s linear infinite; }
           .lipgo-actor{ animation: lipgo-run 6s ease-in-out infinite, lipgo-fadein .5s ease-out; }
@@ -747,7 +752,7 @@ export function Sidebar({
           </button>
           {collapsed ? (
             <div className="flex h-full items-center justify-center">
-              <div className="lipgo-logo-mark">L</div>
+              <Image src="/lipgo-icon.png" alt="LIPgo" width={32} height={32} className="lipgo-logo-img" priority />
             </div>
           ) : (
             <button
@@ -758,8 +763,8 @@ export function Sidebar({
               className="absolute bottom-3 left-4 z-10 flex flex-col items-start gap-1.5 text-left"
             >
               <span className="flex items-center gap-2.5">
-                <span className="lipgo-logo-mark">L</span>
-                <span className="lipgo-word">LIPgo</span>
+                <Image src="/lipgo-icon.png" alt="" width={32} height={32} className="lipgo-logo-img" priority />
+                <span className="lipgo-word">LIP<em>GO</em></span>
               </span>
               <span className="lipgo-tag">
                 <span className="lipgo-live" />
@@ -820,8 +825,8 @@ export function Sidebar({
                 }}
                 className="flex items-center gap-2 text-left"
               >
-                <span className="lipgo-logo-mark">L</span>
-                <span className="lipgo-word">LIPgo</span>
+                <Image src="/lipgo-icon.png" alt="" width={32} height={32} className="lipgo-logo-img" priority />
+                <span className="lipgo-word">LIP<em>GO</em></span>
               </button>
             </div>
             <div className="px-3 pt-3">

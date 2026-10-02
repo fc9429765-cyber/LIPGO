@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Image from "next/image"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { User, LogOut, MessageCircle, Building2, KeyRound, Search } from "lucide-react"
 import { ColombiaClock } from "./colombia-clock"
@@ -78,6 +79,8 @@ export function TopBar() {
       <div className="container mx-auto px-2 sm:px-6 py-2 sm:py-4 max-w-7xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
+            {/* En celular la barra lateral va escondida: el rombo de LIPgo queda aquí, discreto. */}
+            <Image src="/lipgo-icon.png" alt="LIPgo" width={26} height={26} className="h-6 w-6 shrink-0 md:hidden" />
             <ColombiaClock />
             <span className="text-[10px] sm:text-sm text-muted-foreground">·</span>
             {profile ? (

@@ -314,7 +314,9 @@
   --color-info-fg: #1E40AF;
   --color-info-bg: #EFF6FF;
   --color-info-bd: #BFDBFE;
-  --color-marca: #0B2F57;
+  /* Marca LIP: verde azulado profundo y turquesa del rombo del logo. */
+  --color-marca: #0E3B3B;
+  --color-turquesa: #00D4CE;
   --color-acento: #0F766E;
   --color-acento-tinte: #CCFBF1;
 }

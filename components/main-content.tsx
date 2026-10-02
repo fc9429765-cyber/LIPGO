@@ -1136,15 +1136,17 @@ export function MainContent({
               {/* Hero premium con IA (rediseño 2026-07-03). Solo layout; el botón
                   abre el Asistente IA que ya existe. */}
               <style>{`
-                .lipgo-home-hero{ position:relative; overflow:hidden; border-radius:18px; color:#eaf6fa;
+                /* Marca LIP (2026-10-02): el héroe usa el verde azulado profundo y el
+                   turquesa del rombo del logo, no azul marino. */
+                .lipgo-home-hero{ position:relative; overflow:hidden; border-radius:16px; color:#eafaf9;
                   background:
-                    radial-gradient(80% 130% at 92% -20%, rgba(0,194,220,.30), transparent 55%),
-                    radial-gradient(70% 120% at -5% 120%, rgba(95,120,225,.32), transparent 55%),
-                    linear-gradient(120deg,#0a2545,#0b2f57 55%,#0e4a72);
-                  border:1px solid rgba(120,190,230,.15); }
-                .lipgo-ai-bar{ background:rgba(255,255,255,.1); border:1px solid rgba(180,230,245,.28); backdrop-filter:blur(4px); }
-                .lipgo-ai-bar input::placeholder{ color:#bfe0ec; }
-                .lipgo-ai-chip{ color:#d6eef5; background:rgba(255,255,255,.08); border:1px solid rgba(180,230,245,.2); transition:background .15s; }
+                    radial-gradient(80% 130% at 92% -20%, rgba(0,221,214,.32), transparent 55%),
+                    radial-gradient(70% 120% at -5% 120%, rgba(14,124,120,.40), transparent 55%),
+                    linear-gradient(120deg,#052e2b,#0b3b3a 55%,#0f5252);
+                  border:1px solid rgba(0,212,206,.18); }
+                .lipgo-ai-bar{ background:rgba(255,255,255,.1); border:1px solid rgba(140,240,236,.28); backdrop-filter:blur(4px); }
+                .lipgo-ai-bar input::placeholder{ color:#bfecea; }
+                .lipgo-ai-chip{ color:#d6f5f3; background:rgba(255,255,255,.08); border:1px solid rgba(140,240,236,.2); transition:background .15s; }
                 .lipgo-ai-chip:hover{ background:rgba(255,255,255,.16); }
               `}</style>
               <div className="lipgo-home-hero mb-3 px-4 py-2.5">
@@ -1153,7 +1155,7 @@ export function MainContent({
                     {nowInfo.saludo}
                     {primerNombre ? `, ${primerNombre}` : ""}
                   </h1>
-                  <span className="text-xs sm:text-sm" style={{ color: "#9fd4e6" }}>
+                  <span className="text-xs sm:text-sm" style={{ color: "#9fe6e2" }}>
                     {nowInfo.fecha}
                     {selectedEmpresaNombre ? ` · ${selectedEmpresaNombre}` : ""}
                   </span>
