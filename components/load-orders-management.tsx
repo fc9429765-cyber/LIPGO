@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 // Ver comentario en el JSX abajo.
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Chip, Eyebrow } from "@/components/ui/lipgo"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
@@ -468,18 +469,24 @@ export function LoadOrdersManagement({ initialSearch, onInitialSearchApplied }: 
     <div className="p-2 sm:p-4 space-y-4">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold">Gestión de Órdenes de Cargue</h2>
-          <p className="text-xs sm:text-sm text-muted-foreground">Administra las órdenes de cargue generadas</p>
+          <Eyebrow>Recepción y Despacho{selectedEmpresaId ? ` · ID ${selectedEmpresaId}` : ""}</Eyebrow>
+          <h1 className="text-xl font-bold leading-tight sm:text-2xl">Gestión de Órdenes de Cargue</h1>
+          <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground sm:text-sm">
+            <span>Administra las órdenes de cargue generadas</span>
+            {!loading && orders.length > 0 && (
+              <Chip tono="neutro">
+                {filteredOrders.length === orders.length ? `${orders.length} órdenes` : `${filteredOrders.length} de ${orders.length} órdenes`}
+              </Chip>
+            )}
+          </p>
         </div>
 
         {selectedOrderEmpresa && (
-          <Card className="p-3 bg-blue-50 border-blue-200">
-            <div className="text-sm space-y-1">
-              <p className="font-semibold text-blue-900">Empresa: {selectedOrderEmpresa.nombre}</p>
-              <p className="text-blue-700">NIT: {selectedOrderEmpresa.nit}</p>
-              <p className="text-blue-700">Dirección: {selectedOrderEmpresa.direccion}</p>
-            </div>
-          </Card>
+          <div className="lg-card border-info-bd bg-info-bg p-3 text-sm text-info-fg">
+            <p className="font-semibold">Empresa: {selectedOrderEmpresa.nombre}</p>
+            <p>NIT: {selectedOrderEmpresa.nit}</p>
+            <p>Dirección: {selectedOrderEmpresa.direccion}</p>
+          </div>
         )}
 
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
