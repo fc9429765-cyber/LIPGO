@@ -18,6 +18,7 @@ import { setVisibleInterval } from "@/lib/polling"
 import { useAuth } from "@/components/auth-provider"
 import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
+import { Esqueleto } from "@/components/ui/lipgo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -555,8 +556,18 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
 
       <div className="space-y-3 p-3 md:space-y-4 md:p-6">
         {loading && !data ? (
-          <div className="flex items-center justify-center py-16 text-muted-foreground">
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Cargando Centro de Coordinación...
+          <div className="flex flex-col gap-4" aria-busy aria-label="Cargando Centro de Coordinación">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className={`lg-card p-4 ${i === 0 ? "col-span-2" : ""}`}>
+                  <Esqueleto lineas={3} />
+                </div>
+              ))}
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+              <div className="lg-card p-5"><Esqueleto lineas={6} /></div>
+              <div className="lg-card p-5"><Esqueleto lineas={5} /></div>
+            </div>
           </div>
         ) : !data ? (
           <p className="py-8 text-sm text-muted-foreground">No se pudo cargar la información.</p>
@@ -701,7 +712,7 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
                 }`}
               >
                 <div
-                  className={`text-[10px] font-semibold uppercase tracking-wide ${
+                  className={`lg-eyebrow ${
                     data.kpis.esperaLotesPromedioMin === null
                       ? "text-muted-foreground"
                       : data.kpis.esperaLotesPromedioMin >= 60
@@ -764,7 +775,7 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
                 </div>
               </button>
               <div className="rounded-lg border border-[#0e3b3b] bg-[#0e3b3b] p-3 text-white">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-[#8fd3ce]">Proyección de cierre</div>
+                <div className="lg-eyebrow text-[#8fd3ce]">Proyección de cierre</div>
                 <div className="lg-num text-2xl font-bold text-[#21d4c8]">{data.kpis.proyeccionHoraFinCola || "—"}</div>
                 <div className="truncate whitespace-nowrap text-[11px] text-[#cfe9e6]">
                   muelles {data.kpis.muellesOcupados}/{data.kpis.muellesTotal}
@@ -790,10 +801,10 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
                     <button
                       key={f.value}
                       onClick={() => setFiltroTipo(f.value)}
-                      className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
                         filtroTipo === f.value
-                          ? "border-[#12706b] bg-[#12706b] text-white"
-                          : "border-border bg-background text-muted-foreground hover:bg-muted"
+                          ? "border-foreground bg-foreground text-background"
+                          : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground"
                       }`}
                     >
                       {f.label}
