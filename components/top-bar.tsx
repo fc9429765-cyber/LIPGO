@@ -128,7 +128,7 @@ export function TopBar() {
               title="Buscar o ir a… (Ctrl+K)"
             >
               <Search className="h-3.5 w-3.5" />
-              Buscar o ir a…
+              Buscar orden, placa, persona o pantalla…
               <kbd className="rounded border border-border bg-background px-1 font-sans text-[10px] text-muted-foreground">Ctrl K</kbd>
             </button>
             <button

@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/components/auth-provider"
 import { cn } from "@/lib/utils"
+import { Chip, Cifra, Esqueleto, Eyebrow } from "@/components/ui/lipgo"
 import { getCatalogosProgramacion, getCumplimientoProgramacion, getProgramacion, guardarProgramacion } from "@/lib/programacion-cliente-actions"
 import {
   HORA_LIMITE,
@@ -69,18 +70,7 @@ function rangoDe(p: Preset, hoy: string): { desde: string; hasta: string } {
 
 const lineaVacia = (): LineaProgramacion => ({ tipovehiculo: "", destino: "", producto: "", cantidad: 1, observaciones: "" })
 const colorPct = (p: number | null) => (p == null ? "#64748b" : p >= 90 ? "#0f766e" : p >= 70 ? "#d97706" : "#dc2626")
-
-function Cifra({ label, valor, sub, color }: { label: string; valor: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="px-4 py-3">
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="text-2xl font-semibold tabular-nums" style={color ? { color } : undefined}>
-        {valor}
-      </p>
-      {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
-    </div>
-  )
-}
+const tonoPct = (p: number | null): "neutro" | "ok" | "atencion" | "critico" => (p == null ? "neutro" : p >= 90 ? "ok" : p >= 70 ? "atencion" : "critico")
 
 /**
  * modo:
@@ -230,7 +220,7 @@ export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" | "geren
       {/* Cabecera */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-700">
+          <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-acento-tinte text-acento">
             <CalendarClock className="h-5 w-5" />
           </span>
           <div>
@@ -258,7 +248,7 @@ export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" | "geren
       </div>
 
       {errorCat && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+        <div className="rounded-xl border border-atencion-bd bg-atencion-bg p-3 text-xs text-atencion-fg">
           <p className="flex items-center gap-1.5 font-medium">
             <AlertTriangle className="h-3.5 w-3.5" /> {errorCat}
           </p>
@@ -266,11 +256,11 @@ export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" | "geren
       )}
 
       {/* Estado del día elegido (en gerencia va después del cumplimiento) */}
-      <section className={cn("rounded-xl border border-border bg-card", modo === "gerencia" && "order-2")}>
+      <section className={cn("lg-card", modo === "gerencia" && "order-2")}>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
           <div>
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Programación para</p>
-            <h2 className="text-sm font-semibold">{fechaLarga(fecha)}</h2>
+            <Eyebrow>Programación para</Eyebrow>
+            <h2 className="text-[15px] font-bold leading-tight">{fechaLarga(fecha)}</h2>
           </div>
           {cargandoProg ? (
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -280,7 +270,7 @@ export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" | "geren
             <span
               className={cn(
                 "inline-flex flex-wrap items-center gap-1.5 rounded-md border px-2 py-1 text-xs",
-                vigente.aTiempo ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-900",
+                vigente.aTiempo ? "border-ok-bd bg-ok-bg text-ok-fg" : "border-atencion-bd bg-atencion-bg text-atencion-fg",
               )}
             >
               {vigente.aTiempo ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
@@ -291,7 +281,7 @@ export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" | "geren
               </span>
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-atencion-bd bg-atencion-bg px-2 py-1 text-xs text-atencion-fg">
               <AlertTriangle className="h-3.5 w-3.5" />
               Sin programación · hora límite {limite}
               {yaPasoLimite ? " (ya pasó: lo que envíes queda como tarde)" : ""}
@@ -440,11 +430,11 @@ export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" | "geren
       </section>
 
       {/* Cumplimiento (en gerencia va primero) */}
-      <section className={cn("rounded-xl border border-border bg-card", modo === "gerencia" && "order-1")}>
+      <section className={cn("lg-card overflow-hidden", modo === "gerencia" && "order-1")}>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
           <div>
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Programado vs. llegó a portería · por tipo de vehículo</p>
-            <h2 className="text-sm font-semibold">Cumplimiento de la programación</h2>
+            <Eyebrow>Programado vs. llegó a portería · por tipo de vehículo</Eyebrow>
+            <h2 className="text-[15px] font-bold leading-tight">Cumplimiento de la programación</h2>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             {PRESETS.map((p) => (
@@ -486,8 +476,11 @@ export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" | "geren
         {errorCump ? (
           <div className="m-4 rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">{errorCump}</div>
         ) : cargandoCump && !cump ? (
-          <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Calculando…
+          <div className="grid grid-cols-2 gap-6 px-5 py-5 sm:grid-cols-4" aria-busy>
+            <Esqueleto lineas={3} />
+            <Esqueleto lineas={3} />
+            <Esqueleto lineas={3} />
+            <Esqueleto lineas={3} />
           </div>
         ) : cump && cump.dias.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-muted-foreground">
@@ -495,20 +488,23 @@ export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" | "geren
           </div>
         ) : cump ? (
           <>
-            <div className="grid grid-cols-2 divide-x divide-border border-b border-border sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-y-4 border-b border-border px-4 py-4 sm:grid-cols-4 sm:gap-x-6 sm:px-5">
               <Cifra
+                tamano="compacta"
                 label="Cumplimiento"
                 valor={cump.porcentaje == null ? "—" : `${NUM.format(cump.porcentaje)} %`}
                 sub={cump.programados > 0 ? `${cump.cumplidos} de ${cump.programados} programados llegaron` : "sin programación en el rango"}
-                color={colorPct(cump.porcentaje)}
+                tono={tonoPct(cump.porcentaje)}
+                progreso={cump.porcentaje ?? undefined}
               />
-              <Cifra label="Llegaron" valor={cump.llegaron} sub={`${cump.noProgramados} fuera de programación`} />
-              <Cifra label="No llegaron" valor={cump.noLlegaron} sub="programados que no se presentaron" color={cump.noLlegaron > 0 ? "#d97706" : undefined} />
+              <Cifra tamano="compacta" label="Llegaron" valor={NUM.format(cump.llegaron)} sub={`${cump.noProgramados} fuera de programación`} />
+              <Cifra tamano="compacta" label="No llegaron" valor={NUM.format(cump.noLlegaron)} sub="programados que no se presentaron" tono={cump.noLlegaron > 0 ? "atencion" : "neutro"} />
               <Cifra
+                tamano="compacta"
                 label="Enviadas a tiempo"
                 valor={cump.diasConProgramacion > 0 ? `${cump.diasATiempo}/${cump.diasConProgramacion}` : "—"}
                 sub={cump.diasSinProgramacion > 0 ? `${cump.diasSinProgramacion} día${cump.diasSinProgramacion === 1 ? "" : "s"} operado${cump.diasSinProgramacion === 1 ? "" : "s"} sin programación` : "todos los días operados tuvieron programación"}
-                color={cump.diasSinProgramacion > 0 ? "#d97706" : undefined}
+                tono={cump.diasSinProgramacion > 0 ? "atencion" : "neutro"}
               />
             </div>
 
