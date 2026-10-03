@@ -192,45 +192,49 @@ export const APRENDIZAJE_PEDIDOS: ContenidoAprendizaje[] = [
   },
   {
     modulo: "Dashboard Pedidos",
-    resumen: "Tablero gerencial de pedidos: OTIF, tiempos de entrega y eficiencia de carga.",
+    resumen: "Indicadores logisticos del cliente por periodo: cumplimiento de la promesa, atraso, completitud, volumen, anticipacion, pendientes y demanda perdida.",
     proposito:
-      "Tablero de indicadores para leer la salud del proceso de pedidos sin abrir pedido por pedido. Arriba muestra un resumen ejecutivo (pedidos, lineas, facturado y ticket promedio) y luego tres pestañas: cumplimiento del dia, tiempos y atrasos, y eficiencia de carga. Es de consulta: aqui no se modifica ningun pedido.",
+      "Tablero para que el gerente del cliente decida con datos, no para mirar graficos. Un solo selector de periodo (semana, quincena, mes, mes anterior, 90 dias o rango) gobierna toda la pantalla y cada bloque responde a una pregunta: ¿se cargo el dia de la promesa?, ¿de cuanto es el atraso?, ¿se entrega completo o en partes?, ¿que dia pesa mas y cuanto va por vehiculo?, ¿con cuanto tiempo llega el pedido?, ¿que esta pendiente hoy? y ¿que se perdio y por que? Es de consulta; las acciones llevan a Gestionar pedidos. Lo comercial (vendedores, facturado, ticket) vive en el CRM, no aqui.",
     puedes: [
-      "Ver de un vistazo cuantos pedidos y lineas hay, cuanto suman en facturacion y el ticket promedio.",
-      "Medir entregas a tiempo, pedidos completos (In-Full) y el OTIF global, ademas del volumen despachado.",
-      "Comparar el tiempo de entrega prometido contra el real y detectar pedidos atrasados, que vencen hoy o por vencer.",
-      "Revisar el cumplimiento de carga: porcentaje global, tasa de carga perfecta y unidades pendientes, con comparacion contra meses anteriores.",
-      "Ver los top 5 de destinos, vendedores y clientes por volumen de pedidos.",
-      "Actualizar los datos en el momento con el boton Actualizar.",
+      "Elegir el periodo y ver la franja: pedidos prometidos, % a tiempo, kilos cargados frente a prometidos, pendientes del periodo y % de pedidos del mismo dia.",
+      "Leer el cumplimiento semana a semana (a tiempo, tarde, pendiente, no entregado, anulado), la tendencia de los ultimos seis meses y el detalle por tipo de despacho y por cliente.",
+      "Ver el tamaño del atraso cuando se incumple (promedio, mediana, maximo y su distribucion) y cuantos dias llevan los pendientes.",
+      "Ver completitud: entregas completas frente a parciales y los productos que mas quedan pendientes en los parciales.",
+      "Ver el volumen por dia de la semana, el dia pico, las ordenes de cargue y los kilos cargados por orden.",
+      "Ver la anticipacion con que se registra el pedido (mismo dia, 1 dia, 2 a 3, mas de 3) y los clientes que mas piden para el mismo dia.",
+      "Ver la foto de hoy: pendientes y atrasados por antiguedad y por cliente, y el cierre del dia, con botones a la Cola y a Depurar pendientes.",
+      "Ver los pedidos no entregados (depurados) por motivo y por cliente: la demanda perdida que debe volver a comercial.",
     ],
     noPuedes: [
       "Crear, editar o aprobar pedidos. Es un tablero de solo lectura.",
-      "Exportar los graficos; para llevarte datos usa la exportacion a Excel de Gestionar pedidos.",
+      "Ver indicadores comerciales (vendedores, facturado, ticket promedio): estan en el CRM.",
+      "Ver flete, demora o In-Full antiguo: esos campos no se registran y se retiraron para no mostrar datos vacios.",
     ],
     funcionalidades: [
       {
-        nombre: "Resumen ejecutivo",
+        nombre: "Definiciones",
         descripcion:
-          "Franja superior con fecha y hora, total de pedidos, total de lineas, valor facturado y ticket promedio del alcance visible.",
+          "Periodo = pedidos cuya fecha prometida cae en el rango. A tiempo = la orden de cargue (o la entrega, si no hubo OC) se dio el dia de la promesa o antes; el % se calcula sobre los pedidos que ya tienen fecha de cargue. Kilos = suma del peso de las lineas; kilos cargados solo donde hay unidades cargadas registradas, y se informa en cuantos pedidos existe el dato.",
       },
       {
-        nombre: "Centro de Comando Operativo",
+        nombre: "Kilos donde no hay dinero",
         descripcion:
-          "Cumplimiento del cierre del dia/mes/año: entregas a tiempo vs tarde, In-Full, OTIF global, volumen despachado, cuantos pedidos ingresaron y se entregaron, y los top 5 de destinos, vendedores y clientes.",
+          "Si menos de la mitad de los pedidos del periodo tiene valor (caso Avimol), el tablero habla en kilos y unidades; si lo tiene, muestra ademas el valor prometido.",
       },
       {
-        nombre: "Tiempos y Cuellos de Botella",
+        nombre: "Foto de hoy",
         descripcion:
-          "Lead time prometido vs real, pedidos a tiempo vs atrasados, retraso promedio y semaforo de pedidos atrasados, que vencen hoy y por vencer.",
+          "Pendiente y atraso y Cierre del dia no dependen del periodo: son el estado actual, con la misma definicion de la Cola de Gestionar pedidos.",
       },
       {
-        nombre: "Eficiencia de Carga e In-Full",
+        nombre: "Demanda perdida",
         descripcion:
-          "Porcentaje de cumplimiento global, tasa de carga perfecta y unidades pendientes, con tendencia del ultimo mes, delta contra el mes anterior, promedio de 3 meses y mejor/peor mes.",
+          "Los pedidos depurados (no entregado) se agrupan por motivo (reemplazado, el cliente desistio, modificado, vencido, otro) y por cliente, por fecha de depuracion dentro del periodo.",
       },
     ],
     consejos: [
       "El tablero sigue el selector global de empresa: cambia de proyecto en la barra superior y los indicadores se recargan solos.",
+      "Si el % a tiempo baja en un tipo de despacho o un cliente, abre la Cola filtrada por atrasados y revisa Programacion de mañana: la causa suele ser capacidad de vehiculos o promesas muy cortas.",
     ],
   },
 

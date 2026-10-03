@@ -12,124 +12,25 @@
 //     si era parcial) con motivo, quién y cuándo. Requiere clave personal con el
 //     proceso `ped_depurar` (SQL 215). Solo toca pedidos sin rastro logístico.
 //   · En previsualización (NEXT_PUBLIC_VERCEL_ENV = preview) la depuración SIMULA
-//     por defecto: no escribe, solo informa qué haría.
+//     por defecto, salvo en el proyecto de pruebas (ID4).
 //
 // Lecturas: cliente admin "sistema" (auditoría neutra). Escrituras: cliente admin
-// del actor (queda en la auditoría quién depuró).
+// del actor (queda en la auditoría quién depuró). El núcleo compartido con el
+// Dashboard vive en lib/pedidos-cola-core.ts.
 
 import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 import { fetchAllRows } from "@/lib/fetch-all-rows"
 import { autorizar } from "@/lib/autorizaciones-core"
 import { desdeDePeriodo, hoyBogotaISO, type PeriodoListado } from "@/lib/periodo-listados"
 import { accesoPedidos, limitarPorOwners, type AccesoPedidos } from "@/lib/acceso-empresa"
-import {
-  derivarEstado,
-  diasEntre,
-  sumarDiasISO,
-  normalizarEstado,
-  textoMotivo,
-  ESTADO_ENTREGA_PARCIAL,
-  ESTADO_NO_ENTREGADO,
-  FILTRO_ABIERTOS_POSTGREST,
-  MOTIVOS_DEPURACION,
-  type EstadoDerivado,
-  type MotivoDepuracion,
-} from "@/lib/pedidos-estado"
+import { sumarDiasISO, normalizarEstado, textoMotivo, ESTADO_ENTREGA_PARCIAL, ESTADO_NO_ENTREGADO, FILTRO_ABIERTOS_POSTGREST, MOTIVOS_DEPURACION, type MotivoDepuracion } from "@/lib/pedidos-estado"
+import { MSG_SIN_ACCESO, aPedidoCola, cargarCola, n0, resumenLineas, resumir, txt, type ColaPedidos, type LineaPedido, type PedidoCola, type ResLineas, type ResumenCola } from "@/lib/pedidos-cola-core"
+
+export type { PedidoCola, ResumenCola, ColaPedidos, LineaPedido } from "@/lib/pedidos-cola-core"
 
 type Resp<T> = { success: true; data: T } | { success: false; message: string }
 
-const MSG_SIN_ACCESO = "Sin acceso a la empresa."
-const n0 = (v: unknown) => Number(v) || 0
-const txt = (v: unknown) => (v == null ? null : String(v))
-
-// ─────────────────────────────── Tipos ───────────────────────────────
-
-export interface PedidoCola {
-  idpedido: number
-  id_empresa: number
-  pedido: string | null
-  orden_de_compra: string | null
-  cliente: string
-  vendedor: string | null
-  destino: string | null
-  medio: string | null
-  direccion: string | null
-  tipo_despacho: string | null
-  condicion_pago: string | null
-  fecha: string
-  fecha_programada: string | null
-  creado_en: string | null
-  estado: string | null
-  aprobado: string | null
-  revisioncartera: string | null
-  revisiongerencia: string | null
-  ocargue: string | null
-  fechaordencargue: string | null
-  fechadeentrega: string | null
-  vehiculo: string | null
-  transporte: string | null
-  factura: string | null
-  total_pagar: number
-  pdfpedido: string | null
-  observaciones: string | null
-  empresa: string | null
-  empresafactura: string | null
-  motivo_no_entrega: string | null
-  depurado_por: string | null
-  depurado_en: string | null
-  /** Agregados de pedidosdetalle. */
-  kg: number
-  unidades: number
-  lineas: number
-  lineasConOcargue: number
-  unidadesCargadas: number
-  unidadesPendientes: number
-  /** Estado derivado (lib/pedidos-estado.ts). */
-  calc: EstadoDerivado
-}
-
-export interface ResumenCola {
-  abiertos: number
-  atrasados: number
-  /** Atrasados de 1 a 15 días. */
-  atrasadosRecientes: number
-  /** Atrasados de más de 15 días (sin rastro logístico). */
-  atrasadosViejos: number
-  hoy: number
-  kgHoy: number
-  manana: number
-  kgManana: number
-  /** Programados para después de mañana. */
-  futuros: number
-  sinFecha: number
-  enCargue: number
-  parciales: number
-  porAprobar: number
-  porAprobarConCartera: number
-  candidatosSinRastro: number
-  candidatosParciales: number
-}
-
-export interface ColaPedidos {
-  hoy: string
-  manana: string
-  pedidos: PedidoCola[]
-  resumen: ResumenCola
-}
-
-export interface LineaPedido {
-  transid: number
-  producto: string
-  categoria: string | null
-  unidades: number
-  peso: number
-  precio_und: number
-  total_linea: number
-  ocargue: string | null
-  unidadescargadas: number
-  unidadespendientes: number
-  estado: string | null
-}
+// ─────────────────────────────── Tipos propios de Gestionar ───────────────────────────────
 
 export interface CandidatoDepuracion extends PedidoCola {
   tipo: "sin_rastro" | "parcial"
@@ -171,7 +72,6 @@ export interface ResultadoDepuracion {
   depurados: number
   omitidos: { idpedido: number; razon: string }[]
   autorizadoPor: string | null
-  /** Pedidos que quedaron (o quedarían) como "no entregado" / "entrega parcial". */
   comoNoEntregado: number
   comoEntregaParcial: number
 }
@@ -197,9 +97,7 @@ export interface DemandaFecha {
   porAprobar: number
   porCliente: DemandaCliente[]
   porDespacho: { tipo: string; pedidos: number; kg: number }[]
-  /** Atrasados de 1 a 15 días que podrían salir el mismo día. */
   atrasadosRecientes: { total: number; kg: number; porCliente: { cliente: string; pedidos: number; kg: number; promesas: string[] }[] }
-  /** Próximos 8 días (desde mañana) con su demanda, para el selector de fecha. */
   proximosDias: { fecha: string; pedidos: number; kg: number }[]
   programacion: {
     usa: boolean
@@ -210,151 +108,16 @@ export interface DemandaFecha {
     aTiempo: boolean | null
     enviadaEn: string | null
   }
-  /** Catálogo de tipos de vehículo con capacidad (t), para la referencia. */
   tiposVehiculo: { nombre: string; capacidad: number | null }[]
 }
 
-// ─────────────────────────────── Internos ───────────────────────────────
-
-type ResLineas = { kg: number; und: number; lineas: number; oc: number; cargadas: number; pend: number }
-
-async function resumenLineas(sb: any, empresaId: number, ids: number[]): Promise<Map<number, ResLineas>> {
-  const m = new Map<number, ResLineas>()
-  for (let i = 0; i < ids.length; i += 150) {
-    const chunk = ids.slice(i, i + 150)
-    const rows = await fetchAllRows((from, to) =>
-      sb
-        .from("pedidosdetalle")
-        .select("idpedido, transid, peso, unidades, ocargue, unidadescargadas, unidades_cargadas, unidadespendientes")
-        .eq("id_empresa", empresaId)
-        .in("idpedido", chunk)
-        .order("transid", { ascending: true })
-        .range(from, to),
-    )
-    for (const d of rows) {
-      const r = m.get(d.idpedido) ?? { kg: 0, und: 0, lineas: 0, oc: 0, cargadas: 0, pend: 0 }
-      r.kg += n0(d.peso)
-      r.und += n0(d.unidades)
-      r.lineas += 1
-      if (d.ocargue) r.oc += 1
-      r.cargadas += n0(d.unidadescargadas ?? d.unidades_cargadas)
-      r.pend += n0(d.unidadespendientes)
-      m.set(d.idpedido, r)
-    }
-  }
-  return m
-}
-
-function aPedidoCola(p: any, r: ResLineas | undefined, hoy: string): PedidoCola {
-  const res = r ?? { kg: 0, und: 0, lineas: 0, oc: 0, cargadas: 0, pend: 0 }
-  const calc = derivarEstado(p, hoy, { lineasConOcargue: res.oc, unidadesPedidas: res.und, unidadesCargadas: res.cargadas })
-  return {
-    idpedido: Number(p.idpedido),
-    id_empresa: Number(p.id_empresa),
-    pedido: txt(p.pedido),
-    orden_de_compra: txt(p.orden_de_compra),
-    cliente: String(p.cliente ?? ""),
-    vendedor: txt(p.vendedor),
-    destino: txt(p.destino),
-    medio: txt(p.medio),
-    direccion: txt(p.direccion),
-    tipo_despacho: txt(p.tipo_despacho),
-    condicion_pago: txt(p.condicion_pago),
-    fecha: String(p.fecha ?? "").slice(0, 10),
-    fecha_programada: p.fecha_programada ? String(p.fecha_programada).slice(0, 10) : null,
-    creado_en: txt(p.creado_en),
-    estado: txt(p.estado),
-    aprobado: txt(p.aprobado),
-    revisioncartera: txt(p.revisioncartera),
-    revisiongerencia: txt(p.revisiongerencia),
-    ocargue: txt(p.ocargue),
-    fechaordencargue: p.fechaordencargue ? String(p.fechaordencargue).slice(0, 10) : null,
-    fechadeentrega: p.fechadeentrega ? String(p.fechadeentrega).slice(0, 10) : null,
-    vehiculo: txt(p.vehiculo),
-    transporte: txt(p.transporte),
-    factura: txt(p.factura),
-    total_pagar: n0(p.total_pagar),
-    pdfpedido: txt(p.pdfpedido),
-    observaciones: txt(p.observaciones),
-    empresa: txt(p.empresa),
-    empresafactura: txt(p.empresafactura),
-    motivo_no_entrega: txt(p.motivo_no_entrega),
-    depurado_por: txt(p.depurado_por),
-    depurado_en: txt(p.depurado_en),
-    kg: Math.round(res.kg),
-    unidades: res.und,
-    lineas: res.lineas,
-    lineasConOcargue: res.oc,
-    unidadesCargadas: res.cargadas,
-    unidadesPendientes: res.pend,
-    calc,
-  }
-}
-
-/** Pedidos ABIERTOS de la empresa (sin límite de fecha), con sus líneas resumidas y el estado derivado. */
-async function cargarCola(sb: any, acceso: AccesoPedidos, empresaId: number, hoy: string): Promise<PedidoCola[]> {
-  const cab = await fetchAllRows((from, to) =>
-    limitarPorOwners(sb.from("pedidoscabecera").select("*").eq("id_empresa", empresaId).or(FILTRO_ABIERTOS_POSTGREST), acceso)
-      .order("idpedido", { ascending: true })
-      .range(from, to),
-  )
-  const lineas = await resumenLineas(sb, empresaId, cab.map((c: any) => Number(c.idpedido)))
-  return cab.map((p: any) => aPedidoCola(p, lineas.get(Number(p.idpedido)), hoy))
-}
-
-function resumir(pedidos: PedidoCola[]): ResumenCola {
-  const r: ResumenCola = {
-    abiertos: pedidos.length,
-    atrasados: 0,
-    atrasadosRecientes: 0,
-    atrasadosViejos: 0,
-    hoy: 0,
-    kgHoy: 0,
-    manana: 0,
-    kgManana: 0,
-    futuros: 0,
-    sinFecha: 0,
-    enCargue: 0,
-    parciales: 0,
-    porAprobar: 0,
-    porAprobarConCartera: 0,
-    candidatosSinRastro: 0,
-    candidatosParciales: 0,
-  }
-  for (const p of pedidos) {
-    const c = p.calc
-    if (c.candidatoDepuracion === "sin_rastro") r.candidatosSinRastro++
-    if (c.candidatoDepuracion === "parcial") r.candidatosParciales++
-    switch (c.estado) {
-      case "programado":
-        if (c.atrasoDias > 0) {
-          r.atrasados++
-          if (c.atrasoDias <= 15) r.atrasadosRecientes++
-          else r.atrasadosViejos++
-        } else if (c.esHoy) {
-          r.hoy++
-          r.kgHoy += p.kg
-        } else if (c.esManana) {
-          r.manana++
-          r.kgManana += p.kg
-        } else r.futuros++
-        break
-      case "aprobado_sin_programar":
-        r.sinFecha++
-        break
-      case "en_cargue":
-        r.enCargue++
-        break
-      case "parcial":
-        r.parciales++
-        break
-      case "nuevo":
-        r.porAprobar++
-        if (c.conCartera) r.porAprobarConCartera++
-        break
-    }
-  }
-  return r
+export interface HistorialPedidos {
+  hoy: string
+  desde: string | null
+  pedidos: PedidoCola[]
+  /** true cuando el período trae demasiados pedidos y no se sumaron kilos por pedido. */
+  kgOmitidos: boolean
+  totales: { entregados: number; entregaParcial: number; anulados: number; noEntregados: number }
 }
 
 // ─────────────────────────────── Cola ───────────────────────────────
@@ -374,16 +137,23 @@ export async function getColaPedidos(empresaId: number | null | undefined): Prom
   }
 }
 
-// ─────────────────────────────── Historial ───────────────────────────────
-
-export interface HistorialPedidos {
-  hoy: string
-  desde: string | null
-  pedidos: PedidoCola[]
-  /** true cuando el período trae demasiados pedidos y no se sumaron kilos por pedido. */
-  kgOmitidos: boolean
-  totales: { entregados: number; entregaParcial: number; anulados: number; noEntregados: number }
+/** Solo el resumen de la cola (franja del portal del área): mismo cálculo que getColaPedidos, sin las filas. */
+export async function getResumenCola(empresaId: number | null | undefined): Promise<Resp<{ hoy: string; manana: string; resumen: ResumenCola }>> {
+  if (!empresaId) return { success: false, message: "Selecciona un proyecto." }
+  try {
+    const sb: any = await getSupabaseAdminAsSystem()
+    const acceso = await accesoPedidos(sb, empresaId)
+    if (!acceso) return { success: false, message: MSG_SIN_ACCESO }
+    const hoy = hoyBogotaISO()
+    const pedidos = await cargarCola(sb, acceso, empresaId, hoy)
+    return { success: true, data: { hoy, manana: sumarDiasISO(hoy, 1), resumen: resumir(pedidos) } }
+  } catch (e: any) {
+    console.error("[pedidos-cola] getResumenCola:", e?.message ?? e)
+    return { success: false, message: e?.message || "No se pudo leer la cola de pedidos." }
+  }
 }
+
+// ─────────────────────────────── Historial ───────────────────────────────
 
 const FILTRO_FINALES_POSTGREST = "estado.ilike.entregado,estado.ilike.entrega parcial,estado.ilike.anulado,estado.ilike.no entregado"
 
@@ -503,22 +273,6 @@ async function consignadoDe(sb: any, acceso: AccesoPedidos, empresaId: number, h
   }
 }
 
-/** Solo el resumen de la cola (franja del portal del área): mismo cálculo que getColaPedidos, sin las filas. */
-export async function getResumenCola(empresaId: number | null | undefined): Promise<Resp<{ hoy: string; manana: string; resumen: ResumenCola }>> {
-  if (!empresaId) return { success: false, message: "Selecciona un proyecto." }
-  try {
-    const sb: any = await getSupabaseAdminAsSystem()
-    const acceso = await accesoPedidos(sb, empresaId)
-    if (!acceso) return { success: false, message: MSG_SIN_ACCESO }
-    const hoy = hoyBogotaISO()
-    const pedidos = await cargarCola(sb, acceso, empresaId, hoy)
-    return { success: true, data: { hoy, manana: sumarDiasISO(hoy, 1), resumen: resumir(pedidos) } }
-  } catch (e: any) {
-    console.error("[pedidos-cola] getResumenCola:", e?.message ?? e)
-    return { success: false, message: e?.message || "No se pudo leer la cola de pedidos." }
-  }
-}
-
 export async function getCandidatosDepuracion(empresaId: number | null | undefined): Promise<Resp<CandidatosDepuracion>> {
   if (!empresaId) return { success: false, message: "Selecciona un proyecto." }
   try {
@@ -596,7 +350,6 @@ export async function depurarPedidos(input: { empresaId: number | null | undefin
     const porId = new Map<number, PedidoCola>(cab.map((p: any) => [Number(p.idpedido), aPedidoCola(p, lineas.get(Number(p.idpedido)), hoy)]))
 
     const omitidos: { idpedido: number; razon: string }[] = []
-    // Grupos de actualización: mismo estado destino + mismo texto de motivo → un UPDATE.
     const grupos = new Map<string, { estado: string; motivo: string; ids: number[] }>()
     let comoNoEntregado = 0
     let comoEntregaParcial = 0
@@ -613,7 +366,7 @@ export async function depurarPedidos(input: { empresaId: number | null | undefin
         continue
       }
       if (!c.candidatoDepuracion) {
-        const razon = !c.sinRastro && c.estado !== "parcial" ? "Ya tiene orden de cargue, vehículo o entrega" : c.estado === "parcial" ? "Parcial con menos de 30 días" : "Aún no cumple los 15 días sin rastro"
+        const razon = !c.sinRastro && c.estado !== "parcial" ? "Ya tiene orden de cargue, vehículo o entrega" : c.estado === "parcial" ? "Parcial del mes en curso con menos de 30 días" : "Del mes en curso y con menos de 15 días"
         omitidos.push({ idpedido: id, razon })
         continue
       }
@@ -714,7 +467,6 @@ export async function getDemandaFecha(empresaId: number | null | undefined, fech
       proximosDias.push({ fecha: f, pedidos: ps.length, kg: ps.reduce((s, p) => s + p.kg, 0) })
     }
 
-    // Programación de vehículos del cliente para ese día (si el proyecto la usa).
     const [tipos, prog, usa] = await Promise.all([
       sb.from("tiposvehiculos").select("nombretipo, capacidad, activo").order("capacidad", { ascending: false }).limit(50),
       sb.from("programacion_cliente").select("lineas, total_vehiculos, a_tiempo, enviada_en").eq("idempresa", empresaId).eq("fecha_operacion", fecha).eq("vigente", true).limit(1),
