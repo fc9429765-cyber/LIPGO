@@ -141,10 +141,21 @@ export interface CandidatoDepuracion extends PedidoCola {
   motivoSugerido: MotivoDepuracion["clave"] | null
 }
 
+/** Lo ya depurado, para dejarlo consignado en la tarjeta. */
+export interface Consignado {
+  total: number
+  hoy: number
+  ultimoPor: string | null
+  ultimoEn: string | null
+  /** false cuando faltan las columnas del SQL 215. */
+  disponible: boolean
+}
+
 export interface CandidatosDepuracion {
   hoy: string
   sinRastro: CandidatoDepuracion[]
   parciales: CandidatoDepuracion[]
+  consignado: { sinRastro: Consignado; parciales: Consignado }
   /** Si la app corre en previsualización: la depuración solo simula. */
   simulaEnEsteEntorno: boolean
 }
@@ -472,6 +483,37 @@ function pistasDe(p: PedidoCola, posteriores: any[] | undefined): { pistas: stri
   return { pistas, reemplazadoPor, motivoSugerido: reemplazadoPor ? "reemplazado" : null }
 }
 
+async function consignadoDe(sb: any, acceso: AccesoPedidos, empresaId: number, hoy: string, estado: string): Promise<Consignado> {
+  try {
+    const base = () => limitarPorOwners(sb.from("pedidoscabecera").select("idpedido", { count: "exact", head: true }).eq("id_empresa", empresaId).ilike("estado", estado).not("depurado_en", "is", null), acceso)
+    const [t, h] = await Promise.all([base(), base().gte("depurado_en", `${hoy}T00:00:00-05:00`)])
+    if (t.error) throw t.error
+    const { data: ult, error } = await limitarPorOwners(sb.from("pedidoscabecera").select("depurado_por, depurado_en").eq("id_empresa", empresaId).ilike("estado", estado).not("depurado_en", "is", null), acceso)
+      .order("depurado_en", { ascending: false })
+      .limit(1)
+    if (error) throw error
+    return { total: t.count ?? 0, hoy: h.count ?? 0, ultimoPor: ult?.[0]?.depurado_por ?? null, ultimoEn: ult?.[0]?.depurado_en ?? null, disponible: true }
+  } catch {
+    return { total: 0, hoy: 0, ultimoPor: null, ultimoEn: null, disponible: false }
+  }
+}
+
+/** Solo el resumen de la cola (franja del portal del área): mismo cálculo que getColaPedidos, sin las filas. */
+export async function getResumenCola(empresaId: number | null | undefined): Promise<Resp<{ hoy: string; manana: string; resumen: ResumenCola }>> {
+  if (!empresaId) return { success: false, message: "Selecciona un proyecto." }
+  try {
+    const sb: any = await getSupabaseAdminAsSystem()
+    const acceso = await accesoPedidos(sb, empresaId)
+    if (!acceso) return { success: false, message: MSG_SIN_ACCESO }
+    const hoy = hoyBogotaISO()
+    const pedidos = await cargarCola(sb, acceso, empresaId, hoy)
+    return { success: true, data: { hoy, manana: sumarDiasISO(hoy, 1), resumen: resumir(pedidos) } }
+  } catch (e: any) {
+    console.error("[pedidos-cola] getResumenCola:", e?.message ?? e)
+    return { success: false, message: e?.message || "No se pudo leer la cola de pedidos." }
+  }
+}
+
 export async function getCandidatosDepuracion(empresaId: number | null | undefined): Promise<Resp<CandidatosDepuracion>> {
   if (!empresaId) return { success: false, message: "Selecciona un proyecto." }
   try {
@@ -500,12 +542,14 @@ export async function getCandidatosDepuracion(empresaId: number | null | undefin
     }
     const enriquecer = (p: PedidoCola): CandidatoDepuracion => ({ ...p, tipo: p.calc.candidatoDepuracion as "sin_rastro" | "parcial", ...pistasDe(p, porCliente.get(p.cliente)) })
     const orden = (a: CandidatoDepuracion, b: CandidatoDepuracion) => b.calc.antiguedadDias - a.calc.antiguedadDias || a.idpedido - b.idpedido
+    const [cSin, cPar] = await Promise.all([consignadoDe(sb, acceso, empresaId, hoy, ESTADO_NO_ENTREGADO), consignadoDe(sb, acceso, empresaId, hoy, ESTADO_ENTREGA_PARCIAL)])
     return {
       success: true,
       data: {
         hoy,
         sinRastro: candidatos.filter((p) => p.calc.candidatoDepuracion === "sin_rastro").map(enriquecer).sort(orden),
         parciales: candidatos.filter((p) => p.calc.candidatoDepuracion === "parcial").map(enriquecer).sort(orden),
+        consignado: { sinRastro: cSin, parciales: cPar },
         simulaEnEsteEntorno: EN_PREVIEW,
       },
     }

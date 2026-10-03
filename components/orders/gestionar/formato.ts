@@ -20,6 +20,12 @@ export function fechaCortaAnio(iso: string | null | undefined): string {
   return enBogota(iso).toLocaleDateString("es-CO", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "America/Bogota" }).replace(/\./g, "")
 }
 
+/** "13 ene 2026" (sin día de la semana; cabe en una celda estrecha). */
+export function fechaNum(iso: string | null | undefined): string {
+  if (!iso) return "—"
+  return enBogota(iso).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric", timeZone: "America/Bogota" }).replace(/\./g, "")
+}
+
 /** "viernes 3 de octubre de 2026" */
 export function fechaLarga(iso: string | null | undefined): string {
   if (!iso) return ""
@@ -54,6 +60,7 @@ export function tTexto(kg: number): string {
 
 // ── Saltos entre módulos (los mismos eventos que ya usan Operación del día y el buscador) ──
 
+export const MODULO_GESTIONAR = "Gestionar pedidos"
 export const MODULO_ENTRADA = "Entrada de pedidos"
 export const MODULO_GENERAR_OC = "Generar Órdenes de Cargue"
 export const MODULO_GESTION_OC = "Gestión de Ordenes"
@@ -62,6 +69,27 @@ export const MODULO_PROGRAMACION = "Programación del cliente"
 /** Abre otro módulo. El destino conserva su propio PermissionGuard. */
 export function irAModulo(nombre: string) {
   window.dispatchEvent(new CustomEvent("lipgo:navigate-module", { detail: nombre }))
+}
+
+/** Con qué pestaña y filtro debe abrirse Gestionar pedidos la próxima vez que se monte. */
+export interface IntencionGestionar {
+  tab?: "cola" | "manana" | "depurar" | "historial"
+  /** Un FiltroCola de cola-tab ("atrasados", "hoy", "fecha:2026-10-06"…). */
+  filtro?: string
+}
+let intencionGestionar: IntencionGestionar | null = null
+
+/** Abre Gestionar pedidos en una pestaña/filtro concretos (desde el portal del área u otro módulo). */
+export function abrirGestionar(intencion: IntencionGestionar) {
+  intencionGestionar = intencion
+  irAModulo(MODULO_GESTIONAR)
+}
+
+/** La pantalla la toma al montarse y la limpia. */
+export function tomarIntencionGestionar(): IntencionGestionar | null {
+  const i = intencionGestionar
+  intencionGestionar = null
+  return i
 }
 
 /** Abre Gestión de Ordenes filtrada por el número de la orden de cargue. */

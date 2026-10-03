@@ -344,6 +344,16 @@ export function ModulesView({ groupKey, onBack, onSelectModule }: ModulesViewPro
         </div>
       </div>
 
+      {/* Pedidos (2026-10-03): la cola logística del cliente va ARRIBA, compacta y
+          clicable, con la misma fuente que Gestionar pedidos; el mosaico de la
+          pantalla queda debajo y ya no empuja la información. Solo esta área. */}
+      {groupKey === "pedidos" && (
+        <div className="space-y-1">
+          <div className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">Cola logística del cliente · hoy</div>
+          <PedidosKpiStrip />
+        </div>
+      )}
+
       {/* Pantallas primero */}
       {entradasDirectas.length > 0 && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">{render(entradasDirectas)}</div>}
       {entradasSub.map((sg) => (
@@ -357,12 +367,7 @@ export function ModulesView({ groupKey, onBack, onSelectModule }: ModulesViewPro
 
       {/* Indicadores del área, al final y compactos. Pedidos y Despacho conservan
           sus tiras de gestión del cliente (alineadas a objetivos). */}
-      {groupKey === "pedidos" ? (
-        <div className="space-y-1">
-          <div className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">Cumplimiento de entregas</div>
-          <PedidosKpiStrip />
-        </div>
-      ) : groupKey === "despachos" ? (
+      {groupKey === "pedidos" ? null : groupKey === "despachos" ? (
         <div className="space-y-3">
           <div className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">Operación y despacho del día</div>
           <DespachoKpiStrip />

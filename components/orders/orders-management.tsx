@@ -9,7 +9,7 @@
 // clave (aprobar cartera, aprobar, anular, cerrar pendiente, cierre con factura) y
 // la edición usan las MISMAS server actions y el mismo formulario de siempre.
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { AlertTriangle, FileDown, Plus, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -24,18 +24,21 @@ import { DepurarTab } from "./gestionar/depurar-tab"
 import { HistorialTab } from "./gestionar/historial-tab"
 import { DetallePedido } from "./gestionar/detalle-pedido"
 import { AccionesPedidoDialogos, type Accion, type TipoAccion } from "./gestionar/acciones-pedido"
-import { MODULO_ENTRADA, MODULO_GENERAR_OC, MODULO_GESTION_OC, NUM, abrirOrdenCargue, fechaCorta, fechaLarga, horaCorta, irAModulo, tTexto } from "./gestionar/formato"
+import { MODULO_ENTRADA, MODULO_GENERAR_OC, MODULO_GESTION_OC, NUM, abrirOrdenCargue, fechaCorta, fechaLarga, horaCorta, irAModulo, tTexto, tomarIntencionGestionar } from "./gestionar/formato"
 
 type Pestana = "cola" | "manana" | "depurar" | "historial"
 
 export function OrdersManagement(_props?: { onEditOrder?: (orderId: number) => void; initialTab?: Pestana }) {
   const { selectedEmpresaId, selectedEmpresaNombre } = useAuth()
-  const [pestana, setPestana] = useState<Pestana>(_props?.initialTab ?? "cola")
+  // Si se llegó desde el portal del área u otro módulo con una vista pedida, se abre ahí.
+  const [intencion] = useState(() => tomarIntencionGestionar())
+  const [pestana, setPestana] = useState<Pestana>(intencion?.tab ?? _props?.initialTab ?? "cola")
   const [data, setData] = useState<ColaPedidos | null>(null)
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [actualizadoEn, setActualizadoEn] = useState<string | null>(null)
-  const [filtro, setFiltro] = useState<FiltroCola>("todos")
+  const [filtro, setFiltro] = useState<FiltroCola>((intencion?.filtro as FiltroCola | undefined) ?? "todos")
+  const empresaAnterior = useRef(selectedEmpresaId)
   const [detalleId, setDetalleId] = useState<number | null>(null)
   const [accion, setAccion] = useState<Accion | null>(null)
   const [vista, setVista] = useState<"gestion" | "edicion">("gestion")
@@ -57,9 +60,13 @@ export function OrdersManagement(_props?: { onEditOrder?: (orderId: number) => v
 
   useEffect(() => {
     setData(null)
-    setFiltro("todos")
+    // Al cambiar de proyecto se limpia el filtro; en el primer montaje se respeta el pedido.
+    if (empresaAnterior.current !== selectedEmpresaId) {
+      setFiltro("todos")
+      empresaAnterior.current = selectedEmpresaId
+    }
     cargar()
-  }, [cargar])
+  }, [cargar, selectedEmpresaId])
 
   const resumen = data?.resumen
   const exportarCola = async () => {
