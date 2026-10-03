@@ -57,6 +57,9 @@ import type {
   SigTipoMovimiento,
 } from "@/lib/sig-types"
 import { SIG_EMPRESA_LIP, SIG_CLIENTES_LIP } from "@/lib/sig-types"
+import { resumirIndicadoresPedidos, valoresBscPedidos } from "@/lib/pedidos-indicadores"
+import { hoyBogotaISO } from "@/lib/periodo-listados"
+import type { AccesoPedidos } from "@/lib/acceso-empresa"
 import { getMetaDiaForEmpresa } from "@/lib/empresa-meta-dia"
 import { getSlaCargueMin, esNombreSubproducto, PLANTA_ACORDADA, factorTiempoSitio } from "@/lib/sla-acordados"
 import { esCodigoTrasladoNetoCero, nombreMovimientoPorCodigo } from "@/lib/transacciones-codigo"
@@ -2481,7 +2484,51 @@ async function _computeIndicadoresValores(
       base: sstIndBase[tipo] ?? "sin datos",
     })
 
+    // --- Pedidos del cliente (BSC IND-PED-01..05, SQL 216). MISMA definición que
+    //     Gestionar pedidos y el Dashboard: lib/pedidos-indicadores.ts (puro) y la
+    //     cola de lib/pedidos-cola-core.ts. Período = promesa del pedido en [desde, hasta];
+    //     atrasados = foto de hoy. Falla-seguro: sin lectura → sin valor, nunca 0 falso.
+    //     pedidos-cola-core es server-only: import dinámico para no romper los scripts tsx.
+    let valoresPedidos: Record<string, { valor: number | null; base: string }> = {}
+    try {
+      const filtroPromesa = (q: any) => {
+        if (desde) q = q.gte("fecha_programada", desde)
+        if (hasta) q = q.lte("fecha_programada", hasta)
+        return q
+      }
+      const pedRows = await pagAll((from, to) =>
+        filtroPromesa(supabase.from("pedidoscabecera").select("idpedido,estado,fecha,fecha_programada,fechaordencargue,fechadeentrega,ocargue").in("id_empresa", clientes))
+          .order("idpedido", { ascending: true })
+          .range(from, to),
+      )
+      // Atrasados de HOY con la misma cola de Gestionar (si falla, solo ese indicador queda sin lectura).
+      let atrasados: number | null = null
+      try {
+        const { cargarCola } = await import("@/lib/pedidos-cola-core")
+        const hoyPed = hoyBogotaISO()
+        const accesoSistema: AccesoPedidos = { id: "sistema", usuario: null, empresa_id: null, empresas: clientes, owners: [] }
+        let n = 0
+        for (const emp of clientes) {
+          const cola = await cargarCola(supabase, accesoSistema, emp, hoyPed)
+          n += cola.filter((p) => p.calc.estado === "programado" && p.calc.atrasoDias > 0).length
+        }
+        atrasados = n
+      } catch (e: any) {
+        console.warn("[sig] atrasados de pedidos:", e?.message ?? e)
+      }
+      valoresPedidos = valoresBscPedidos(resumirIndicadoresPedidos(pedRows), atrasados)
+    } catch (e: any) {
+      console.warn("[sig] indicadores de pedidos:", e?.message ?? e)
+    }
+    const ped = (k: string): SigIndicadorValor => ({ valor: valoresPedidos[k]?.valor ?? Number.NaN, base: valoresPedidos[k]?.base ?? "sin lectura" })
+
     const valores: Record<string, SigIndicadorValor> = {
+      // Pedidos del cliente (cumplimiento de la promesa, atraso, completitud, anticipación).
+      ped_a_tiempo: ped("ped_a_tiempo"),
+      ped_atrasados: ped("ped_atrasados"),
+      ped_completos: ped("ped_completos"),
+      ped_pendientes: ped("ped_pendientes"),
+      ped_mismo_dia: ped("ped_mismo_dia"),
       // Cumplimiento SG-SST (Resolución 0312) — avance real de los 60 estándares.
       sgsst_0312: { valor: Math.round(sgsst0312 * 10) / 10, base: "Autoevaluación 0312 (Art. 27)" },
       // Indicadores de medición 0312 (numerales 3.3.1-3.3.6) + extras (sst_indicadores).

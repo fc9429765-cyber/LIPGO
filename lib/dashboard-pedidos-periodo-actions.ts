@@ -22,11 +22,10 @@ import { hoyBogotaISO } from "@/lib/periodo-listados"
 import { accesoPedidos, limitarPorOwners } from "@/lib/acceso-empresa"
 import { diasEntre, esEstadoFinal, inicioDeMes, normalizarEstado, sumarDiasISO } from "@/lib/pedidos-estado"
 import { validarRango, lunesDe } from "@/lib/periodo-rango"
-import { MSG_SIN_ACCESO, cargarCola, lineasMinimas, n0, resumirLineas, type LineaMinima, type ResLineas } from "@/lib/pedidos-cola-core"
+import { MSG_SIN_ACCESO, cargarCola, lineasMinimas, n0, resumirLineas, type ResLineas } from "@/lib/pedidos-cola-core"
+import { clasificarPedido } from "@/lib/pedidos-indicadores"
 
 type Resp<T> = { success: true; data: T } | { success: false; message: string }
-
-export type ClasePedido = "a_tiempo" | "tarde" | "pendiente" | "no_entregado" | "anulado" | "cerrado_sin_fecha"
 
 export interface SemanaCumplimiento {
   inicio: string
@@ -90,18 +89,8 @@ export interface DashboardPedidosPeriodo {
 const DIAS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
 const diaSemana = (iso: string) => DIAS[(new Date(`${iso}T12:00:00Z`).getUTCDay() + 6) % 7]
 
-function clasificar(p: any, hoy: string): { clase: ClasePedido; fechaRef: string | null } {
-  const est = normalizarEstado(p.estado)
-  const promesa = p.fecha_programada ? String(p.fecha_programada).slice(0, 10) : null
-  const fechaRef = p.fechaordencargue ? String(p.fechaordencargue).slice(0, 10) : p.fechadeentrega ? String(p.fechadeentrega).slice(0, 10) : null
-  if (est === "anulado") return { clase: "anulado", fechaRef }
-  if (est === "no entregado") return { clase: "no_entregado", fechaRef }
-  if (fechaRef && promesa) return { clase: fechaRef <= promesa ? "a_tiempo" : "tarde", fechaRef }
-  if (fechaRef) return { clase: "a_tiempo", fechaRef }
-  if (esEstadoFinal(est) || (p.ocargue && String(p.ocargue).trim())) return { clase: "cerrado_sin_fecha", fechaRef }
-  void hoy
-  return { clase: "pendiente", fechaRef }
-}
+// La clasificación (a tiempo / tarde / pendiente…) es la misma del BSC: lib/pedidos-indicadores.ts.
+const clasificar = (p: any, _hoy: string) => clasificarPedido(p)
 
 const mediana = (xs: number[]) => {
   if (xs.length === 0) return null

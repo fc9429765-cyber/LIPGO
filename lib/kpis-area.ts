@@ -47,6 +47,13 @@ export const KPI_DEFS: Record<string, KpiDef> = {
   nc_cerradas: { nombre: "NC cerradas a tiempo", fmt: "pct", meta: 95, higherBetter: true },
   legal_cumplimiento: { nombre: "Cumplimiento legal", fmt: "pct", meta: 100, higherBetter: true },
   sig_implementacion: { nombre: "Implementación del SIG", fmt: "pct", meta: 100, higherBetter: true },
+  // Pedidos del cliente (BSC IND-PED-01..05, SQL 216). Fuente única de cálculo:
+  // lib/pedidos-indicadores.ts (la misma de Gestionar pedidos y del Dashboard).
+  ped_a_tiempo: { nombre: "Pedidos a tiempo", fmt: "pct", meta: 95, higherBetter: true },
+  ped_atrasados: { nombre: "Pedidos atrasados hoy", fmt: "num", meta: 0, higherBetter: false },
+  ped_completos: { nombre: "Entregas completas", fmt: "pct", meta: 98, higherBetter: true },
+  ped_pendientes: { nombre: "Pendientes del período", fmt: "num", higherBetter: false },
+  ped_mismo_dia: { nombre: "Pedidos del mismo día", fmt: "pct", higherBetter: false },
 }
 
 // Qué indicadores muestra cada grupo del menú (por su `key`). Curados a los MÁS
@@ -56,7 +63,8 @@ export const KPI_DEFS: Record<string, KpiDef> = {
 export const AREA_KPIS: Record<string, string[]> = {
   // Gerencia / vista integral: los resultados estratégicos de LIP.
   integral: ["sla_global", "sat_cliente", "desp_cumplimiento", "desp_meta_ton", "sgsst_0312"],
-  pedidos: ["desp_ordenes", "desp_toneladas", "desp_cumplimiento"],
+  // Pedidos del cliente: cumplimiento de la promesa, atraso de hoy, completitud y anticipación.
+  pedidos: ["ped_a_tiempo", "ped_atrasados", "ped_completos", "ped_mismo_dia"],
   // Operaciones (Cargue/Descargue): servicio, cumplimiento, calidad, volumen.
   despachos: ["desp_cumplimiento", "sla_tiempos", "lip_evidencia", "desp_meta_ton", "sat_conductor"],
   // Almacenamiento e Inventarios: exactitud world-class.
@@ -92,8 +100,10 @@ export const SUBMODULO_KPIS: Record<string, string[]> = {
   Báscula: ["desp_toneladas"],
   "Historial Báscula": ["desp_toneladas"],
   // --- Pedidos ---
-  "Entrada de pedidos": ["desp_ordenes"],
-  "Gestionar pedidos": ["sla_global", "desp_ordenes"],
+  "Entrada de pedidos": ["ped_mismo_dia", "ped_a_tiempo"],
+  "Gestionar pedidos": ["ped_atrasados", "ped_a_tiempo", "ped_completos", "ped_pendientes"],
+  "Dashboard Pedidos": ["ped_a_tiempo", "ped_atrasados", "ped_completos", "ped_pendientes", "ped_mismo_dia"],
+  "Programación del cliente": ["ped_a_tiempo", "ped_atrasados"],
   "Gestión integral de pedidos": ["sla_global"],
   // --- Almacenamiento ---
   "Transacciones de Inventario": ["inv_exactitud"],
@@ -190,6 +200,7 @@ const KPI_ICON: Record<string, string> = {
   gh_activos: "activity", gh_cobertura: "activity", sat_cliente: "activity", sat_conductor: "activity",
   gh_ausentismo: "alert", sst_at_count: "alert", sst_at_dias: "alert", sst_frecuencia: "alert",
   gh_formacion: "file",
+  ped_a_tiempo: "shield", ped_atrasados: "alert", ped_completos: "package", ped_pendientes: "clock", ped_mismo_dia: "clock",
 }
 
 export function kpiIcon(key: string): string {
