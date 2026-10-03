@@ -81,7 +81,8 @@ export async function evaluarYEnviarAlertas(opts: { usuarioId?: string | null; i
   const valoresDe = async (scope: number | null) => {
     const k = String(scope ?? "lip")
     if (!valoresPorScope.has(k)) {
-      const r: any = await getIndicadoresValores(scope, desde, hoy)
+      // `fresco`: una alerta nunca debe salir de una caché vencida (ver getIndicadoresValores).
+      const r: any = await getIndicadoresValores(scope, desde, hoy, { fresco: true })
       valoresPorScope.set(k, r?.success && r.valores ? r.valores : {})
     }
     return valoresPorScope.get(k)!

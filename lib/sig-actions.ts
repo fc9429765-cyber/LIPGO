@@ -1949,6 +1949,10 @@ export async function getIndicadoresValores(
   proyectoId?: number | null,
   desde?: string | null,
   hasta?: string | null,
+  // `fresco`: nunca servir un valor vencido (alertas del BSC por cron e "Enviarme una prueba").
+  // En una función serverless el refresco "en segundo plano" puede no terminar, y un aviso
+  // con datos de ayer es peor que esperar unos segundos. La UI sigue usando el modo rápido.
+  opts?: { fresco?: boolean },
 ): Promise<IvRes> {
   const _ivKey = `${proyectoId ?? "all"}|${desde ?? ""}|${hasta ?? ""}`
   const _ivHit = _ivCache.get(_ivKey)
@@ -1969,8 +1973,10 @@ export async function getIndicadoresValores(
     _ivInflight.set(_ivKey, p)
     return p
   }
-  // Vencido pero con valor previo → servir stale al instante y refrescar en bg.
+  // Vencido pero con valor previo → servir stale al instante y refrescar en bg
+  // (salvo `fresco`, que espera el recálculo).
   if (_ivHit) {
+    if (opts?.fresco) return refrescar()
     void refrescar()
     return _ivHit.value
   }
@@ -1981,7 +1987,10 @@ export async function getIndicadoresValores(
   if (persistido) {
     const expira = persistido.computedAt + IV_TTL_MS
     _ivCache.set(_ivKey, { value: persistido.value, exp: expira })
-    if (expira <= Date.now()) void refrescar()
+    if (expira <= Date.now()) {
+      if (opts?.fresco) return refrescar()
+      void refrescar()
+    }
     return persistido.value
   }
   // Frío en todas partes (nunca calculado para este alcance) → única espera.
