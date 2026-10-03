@@ -14,8 +14,10 @@
 //   scroll con el color del área en el borde izquierdo, el ícono y el título
 //   del hub, y las pestañas como píldoras; la activa va con el tinte del área.
 //   Cada pestaña muestra su contador de pendientes vivo (misma fuente que el
-//   portal: getPendientesPorPantalla). Los KPIs y la guía del módulo
-//   (`cabecera`) van DEBAJO de las pestañas porque pertenecen a la pestaña.
+//   portal: getPendientesPorPantalla). Los indicadores del área y la guía de la
+//   pestaña ya no son bandas debajo: son dos botones al final de la barra que
+//   abren un panel lateral (gerencia 2026-10-03: las bandas bajaban el contenido
+//   en todos los módulos). `cabecera` queda opcional por compatibilidad.
 
 import React, { type CSSProperties } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -23,6 +25,7 @@ import { useModulePermissions } from "@/hooks/use-module-permissions"
 import { useAuth } from "@/components/auth-provider"
 import { colorDeEntrada, etiquetaDeGrupo, etiquetaDeTab, moduloPorNombre, type Hub } from "@/lib/navegacion"
 import { getPendientesPorPantalla, type PendientePantalla } from "@/lib/pendientes-pantalla-actions"
+import { BotonesContextoModulo } from "@/components/contexto-modulo"
 
 interface ModuleHubProps {
   hub: Hub
@@ -91,7 +94,7 @@ export function ModuleHub({ hub, activeModule, onSelectTab, renderLeaf, cabecera
           </div>
 
           {loaded && tabs.length > 0 && (
-            <div className="ml-auto max-w-full overflow-x-auto py-0.5">
+            <div className="ml-auto flex max-w-full items-center gap-2 overflow-x-auto py-0.5">
               <TabsList className="h-auto gap-1 bg-transparent p-0">
                 {tabs.map((t) => {
                   const TabIcon = moduloPorNombre(t.module)?.icon
@@ -114,6 +117,8 @@ export function ModuleHub({ hub, activeModule, onSelectTab, renderLeaf, cabecera
                   )
                 })}
               </TabsList>
+              <span aria-hidden className="hidden h-6 w-px bg-border sm:block" />
+              <BotonesContextoModulo selectedModule={activeModule} />
             </div>
           )}
         </div>

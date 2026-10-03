@@ -13,7 +13,7 @@ import { ModulePlaceholder } from "@/components/module-placeholder"
 import { configModules } from "@/lib/config-definitions"
 import ConsultaSiigo from "@/components/facturacion/consulta-siigo"
 // Producción: maestro de montacargas, QR y bitácora de mantenimiento.
-import { ModuloGuiaBar } from "@/components/modulo-guia-bar" // Guia embebida en la pantalla de cada modulo
+import { BotonesContextoModulo } from "@/components/contexto-modulo" // Indicadores del área + guía, en panel lateral
 import { ArrowLeft, Compass, Search, Sparkles, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PermissionGuard } from "@/components/permission-guard"
@@ -25,7 +25,6 @@ import { ClaveFinancieraGuard } from "@/components/clave-financiera-guard"
 // Gestión Financiera: alquiler de montacargas facturado + cargos fijos ($2M, 600 ton).
 // Reconstruido: requisicion con causal legal del Art. 77 Ley 50/1990 y costo
 // mensual estimado con los porcentajes reales de prestaciones y parafiscales.
-import { ModuleKpiHeader } from "@/components/module-kpi-header"
 import { ModuleHub } from "@/components/module-hub"
 import { MigaNavegacion } from "@/components/miga-navegacion"
 import { ContinuarReciente } from "@/components/continuar-reciente"
@@ -1133,15 +1132,16 @@ export function MainContent({
               : "w-full max-w-full px-2 sm:px-4 lg:px-8 xl:px-12 py-2 sm:py-4 lg:py-6"
           }
         >
-          {/* Miga de pan: Inicio › Área › Pantalla › Pestaña. */}
+          {/* Miga de pan: Inicio › Área › Pantalla › Pestaña. Los indicadores del área y
+              la guía ya no son bandas sobre el contenido (gerencia 2026-10-03): dentro de
+              un hub van como botones en la barra de pestañas (ModuleHub); en un módulo
+              sin hub, a la derecha de la miga. Abren un panel lateral. */}
           {selectedGroup && selectedModule && !editingOrderId ? (
-            <MigaNavegacion groupKey={selectedGroup} moduleName={selectedModule} onInicio={onInicio} onGrupo={(k) => onOpenGroup(k)} />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <MigaNavegacion groupKey={selectedGroup} moduleName={selectedModule} onInicio={onInicio} onGrupo={(k) => onOpenGroup(k)} />
+              {!hubActivo && <BotonesContextoModulo selectedModule={selectedModule} className="mb-2 ml-auto" />}
+            </div>
           ) : null}
-          {/* KPIs del módulo, presentes en CUALQUIER submódulo del módulo (self-gated:
-              solo pinta en submódulos de grupos con KPIs; null en home/portada).
-              Dentro de un hub se pintan DEBAJO de las pestañas (los pasa ModuleHub). */}
-          {selectedGroup && selectedModule && !hubActivo ? <ModuleKpiHeader selectedModule={selectedModule} /> : null}
-          {selectedGroup && selectedModule && !hubActivo ? <ModuloGuiaBar selectedModule={selectedModule} /> : null}
           {editingOrderId ? (
             <OrderEditPage {...({ orderId: editingOrderId, onBack: () => setEditingOrderId(null) } as any)} />
           ) : !selectedGroup ? (
@@ -1244,18 +1244,7 @@ export function MainContent({
               </div>
             </>
           ) : selectedModule && hubActivo ? (
-            <ModuleHub
-              hub={hubActivo}
-              activeModule={selectedModule}
-              onSelectTab={onSelectModule}
-              renderLeaf={renderLeaf}
-              cabecera={
-                <>
-                  <ModuleKpiHeader selectedModule={selectedModule} />
-                  <ModuloGuiaBar selectedModule={selectedModule} />
-                </>
-              }
-            />
+            <ModuleHub hub={hubActivo} activeModule={selectedModule} onSelectTab={onSelectModule} renderLeaf={renderLeaf} />
           ) : selectedModule ? (
             renderLeaf(selectedModule)
           ) : (

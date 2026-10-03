@@ -7,7 +7,7 @@ import { AreaKpiStrip } from "@/components/area-kpi-strip"
 // que el usuario vea siempre las tareas pendientes / indicadores que ameritan revisión
 // del área en la que está trabajando. Detecta el grupo (módulo principal) al que
 // pertenece el submódulo actual y pinta sus KPIs (los mismos de la portada del grupo).
-function groupKeyOf(moduleName: string | null): string | null {
+export function groupKeyOf(moduleName: string | null): string | null {
   if (!moduleName) return null
   for (const g of groups) {
     if (g.modules?.some((m) => m.name === moduleName)) return g.key
