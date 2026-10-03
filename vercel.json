@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/alertas-bsc",
       "schedule": "30 11 * * *"
+    },
+    {
+      "path": "/api/cron/informe-semanal",
+      "schedule": "0 11 * * 1"
     }
   ]
 }

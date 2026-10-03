@@ -63,7 +63,8 @@ async function nombresEmpresas(sb: any): Promise<Map<number, string>> {
 export async function evaluarYEnviarAlertas(opts: { usuarioId?: string | null; indicador?: string | null; empresaId?: number | null; forzar?: boolean; simular?: boolean } = {}): Promise<ResultadoEvaluacion> {
   const sb: any = await getSupabaseAdminAsSystem()
   const res: ResultadoEvaluacion = { evaluadas: 0, enviadas: 0, simuladas: 0, omitidas: [], errores: [] }
-  let q = sb.from("alerta_suscripciones").select("*").eq("activo", true).order("id")
+  // El informe semanal usa la misma tabla con indicador 'informe_semanal' y tiene su propio cron.
+  let q = sb.from("alerta_suscripciones").select("*").eq("activo", true).neq("indicador", "informe_semanal").order("id")
   if (opts.usuarioId) q = q.eq("usuario_id", opts.usuarioId)
   if (opts.indicador) q = q.eq("indicador", opts.indicador)
   if (opts.empresaId != null) q = q.eq("empresa_id", opts.empresaId)

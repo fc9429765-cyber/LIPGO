@@ -26,7 +26,9 @@ import { getIndicadoresValores } from "@/lib/sig-actions"
 import { getPendientesPorPantalla, type PendientePantalla } from "@/lib/pendientes-pantalla-actions"
 import { UMBRALES, formatearValor, type UmbralAlerta } from "@/lib/alertas-bsc"
 import { cancelarSuscripcion, enviarPruebaAlerta, getMisSuscripciones, guardarSuscripcion, type SuscripcionMia } from "@/lib/alertas-bsc-actions"
+import { cancelarInforme, enviarInformeAhora, getInformeSuscripcion, suscribirInforme, type InformeSuscripcion } from "@/lib/informe-semanal-actions"
 import { BscIndicadorModal } from "@/components/indicadores/bsc-indicador-modal"
+import { FileText } from "lucide-react"
 
 type Valor = { valor: number; base?: string }
 
@@ -273,7 +275,68 @@ export function IndicadoresPantalla({ groupKey, moduleName, onNavegar }: { group
         </section>
       )}
 
+      {empresaId != null && !transversal && !errorAlertas && <InformeSemanalBloque empresaId={empresaId} empresaNombre={nombreAlcance} correo={correo} />}
+
       {ver && <BscIndicadorModal codigo={ver} def={KPI_DEFS[ver]} actual={valores?.[ver]?.valor ?? null} onClose={() => setVer(null)} />}
     </div>
+  )
+}
+
+/** Informe semanal del proyecto por correo (cron de los lunes) + "Enviarme ahora" (semana en curso). */
+function InformeSemanalBloque({ empresaId, empresaNombre, correo }: { empresaId: number; empresaNombre: string; correo: string }) {
+  const [susc, setSusc] = useState<InformeSuscripcion | null | undefined>(undefined)
+  const [ocupado, setOcupado] = useState<"toggle" | "ahora" | null>(null)
+  const cargar = () => getInformeSuscripcion(empresaId).then((r) => setSusc(r.success ? r.data.suscripcion : null))
+  useEffect(() => {
+    setSusc(undefined)
+    cargar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empresaId])
+
+  const alternar = async () => {
+    setOcupado("toggle")
+    const r = susc ? await cancelarInforme(susc.id) : await suscribirInforme({ empresaId, correo })
+    setOcupado(null)
+    if (!r.success) {
+      toast({ title: "No se pudo", description: r.message, variant: "destructive" })
+      return
+    }
+    toast({ title: susc ? "Informe cancelado" : "Informe activado", description: susc ? undefined : `Cada lunes a las 6 a. m. llegará a ${correo} la semana cerrada de ${empresaNombre}.` })
+    cargar()
+  }
+  const ahora = async () => {
+    setOcupado("ahora")
+    const r = await enviarInformeAhora({ empresaId, correo })
+    setOcupado(null)
+    if (r.success) toast({ title: "Informe enviado", description: `${r.data.asunto}. Lectura ${r.data.fuente === "ia" ? "redactada por la IA con las cifras del informe" : "automática"}. Revisa tu correo.` })
+    else toast({ title: "No se envió", description: r.message, variant: "destructive" })
+  }
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <Eyebrow>Informe semanal del proyecto</Eyebrow>
+          <p className="mt-1 text-[12.5px] leading-snug">
+            Cada lunes a las 6 a. m., la semana cerrada de {empresaNombre}: todos los indicadores del BSC con su meta y semáforo, el cambio frente a la semana anterior, lo que requiere acción y una lectura breve escrita por la IA solo con esas cifras.
+          </p>
+          {susc && (
+            <p className="lg-num mt-1 text-[11px] text-muted-foreground">
+              Activo · llega a {susc.correo}
+              {susc.ultimoEnvio ? ` · último envío ${new Date(susc.ultimoEnvio).toLocaleDateString("es-CO", { day: "numeric", month: "short", timeZone: "America/Bogota" })}${susc.ultimoEstado === "error" ? " (falló)" : ""}` : ""}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 text-xs" onClick={ahora} disabled={ocupado != null || !correo || susc === undefined} title="Enviarme ahora la semana en curso al correo de arriba">
+            {ocupado === "ahora" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Enviarme ahora
+          </Button>
+          <Button variant={susc ? "default" : "outline"} size="sm" className="h-8 gap-1.5 text-xs" onClick={alternar} disabled={ocupado != null || susc === undefined || (!susc && !correo)} aria-pressed={!!susc}>
+            {ocupado === "toggle" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+            {susc ? "Activo" : "Recibirlo cada lunes"}
+          </Button>
+        </div>
+      </div>
+    </section>
   )
 }
