@@ -28,6 +28,14 @@ export const FILTRO_ABIERTOS_POSTGREST =
 export const DIAS_SIN_RASTRO = 15
 /** Días desde la promesa a partir de los cuales un parcial es candidato a cierre por depuración. */
 export const DIAS_PARCIAL = 30
+// Además (gerencia 2026-10-03): todo pedido sin rastro logístico cuya fecha más reciente
+// entre registro y promesa sea ANTERIOR AL MES EN CURSO es candidato, aunque no haya
+// cumplido los 15 días. "La persona de pedidos debe poder sacar los que no son del mes".
+
+/** Primer día del mes de una fecha ISO: "2026-10-03" → "2026-10-01". */
+export function inicioDeMes(fechaISO: string): string {
+  return `${fechaISO.slice(0, 7)}-01`
+}
 
 export function normalizarEstado(estado: unknown): string {
   return String(estado ?? "").trim().toLowerCase()
@@ -82,6 +90,8 @@ export interface EstadoDerivado {
   sinRastro: boolean
   /** Días de antigüedad para la depuración: desde la fecha más reciente entre registro y promesa. */
   antiguedadDias: number
+  /** La fecha más reciente entre registro y promesa es anterior al mes en curso. */
+  anteriorAlMes: boolean
   candidatoDepuracion: "sin_rastro" | "parcial" | null
   siguientePaso: { clave: SiguientePaso; texto: string } | null
 }
@@ -117,12 +127,13 @@ export function derivarEstado(p: PedidoParaEstado, hoyISO: string, opts: Opcione
   const atraso = promesa ? diasEntre(hoyISO, promesa) : 0
   const referencia = promesa && registro ? (promesa > registro ? promesa : registro) : promesa ?? registro
   const antiguedad = referencia ? diasEntre(hoyISO, referencia) : 0
+  const anteriorAlMes = !!referencia && referencia < inicioDeMes(hoyISO)
   const lineasOc = opts.lineasConOcargue ?? 0
   const conCartera = tieneTexto(p.revisioncartera)
   const aprobado = normalizarEstado(p.aprobado) === "si"
   const sinRastro = !tieneTexto(p.ocargue) && !p.fechaordencargue && !tieneTexto(p.vehiculo) && !p.fechadeentrega && lineasOc === 0 && est !== "parcial"
 
-  const base = { atrasoDias: atraso, esHoy: atraso === 0 && !!promesa, esManana: atraso === -1, conCartera, sinRastro, antiguedadDias: antiguedad }
+  const base = { atrasoDias: atraso, esHoy: atraso === 0 && !!promesa, esManana: atraso === -1, conCartera, sinRastro, antiguedadDias: antiguedad, anteriorAlMes }
   const fin = (estado: EstadoPedido, etiqueta: string, tono: TonoEstado): EstadoDerivado => ({
     ...base,
     estado,
@@ -146,7 +157,7 @@ export function derivarEstado(p: PedidoParaEstado, hoyISO: string, opts: Opcione
       etiqueta: faltan != null ? `Parcial · faltan ${faltan.toLocaleString("es-CO")} und` : "Parcial",
       tono: "atencion",
       esFinal: false,
-      candidatoDepuracion: antiguedad > DIAS_PARCIAL ? "parcial" : null,
+      candidatoDepuracion: antiguedad > DIAS_PARCIAL || anteriorAlMes ? "parcial" : null,
       siguientePaso: { clave: "cerrar_pendiente", texto: "Cerrar pendiente" },
     }
   }
@@ -163,7 +174,7 @@ export function derivarEstado(p: PedidoParaEstado, hoyISO: string, opts: Opcione
     }
   }
 
-  const candidato: "sin_rastro" | null = antiguedad > DIAS_SIN_RASTRO ? "sin_rastro" : null
+  const candidato: "sin_rastro" | null = antiguedad > DIAS_SIN_RASTRO || anteriorAlMes ? "sin_rastro" : null
 
   if (aprobado) {
     if (!promesa) {

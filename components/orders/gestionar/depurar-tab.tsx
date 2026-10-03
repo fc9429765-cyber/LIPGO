@@ -25,11 +25,12 @@ import { MOTIVOS_DEPURACION, type MotivoDepuracion } from "@/lib/pedidos-estado"
 import { NUM, fechaNum, horaCorta, tTexto } from "./formato"
 
 type Lista = "sin_rastro" | "parcial"
-type FiltroAnt = "todos" | ">90" | "31-90" | "16-30" | "pista" | "nunca"
+type FiltroAnt = "todos" | ">90" | "31-90" | "0-30" | "mes" | "pista" | "nunca"
 type MotivoClave = MotivoDepuracion["clave"]
 const POR_PAGINA = 50
 
-const bucket = (d: number): ">90" | "31-90" | "16-30" => (d > 90 ? ">90" : d > 30 ? "31-90" : "16-30")
+const bucket = (d: number): ">90" | "31-90" | "0-30" => (d > 90 ? ">90" : d > 30 ? "31-90" : "0-30")
+const nombreMes = (iso: string) => new Date(`${iso}T12:00:00-05:00`).toLocaleDateString("es-CO", { month: "long", timeZone: "America/Bogota" })
 
 function textoConsignado(c: Consignado): string {
   if (!c.disponible) return "Se verá al correr el SQL 215"
@@ -73,7 +74,8 @@ export function DepurarTab({ empresaId, onDepurado, onVerDetalle }: { empresaId:
     return candidatos.filter((c) => {
       if (filtro === "pista" && !c.reemplazadoPor) return false
       if (filtro === "nunca" && !c.pistas.includes("Nunca aprobado")) return false
-      if ((filtro === ">90" || filtro === "31-90" || filtro === "16-30") && bucket(c.calc.antiguedadDias) !== filtro) return false
+      if (filtro === "mes" && !c.calc.anteriorAlMes) return false
+      if ((filtro === ">90" || filtro === "31-90" || filtro === "0-30") && bucket(c.calc.antiguedadDias) !== filtro) return false
       if (q && ![String(c.idpedido), c.pedido, c.orden_de_compra, c.cliente].some((v) => (v ?? "").toLowerCase().includes(q))) return false
       return true
     })
@@ -83,9 +85,10 @@ export function DepurarTab({ empresaId, onDepurado, onVerDetalle }: { empresaId:
   const visibles = filtrados.slice(pag * POR_PAGINA, pag * POR_PAGINA + POR_PAGINA)
 
   const conteos = useMemo(() => {
-    const c = { todos: candidatos.length, ">90": 0, "31-90": 0, "16-30": 0, pista: 0, nunca: 0 } as Record<FiltroAnt, number>
+    const c = { todos: candidatos.length, ">90": 0, "31-90": 0, "0-30": 0, mes: 0, pista: 0, nunca: 0 } as Record<FiltroAnt, number>
     for (const x of candidatos) {
       c[bucket(x.calc.antiguedadDias)]++
+      if (x.calc.anteriorAlMes) c.mes++
       if (x.reemplazadoPor) c.pista++
       if (x.pistas.includes("Nunca aprobado")) c.nunca++
     }
@@ -182,7 +185,7 @@ export function DepurarTab({ empresaId, onDepurado, onVerDetalle }: { empresaId:
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <p className="max-w-3xl text-sm leading-relaxed">
-            Pedidos que no se van a entregar: nunca tuvieron orden de cargue, vehículo, lote, inicio ni fin de cargue, ni peso de báscula. Toca una tarjeta para trabajar su lista. Al depurar quedan como <b className="font-semibold">No entregado</b> con motivo, quién y cuándo; <b className="font-semibold">no se borra nada</b> y lo hecho queda consignado aquí.
+            Pedidos que no se van a entregar: nunca tuvieron orden de cargue, vehículo, lote, inicio ni fin de cargue, ni peso de báscula, y son de meses anteriores o llevan más de 15 días. Toca una tarjeta para trabajar su lista: marca los pedidos, confirma con tu clave y salen de pendientes. Quedan como <b className="font-semibold">No entregado</b> con motivo, quién y cuándo, solo visibles en Historial; lo hecho queda consignado aquí.
           </p>
           <Chip tono="neutro"><Lock className="h-3 w-3" /> Clave personal · Gerencia de proyecto</Chip>
         </div>
@@ -199,7 +202,8 @@ export function DepurarTab({ empresaId, onDepurado, onVerDetalle }: { empresaId:
                 <div className="flex flex-wrap gap-1.5">
                   <Chip tono="critico">más de 90 d · {bb.v}</Chip>
                   <Chip tono="atencion">31–90 d · {bb.m}</Chip>
-                  {t.k === "sin_rastro" && <Chip tono="neutro">16–30 d · {bb.r}</Chip>}
+                  {bb.r > 0 && <Chip tono="neutro">hasta 30 d · {bb.r}</Chip>}
+                  <Chip tono="neutro">anteriores a {nombreMes(data.hoy)} · {t.lista.filter((c) => c.calc.anteriorAlMes).length}</Chip>
                 </div>
                 <div className="mt-1 flex items-center justify-between gap-3 border-t border-border pt-3">
                   <div className="min-w-0">
@@ -231,8 +235,9 @@ export function DepurarTab({ empresaId, onDepurado, onVerDetalle }: { empresaId:
             <p className="lg-num text-xs text-muted-foreground">{NUM.format(actual.lista.length)} candidatos · {actual.destino.toLowerCase()} · {textoConsignado(actual.consignado)}</p>
           </div>
         </div>
-        <div className="hidden gap-2 md:flex">
+        <div className="hidden flex-wrap gap-2 md:flex">
           <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => seleccionar(filtrados)} disabled={filtrados.length === 0}><Check className="h-3.5 w-3.5" /> Seleccionar los {NUM.format(filtrados.length)} filtrados</Button>
+          {conteos.mes > 0 && <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => seleccionar(actual.lista.filter((c) => c.calc.anteriorAlMes))}>Anteriores a {nombreMes(data.hoy)} ({NUM.format(conteos.mes)})</Button>}
           {b.v > 0 && <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => seleccionar(actual.lista.filter((c) => c.calc.antiguedadDias > 90))}>Solo los de más de 90 días ({NUM.format(b.v)})</Button>}
         </div>
       </div>
@@ -261,7 +266,7 @@ export function DepurarTab({ empresaId, onDepurado, onVerDetalle }: { empresaId:
       ) : (
         candidatos.length > 0 && (
           <p className="hidden items-center gap-2 rounded-xl border border-dashed border-border px-4 py-2.5 text-xs text-muted-foreground md:flex">
-            <Lock className="h-3.5 w-3.5" /> Marca los pedidos (o usa "Seleccionar los filtrados") y aparecerá aquí el botón <b className="font-semibold">Depurar</b>. Marcar no cambia nada: el pedido deja de estar pendiente solo al confirmar con tu clave{data.simulaEnEsteEntorno ? " (en esta previsualización solo se simula)" : ""}.
+            <Lock className="h-3.5 w-3.5" /> Paso 1: marca los pedidos, elige su motivo o usa "Anteriores a {nombreMes(data.hoy)}". Paso 2: pulsa <b className="font-semibold">Depurar N pedidos</b> en la barra que aparece aquí y confirma con tu clave. Solo entonces salen de pendientes{data.simulaEnEsteEntorno ? " (en esta previsualización solo se simula)" : ""}.
           </p>
         )
       )}
@@ -277,9 +282,11 @@ export function DepurarTab({ empresaId, onDepurado, onVerDetalle }: { empresaId:
             </div>
             {([
               ["todos", "Todos"],
+              ["mes", `Anteriores a ${nombreMes(data.hoy)}`],
               [">90", "Más de 90 d"],
               ["31-90", "31–90 d"],
-              ...(lista === "sin_rastro" ? ([["16-30", "16–30 d"], ["pista", "Con pista"], ["nunca", "Nunca aprobados"]] as [FiltroAnt, string][]) : []),
+              ["0-30", "Hasta 30 d"],
+              ...(lista === "sin_rastro" ? ([["pista", "Con pista"], ["nunca", "Nunca aprobados"]] as [FiltroAnt, string][]) : []),
             ] as [FiltroAnt, string][]).map(([v, et]) => (
               <button key={v} type="button" onClick={() => { setFiltro(v); setPagina(0) }} className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium ${filtro === v ? "border-marca bg-marca text-white" : "border-input bg-background hover:bg-accent"}`}>
                 {et} <span className="lg-num">{NUM.format(conteos[v] ?? 0)}</span>
@@ -344,7 +351,14 @@ export function DepurarTab({ empresaId, onDepurado, onVerDetalle }: { empresaId:
                         )}
                       </td>
                       <td className="px-3 py-2 align-middle">
-                        <Select value={m} onValueChange={(v) => setMotivos((mm) => new Map(mm).set(c.idpedido, v as MotivoClave))}>
+                        <Select
+                          value={m}
+                          onValueChange={(v) => {
+                            // Elegir un motivo también MARCA el pedido: catalogar sin seleccionar no hacía nada.
+                            setMotivos((mm) => new Map(mm).set(c.idpedido, v as MotivoClave))
+                            setSel((s) => new Set(s).add(c.idpedido))
+                          }}
+                        >
                           <SelectTrigger className={`h-8 w-[200px] text-xs ${motivos.has(c.idpedido) || c.motivoSugerido ? "border-acento" : ""}`}><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {MOTIVOS_DEPURACION.map((x) => <SelectItem key={x.clave} value={x.clave}>{x.texto}{x.clave === "reemplazado" && c.reemplazadoPor ? ` · #${c.reemplazadoPor}` : ""}</SelectItem>)}
