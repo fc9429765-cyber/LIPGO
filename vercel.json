@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/cierre-produccion",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/alertas-bsc",
+      "schedule": "30 11 * * *"
     }
   ]
 }

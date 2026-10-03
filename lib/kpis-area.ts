@@ -207,6 +207,14 @@ export function kpiIcon(key: string): string {
   return KPI_ICON[key] || "activity"
 }
 
+/** Pantalla donde se actúa sobre un indicador: la primera que lo declara en SUBMODULO_KPIS,
+ *  o el portal del primer grupo que lo lista en AREA_KPIS. Para los enlaces de las alertas. */
+export function pantallaDeIndicador(key: string): { modulo: string | null; grupo: string | null } {
+  for (const [modulo, keys] of Object.entries(SUBMODULO_KPIS)) if (keys.includes(key)) return { modulo, grupo: null }
+  for (const [grupo, keys] of Object.entries(AREA_KPIS)) if (keys.includes(key)) return { modulo: null, grupo }
+  return { modulo: null, grupo: null }
+}
+
 // Indicadores a mostrar para un módulo/submódulo: el set del submódulo si existe,
 // si no el del módulo madre (grupo). Vacío = no hay indicadores (mrp/configuración).
 export function kpisParaModulo(groupKey: string | null | undefined, moduleName: string | null | undefined): string[] {

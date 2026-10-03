@@ -14,6 +14,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { APRENDIZAJE_POR_MODULO } from "@/lib/aprendizaje-content"
 import { GuiaModulo } from "@/components/guia-modulo-panel"
 import { ModuleKpiHeader, groupKeyOf } from "@/components/module-kpi-header"
+import { AlertasIndicadores } from "@/components/alertas-indicadores"
 import { etiquetaDeGrupo } from "@/lib/navegacion"
 import type { GroupKey } from "@/lib/dashboard-data"
 
@@ -50,6 +51,7 @@ export function BotonesContextoModulo({ selectedModule, className }: { selectedM
             </SheetHeader>
             <div className="px-4 pb-6">
               <ModuleKpiHeader selectedModule={selectedModule} />
+              <AlertasIndicadores groupKey={gk} moduleName={selectedModule} />
             </div>
           </SheetContent>
         </Sheet>
