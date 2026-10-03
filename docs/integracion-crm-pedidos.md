@@ -3,6 +3,16 @@
 Borrador guardado el 2026-10-03 por instrucción de la Gerencia General, para cuando se
 retome. Aún no se ha construido nada de esto en LIPgo.
 
+## Alcance (gerencia, 2026-10-03)
+
+- **Solo el ID1 (Harinera Indupan) tendrá CRM.** ID2 (Avimol) e ID3 (Cedi Funza) siguen con el
+  canal manual tal como está hoy: Entrada de pedidos con aprobación de cartera y gerencia por
+  clave dentro de LIPgo.
+- En ID1 e ID3 la misma persona maneja pedidos y Recepción y Despacho; en ID2 son personas
+  distintas. Por eso en Gestionar pedidos los botones "Generar orden de cargue" y "Ver orden de
+  cargue" solo aparecen si el usuario tiene esos módulos en Gestión de Usuarios; si no, la fila
+  dice "Espera orden de cargue".
+
 ## El proceso real
 
 1. El vendedor gestiona el pedido en el **CRM de LIP** (sistema propio de LIP, fuera de LIPgo).

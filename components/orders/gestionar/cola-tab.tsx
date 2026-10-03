@@ -76,6 +76,7 @@ export function ColaTab({
   onGenerarOC,
   onVerOC,
   onIrDepurar,
+  permisos,
 }: {
   data: ColaPedidos
   filtro: FiltroCola
@@ -86,6 +87,8 @@ export function ColaTab({
   onGenerarOC: (p: PedidoCola) => void
   onVerOC: (p: PedidoCola) => void
   onIrDepurar: () => void
+  /** Módulos de Recepción y Despacho que tiene el usuario (Gestión de Usuarios). */
+  permisos: { generarOC: boolean; verOC: boolean }
 }) {
   const [busqueda, setBusqueda] = useState("")
   const [mostrarViejos, setMostrarViejos] = useState(false)
@@ -102,6 +105,13 @@ export function ColaTab({
   const pasoDe = (p: PedidoCola) => {
     const s = p.calc.siguientePaso
     if (!s) return null
+    // La orden de cargue la genera Recepción y Despacho: sin ese módulo, el pedido solo espera.
+    if (s.clave === "generar_oc" && !permisos.generarOC) {
+      return <Chip tono={p.calc.atrasoDias > 0 ? "critico" : "info"} title="La orden de cargue la genera Recepción y Despacho">Espera orden de cargue</Chip>
+    }
+    if (s.clave === "ver_oc" && !permisos.verOC) {
+      return <Chip tono="info" title={p.ocargue ? `Orden de cargue ${p.ocargue}` : "En cargue"}>En Recepción y Despacho</Chip>
+    }
     const primario = p.calc.estado === "programado" && p.calc.atrasoDias >= 0 && !p.calc.esManana
     const ejecutar = () => {
       switch (s.clave) {
@@ -146,8 +156,8 @@ export function ColaTab({
           <DropdownMenuSeparator />
           {c.estado === "nuevo" && !c.conCartera && <DropdownMenuItem onClick={() => onAccion("cartera", p)}>Aprobar cartera…</DropdownMenuItem>}
           {c.estado === "nuevo" && c.conCartera && <DropdownMenuItem onClick={() => onAccion("aprobar", p)}>Aprobar…</DropdownMenuItem>}
-          {c.estado === "programado" && <DropdownMenuItem onClick={() => onGenerarOC(p)}>Generar orden de cargue</DropdownMenuItem>}
-          {(c.estado === "en_cargue" || c.estado === "parcial") && (p.ocargue || p.lineasConOcargue > 0) && <DropdownMenuItem onClick={() => onVerOC(p)}>Ver orden de cargue</DropdownMenuItem>}
+          {c.estado === "programado" && permisos.generarOC && <DropdownMenuItem onClick={() => onGenerarOC(p)}>Generar orden de cargue</DropdownMenuItem>}
+          {(c.estado === "en_cargue" || c.estado === "parcial") && (p.ocargue || p.lineasConOcargue > 0) && permisos.verOC && <DropdownMenuItem onClick={() => onVerOC(p)}>Ver orden de cargue</DropdownMenuItem>}
           {c.estado === "parcial" && <DropdownMenuItem onClick={() => onAccion("cerrar_pendiente", p)}>Cerrar pendiente…</DropdownMenuItem>}
           {aprobado && <DropdownMenuItem onClick={() => onAccion("cierre_factura", p)}>Cierre con factura…</DropdownMenuItem>}
           {aprobado && c.sinRastro && c.estado !== "parcial" && <DropdownMenuItem onClick={() => onAccion("anular", p)}>Anular…</DropdownMenuItem>}

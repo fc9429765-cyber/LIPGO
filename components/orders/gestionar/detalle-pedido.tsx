@@ -8,7 +8,7 @@ import { useEffect, useState } from "react"
 import { Check, FileText, Pencil, Truck, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Esqueleto, Eyebrow } from "@/components/ui/lipgo"
+import { Chip, Esqueleto, Eyebrow } from "@/components/ui/lipgo"
 import { getLineasPedido, type LineaPedido, type PedidoCola } from "@/lib/pedidos-cola-actions"
 import { normalizarEstado } from "@/lib/pedidos-estado"
 import { EstadoChip } from "./estado-chip"
@@ -57,6 +57,7 @@ export function DetallePedido({
   onEditar,
   onGenerarOC,
   onVerOC,
+  permisos,
 }: {
   empresaId: number | null
   idpedido: number | null
@@ -65,6 +66,7 @@ export function DetallePedido({
   onEditar: (pedido: PedidoCola) => void
   onGenerarOC: (pedido: PedidoCola) => void
   onVerOC: (pedido: PedidoCola) => void
+  permisos: { generarOC: boolean; verOC: boolean }
 }) {
   const [data, setData] = useState<{ cabecera: PedidoCola; lineas: LineaPedido[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -248,14 +250,15 @@ export function DetallePedido({
                   {aprobado && c.sinRastro && c.estado !== "parcial" && <Button variant="outline" size="sm" onClick={() => onAccion("anular", p)}>Anular…</Button>}
                   {aprobado && <Button variant="outline" size="sm" onClick={() => onAccion("cierre_factura", p)}>Cierre con factura</Button>}
                   {c.estado === "parcial" && <Button variant="outline" size="sm" onClick={() => onAccion("cerrar_pendiente", p)}>Cerrar pendiente</Button>}
-                  {(c.estado === "en_cargue" || c.estado === "parcial") && (p.ocargue || p.lineasConOcargue > 0) && (
+                  {(c.estado === "en_cargue" || c.estado === "parcial") && (p.ocargue || p.lineasConOcargue > 0) && permisos.verOC && (
                     <Button variant="outline" size="sm" onClick={() => onVerOC(p)}>Ver orden de cargue</Button>
                   )}
-                  {c.estado === "programado" && (
+                  {c.estado === "programado" && permisos.generarOC && (
                     <Button size="sm" className="gap-1.5" onClick={() => onGenerarOC(p)}>
                       <Truck className="h-3.5 w-3.5" /> Generar orden de cargue
                     </Button>
                   )}
+                  {c.estado === "programado" && !permisos.generarOC && <Chip tono="info">Espera orden de cargue de Recepción y Despacho</Chip>}
                 </div>
               </div>
             )}

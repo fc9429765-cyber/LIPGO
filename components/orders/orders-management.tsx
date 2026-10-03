@@ -16,6 +16,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Chip, Cifra, Esqueleto, Eyebrow } from "@/components/ui/lipgo"
 import { toast } from "@/hooks/use-toast"
 import { useAuth } from "@/components/auth-provider"
+import { useModulePermissions } from "@/hooks/use-module-permissions"
 import { getColaPedidos, type ColaPedidos, type PedidoCola } from "@/lib/pedidos-cola-actions"
 import OrderEntryForm from "./order-entry-form"
 import { ColaTab, filtrarCola, ordenarCola, type FiltroCola } from "./gestionar/cola-tab"
@@ -30,6 +31,14 @@ type Pestana = "cola" | "manana" | "depurar" | "historial"
 
 export function OrdersManagement(_props?: { onEditOrder?: (orderId: number) => void; initialTab?: Pestana }) {
   const { selectedEmpresaId, selectedEmpresaNombre } = useAuth()
+  // Permisos por módulo de Gestión de Usuarios (no se tocan aquí): quien no tiene
+  // Recepción y Despacho no genera ni abre órdenes de cargue (en ID2 la persona de
+  // pedidos es distinta de la de despachos). Los botones solo aparecen si tiene el módulo.
+  const { loaded: permisosCargados, isModuleVisible } = useModulePermissions()
+  const permisos = {
+    generarOC: permisosCargados && isModuleVisible(MODULO_GENERAR_OC),
+    verOC: permisosCargados && isModuleVisible(MODULO_GESTION_OC),
+  }
   // Si se llegó desde el portal del área u otro módulo con una vista pedida, se abre ahí.
   const [intencion] = useState(() => tomarIntencionGestionar())
   const [pestana, setPestana] = useState<Pestana>(intencion?.tab ?? _props?.initialTab ?? "cola")
@@ -220,7 +229,7 @@ export function OrdersManagement(_props?: { onEditOrder?: (orderId: number) => v
 
       {pestana === "cola" &&
         (data ? (
-          <ColaTab data={data} filtro={filtro} onFiltro={setFiltro} onVerDetalle={(p) => setDetalleId(p.idpedido)} onAccion={abrirAccion} onEditar={editar} onGenerarOC={generarOC} onVerOC={verOC} onIrDepurar={() => setPestana("depurar")} />
+          <ColaTab data={data} filtro={filtro} onFiltro={setFiltro} onVerDetalle={(p) => setDetalleId(p.idpedido)} onAccion={abrirAccion} onEditar={editar} onGenerarOC={generarOC} onVerOC={verOC} onIrDepurar={() => setPestana("depurar")} permisos={permisos} />
         ) : (
           <div className="lg-card p-5"><Esqueleto lineas={6} /></div>
         ))}
@@ -234,7 +243,7 @@ export function OrdersManagement(_props?: { onEditOrder?: (orderId: number) => v
         </p>
       )}
 
-      <DetallePedido empresaId={selectedEmpresaId} idpedido={detalleId} onClose={() => setDetalleId(null)} onAccion={abrirAccion} onEditar={editar} onGenerarOC={generarOC} onVerOC={verOC} />
+      <DetallePedido empresaId={selectedEmpresaId} idpedido={detalleId} onClose={() => setDetalleId(null)} onAccion={abrirAccion} onEditar={editar} onGenerarOC={generarOC} onVerOC={verOC} permisos={permisos} />
       <AccionesPedidoDialogos accion={accion} onClose={() => setAccion(null)} onDone={cargar} />
     </div>
   )
