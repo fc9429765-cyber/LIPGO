@@ -25,6 +25,7 @@ import { desdeDePeriodo, hoyBogotaISO, type PeriodoListado } from "@/lib/periodo
 import { accesoPedidos, limitarPorOwners, type AccesoPedidos } from "@/lib/acceso-empresa"
 import { sumarDiasISO, normalizarEstado, textoMotivo, ESTADO_ENTREGA_PARCIAL, ESTADO_NO_ENTREGADO, FILTRO_ABIERTOS_POSTGREST, MOTIVOS_DEPURACION, type MotivoDepuracion } from "@/lib/pedidos-estado"
 import { MSG_SIN_ACCESO, aPedidoCola, cargarCola, n0, resumenLineas, resumir, txt, type ColaPedidos, type LineaPedido, type PedidoCola, type ResLineas, type ResumenCola } from "@/lib/pedidos-cola-core"
+import { registrarErrorServidor } from "@/lib/errores-servidor"
 
 export type { PedidoCola, ResumenCola, ColaPedidos, LineaPedido } from "@/lib/pedidos-cola-core"
 
@@ -133,6 +134,7 @@ export async function getColaPedidos(empresaId: number | null | undefined): Prom
     return { success: true, data: { hoy, manana: sumarDiasISO(hoy, 1), pedidos, resumen: resumir(pedidos) } }
   } catch (e: any) {
     console.error("[pedidos-cola] getColaPedidos:", e?.message ?? e)
+    void registrarErrorServidor("pedidos-cola.getColaPedidos", e, { empresaId })
     return { success: false, message: e?.message || "No se pudo cargar la cola de pedidos." }
   }
 }
@@ -409,6 +411,7 @@ export async function depurarPedidos(input: { empresaId: number | null | undefin
     return { success: true, data: { simulado: simular, depurados, omitidos, autorizadoPor: auth.autorizadoPor ?? null, comoNoEntregado, comoEntregaParcial } }
   } catch (e: any) {
     console.error("[pedidos-cola] depurarPedidos:", e?.message ?? e)
+    void registrarErrorServidor("pedidos-cola.depurarPedidos", e, { empresaId, items: items.length, simular })
     const m = String(e?.message ?? "")
     if (/motivo_no_entrega|depurado_por|depurado_en/.test(m)) return { success: false, message: "Falta correr el script SQL 215 (columnas de depuración en pedidoscabecera)." }
     return { success: false, message: m || "No se pudo depurar." }

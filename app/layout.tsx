@@ -7,6 +7,7 @@ import { AuthProvider } from "@/components/auth-provider"
 import { SubmoduloFiltroProvider } from "@/components/submodulo-filtro-context"
 import GlobalLocationScheduler from "@/components/global-location-scheduler"
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt"
+import { MonitorErrores } from "@/components/monitor-errores"
 import { Toaster } from "@/components/ui/toaster"
 import "./globals.css"
 
@@ -80,6 +81,8 @@ export default function RootLayout({
         </AuthProvider>
         {/* Banner "¿Quieres instalar LIPgo?" (PWA) en escritorio y movil. */}
         <PwaInstallPrompt />
+        {/* Monitoreo de errores propio (SQL 217): errores no capturados y promesas rechazadas. */}
+        <MonitorErrores />
         <Analytics />
         <Script
           src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"
