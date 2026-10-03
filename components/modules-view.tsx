@@ -242,6 +242,10 @@ export function ModulesView({ groupKey, onBack, onSelectModule }: ModulesViewPro
 
   if (!group) return null
 
+  // Subgrupos de una sola pantalla van juntos en una rejilla; los de varias conservan su sección.
+  const sueltas = entradasSub.filter((s) => s.entradas.length === 1).flatMap((s) => s.entradas)
+  const conSeccion = entradasSub.filter((s) => s.entradas.length > 1)
+
   const GroupIcon = group.icon
   const tint = TINT[groupKey] ?? TEAL
   const totalPantallas = entradasDirectas.length + entradasSub.reduce((acc, s) => acc + s.entradas.length, 0)
@@ -356,9 +360,19 @@ export function ModulesView({ groupKey, onBack, onSelectModule }: ModulesViewPro
 
       {/* Pantallas primero */}
       {entradasDirectas.length > 0 && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">{render(entradasDirectas)}</div>}
-      {entradasSub.map((sg) => (
+      {/* Subgrupos con UNA sola pantalla (p. ej. Configuración, donde cada subgrupo es un
+          hub) comparten una misma rejilla: antes cada uno ocupaba una fila entera y el
+          portal quedaba en una sola columna con la pantalla vacía (gerencia 2026-10-03).
+          El título del subgrupo sobra porque la tarjeta ya lo lleva. */}
+      {sueltas.length > 0 && (
+        <div className="space-y-2.5">
+          {conSeccion.length > 0 && <h2 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Pantallas</h2>}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">{render(sueltas)}</div>
+        </div>
+      )}
+      {conSeccion.map((sg) => (
         <div key={sg.title} className="space-y-2.5">
-          {(entradasSub.length > 1 || entradasDirectas.length > 0) && (
+          {(conSeccion.length > 1 || entradasDirectas.length > 0 || sueltas.length > 0) && (
             <h2 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">{sg.title}</h2>
           )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">{render(sg.entradas)}</div>
