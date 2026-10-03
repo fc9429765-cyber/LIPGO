@@ -202,7 +202,7 @@ export function BloqueCompletitud({ d }: { d: DashboardPedidosPeriodo }) {
               </ul>
             </div>
           )}
-          <p className="border-t border-border px-5 py-2.5 text-xs text-muted-foreground">"Sin dato de cargue" son pedidos con orden de cargue cuyas unidades cargadas no quedaron registradas; el dato existe en {NUM.format(d.franja.conCargado)} de {NUM.format(d.franja.pedidos)} pedidos.</p>
+          <p className="border-t border-border px-5 py-2.5 text-xs text-muted-foreground">Completo = pedido en estado entregado; parcial = parcial o entrega parcial (misma definición del BSC, IND-PED-03). "Sin dato" = tuvo cargue o cierre pero el estado no lo refleja. Unidades cargadas registradas en {NUM.format(d.franja.conCargado)} de {NUM.format(d.franja.pedidos)} pedidos.</p>
         </>
       )}
     </Seccion>

@@ -204,13 +204,13 @@ export async function getDashboardPedidosPeriodo(empresaId: number | null | unde
       if (clase === "pendiente") cc.pendientes++
       cc.kg += r.kg
       clientes.set(cliente, cc)
-      // Completitud (solo pedidos que ya tuvieron cargue o cierre)
+      // Completitud: MISMA definición del BSC (lib/pedidos-indicadores.ts): por el estado
+      // que fija el proceso. Completo = entregado; parcial = parcial o entrega parcial;
+      // "sin dato" = ya tuvo cargue o cierre pero el estado no lo refleja.
       const est = normalizarEstado(p.estado)
-      if (clase === "a_tiempo" || clase === "tarde" || clase === "cerrado_sin_fecha") {
-        if (est === "entregado" || (r.cargadas > 0 && r.und > 0 && r.cargadas >= r.und)) completitud.completos++
-        else if (est === "parcial" || est === "entrega parcial" || (r.cargadas > 0 && r.cargadas < r.und)) completitud.parciales++
-        else completitud.sinDato++
-      }
+      if (est === "entregado") completitud.completos++
+      else if (est === "parcial" || est === "entrega parcial") completitud.parciales++
+      else if (clase === "a_tiempo" || clase === "tarde" || clase === "cerrado_sin_fecha") completitud.sinDato++
       // Volumen
       const dia = porDia.get(diaSemana(promesa))!
       dia.pedidos++
