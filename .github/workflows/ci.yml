@@ -1,0 +1,47 @@
+# Integración continua de LIPgo (2026-10-03).
+# Cada push a main o a una rama preview/* y cada pull request pasa por: tipos, guías de
+# aprendizaje, pruebas y build de producción. Si algo falla, el commit queda marcado en
+# rojo en GitHub. Para que además BLOQUEE la publicación, activar en GitHub la protección
+# de la rama main exigiendo este flujo ("Require status checks to pass").
+# El build corre con valores de relleno: las pantallas son dinámicas y no consultan la
+# base al compilar (verificado localmente sin .env.local).
+name: CI
+
+on:
+  push:
+    branches: [main, "preview/**"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: tipos · guías · pruebas · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon
+      SUPABASE_SERVICE_ROLE_KEY: placeholder-service
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Dependencias
+        run: pnpm install --frozen-lockfile
+      - name: Tipos
+        run: pnpm exec tsc --noEmit
+      - name: Guías de aprendizaje
+        run: pnpm run check:aprendizaje
+      - name: Pruebas
+        run: pnpm test
+      - name: Build de producción
+        run: pnpm build

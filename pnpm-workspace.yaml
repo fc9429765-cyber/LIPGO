@@ -1,3 +1,5 @@
 allowBuilds:
   core-js: true
+  # esbuild lo trae vitest; su binario llega por paquete opcional y no necesita script de build.
+  esbuild: false
   sharp: true
