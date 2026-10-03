@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { esEstadoFinal } from "@/lib/pedidos-estado"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -221,11 +222,9 @@ function GenerateLoadOrdersComponent() {
     if (result.success && result.data) {
       let filteredOrders = result.data
 
-      // Exclude orders with estado: "entregado", "entrega parcial", "anulado"
-      filteredOrders = filteredOrders.filter((order: Order) => {
-        const estado = order.estado?.toLowerCase().trim()
-        return estado !== "entregado" && estado !== "entrega parcial" && estado !== "anulado"
-      })
+      // Exclude orders with estado: "entregado", "entrega parcial", "anulado" y, desde
+      // SQL 215, "no entregado" (depurados). Misma lista que lib/pedidos-estado.ts.
+      filteredOrders = filteredOrders.filter((order: Order) => !esEstadoFinal(order.estado))
 
       if (selectedFecha) {
         filteredOrders = filteredOrders.filter((order: Order) => {

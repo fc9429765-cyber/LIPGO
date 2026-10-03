@@ -95,54 +95,55 @@ export const APRENDIZAJE_PEDIDOS: ContenidoAprendizaje[] = [
   },
   {
     modulo: "Gestionar pedidos",
-    resumen: "Consulta, edita, aprueba, anula y cierra los pedidos del proyecto activo.",
+    resumen: "Cola logistica del cliente: que pedidos van hoy, cuales estan atrasados, que falta aprobar y cuales ya no se van a entregar.",
     proposito:
-      "Es el centro de trabajo diario sobre los pedidos ya registrados. Aqui vive el ciclo de aprobacion en dos pasos (primero cartera, luego aprobacion final con contraseña) y las acciones de cierre: anular, cerrar un pedido parcial o cerrarlo con factura. Muestra los pedidos del proyecto seleccionado en la barra superior.",
+      "Es el centro de trabajo diario del cliente sobre sus pedidos ya registrados (el coordinador LIP no participa: quien decide que se carga es el cliente). Muestra los pedidos abiertos del proyecto como una cola ordenada por urgencia, con el estado derivado de los datos (atrasado, para hoy, programado, en cargue, parcial, nuevo) y el siguiente paso de cada uno. Tiene cuatro pestañas: Cola, Para mañana, Depurar pendientes e Historial. Las aprobaciones de cartera y gerencia solo aplican al canal manual (Entrada de pedidos); los pedidos que llegan del CRM ya vienen aprobados.",
     puedes: [
-      "Filtrar los pedidos por cliente, vendedor, destino, estado, aprobado si/no y rango de fechas, y aplicar o limpiar los filtros.",
-      "Ver el detalle completo de un pedido y abrir o descargar su PDF.",
-      "Editar un pedido que aun no tenga revision de cartera ni aprobacion; al guardar se regenera el PDF automaticamente.",
-      "Aprobar cartera y luego dar la aprobacion final del pedido, cada paso con su contraseña de autorizacion.",
-      "Anular un pedido aprobado (con contraseña y observaciones) mientras no tenga orden de cargue asignada.",
-      "Cerrar un pedido en estado parcial (Cerrar Pendiente) o hacer cierre con numero de factura para cualquier pedido aprobado.",
-      "Exportar el listado filtrado a Excel.",
+      "Ver la franja de seis cifras (atrasados, para hoy, para mañana, en cargue/parcial, por aprobar, candidatos a depurar) y tocar cualquiera para abrir su vista.",
+      "Trabajar la Cola: buscar por pedido, numero del cliente, OC, cliente o placa; filtrar por atrasados, hoy, programados, en cargue o por aprobar; y ejecutar el siguiente paso desde la misma fila (aprobar cartera, aprobar, generar orden de cargue, ver la orden, cerrar pendiente).",
+      "Abrir el detalle de un pedido con su linea de tiempo (registrado, cartera, aprobado, promesa, orden de cargue, entrega, cierre), sus datos, sus lineas con kilos y lo cargado, y el PDF.",
+      "Ver en Para mañana la demanda de un dia (pedidos, kilos y unidades por cliente y tipo de despacho) frente a la programacion de vehiculos del cliente, con la cobertura y los atrasados recientes que podrian salir el mismo dia.",
+      "Depurar pendientes: seleccionar en bloque los pedidos que nunca tuvieron orden de cargue, vehiculo ni lote (mas de 15 dias) o los parciales viejos (mas de 30 dias), darles un motivo y dejarlos como 'no entregado' con tu clave personal. No se borra nada.",
+      "Consultar el Historial de pedidos finalizados (entregados, entrega parcial, anulados y no entregados) por periodo, con filtros y exportacion a Excel.",
+      "Editar o eliminar un pedido solo mientras sea nuevo, sin revision de cartera ni aprobacion.",
+      "Anular un pedido aprobado sin orden de cargue, cerrar un pedido parcial o hacer cierre con factura, cada accion con su clave de autorizacion.",
     ],
     noPuedes: [
-      "Editar o eliminar un pedido que ya esta aprobado.",
-      "Editar un pedido que ya tiene revision de cartera.",
-      "Eliminar un pedido que ya tiene orden de cargue asignada.",
-      "Dar la aprobacion final si el pedido no paso antes por la aprobacion de cartera.",
+      "Editar o eliminar un pedido que ya esta aprobado o que ya tiene revision de cartera.",
+      "Anular o depurar un pedido que ya tiene orden de cargue, vehiculo o entrega: ese pedido se gestiona en Recepcion y Despacho.",
+      "Depurar sin clave personal con el proceso 'Depurar pedidos' (perfiles Gerencia de proyecto y Gerencia General LIPgo). El coordinador LIP no lo tiene.",
+      "Borrar un pedido depurado: queda en Historial como 'no entregado' con motivo, quien y cuando.",
     ],
     funcionalidades: [
       {
-        nombre: "Filtros y exportacion",
+        nombre: "Estado derivado y siguiente paso",
         descripcion:
-          "Barra de filtros por cliente (con buscador), vendedor, destino, aprobado, estado y fechas desde/hasta. El boton Exportar a Excel baja exactamente lo que este filtrado en pantalla.",
+          "El estado no se lee crudo de la base: se deriva de aprobacion, promesa, orden de cargue y lineas. Atrasado = aprobado con promesa vencida y sin orden de cargue; en cargue = con orden de cargue; parcial = cargo una parte. Cada estado trae su boton de siguiente paso. Los atrasados de mas de 15 dias se agrupan en una fila para no tapar la operacion de hoy.",
       },
       {
-        nombre: "Aprobacion en dos pasos",
+        nombre: "Para mañana",
         descripcion:
-          "Primero 'Aprobar Cartera' (valida contraseña y deja registrado quien reviso) y despues 'Aprobar' (contraseña de aprobacion). Una vez aprobado, el pedido queda blindado: no se edita ni se elimina.",
+          "Demanda del dia elegido (promesa = fecha programada) por cliente y tipo de despacho, atrasados de los ultimos 15 dias, y la programacion de vehiculos del cliente con su cobertura (vehiculos por capacidad del tipo frente a los kilos). Desde ahi se salta a Programacion de mañana.",
       },
       {
-        nombre: "Edicion con PDF regenerado",
+        nombre: "Depurar pendientes",
         descripcion:
-          "Mientras el pedido siga sin revision de cartera, se puede modificar todo (encabezado y productos). Al guardar, el PDF se regenera y descarga automaticamente.",
+          "Lista los candidatos con antiguedad, kilos, estado actual y pistas ('Reemplazado por #N' cuando hay un pedido posterior del mismo cliente con el mismo numero u OC; 'Promesa anterior al registro'; 'Nunca aprobado'). Motivos: reemplazado, el cliente desistio, modificado, vencido sin gestion, otro. Se confirma con clave personal y queda registrado quien depuro. En la previsualizacion solo simula.",
       },
       {
-        nombre: "Anular pedido",
+        nombre: "Acciones con clave",
         descripcion:
-          "Disponible solo para pedidos aprobados sin orden de cargue. Pide contraseña y observaciones del motivo, y deja el pedido anulado.",
+          "Aprobar cartera, Aprobar, Anular, Cerrar pendiente y Cierre con factura son las mismas acciones de siempre, ahora desde el menu de la fila o desde el detalle.",
       },
       {
-        nombre: "Cierres",
+        nombre: "Historial y Excel",
         descripcion:
-          "'Cerrar Pendiente' cierra un pedido en estado parcial (entrego parte y no va a completar). 'Cierre con Factura' registra el numero de factura para cerrar cualquier pedido aprobado.",
+          "Periodo (90 dias, 6 meses, año, todo), filtros por cliente, vendedor, despacho y estado final, y exportacion con kilos, unidades, orden de cargue, vehiculo, estado y motivo de depuracion.",
       },
     ],
     consejos: [
       "Este modulo obedece al selector global de empresa de la barra superior: si no ves un pedido, verifica primero en que proyecto estas parado.",
-      "El orden importa: cartera revisa primero; sin esa revision el boton Aprobar queda deshabilitado.",
+      "Si la Cola se llena de atrasados viejos, pasa por Depurar pendientes: lo que nunca se va a entregar debe salir de la operacion sin borrarse.",
     ],
   },
   {

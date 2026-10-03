@@ -39,6 +39,9 @@ export async function getDailySummaryStats(selectedEmpresaId?: number) {
       .eq("id_empresa", empresaId)
       .eq("fecha_programada", today)
       .neq("estado", "entregado")
+      // Los depurados ("no entregado", SQL 215) tampoco cuentan. El resto de la
+      // condición se deja exactamente como estaba.
+      .neq("estado", "no entregado")
 
     if (pedidosError) {
       console.error("[v0] Error fetching pedidos count:", pedidosError)

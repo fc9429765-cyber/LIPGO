@@ -15,6 +15,7 @@ import { esPlacaDistribucion, numeroOrdenDistribucion, getPlacasEmpresa, cargarP
 import { cediDeDestino, PLANTAS_ORIGEN, type CediDestino } from "@/lib/cedis-destino"
 import { esProductoPorUnidad } from "@/lib/facturacion-billed-party"
 import { reportarInterno } from "@/lib/reporte-interno-actions"
+import { FILTRO_ABIERTOS_POSTGREST, normalizarEstado } from "@/lib/pedidos-estado"
 
 /**
  * Obtiene los IDs de empresa accesibles para el usuario actual desde perfil_acceso_empresas
@@ -158,7 +159,8 @@ export interface OpcionesPedidos {
 function aplicarOpcionesPedidos(q: any, opciones?: OpcionesPedidos) {
   if (opciones?.soloAbiertos) {
     // Misma regla que aplicaba Generar Órdenes en el cliente (sin estado = abierto).
-    return q.or("estado.is.null,and(estado.not.ilike.entregado,estado.not.ilike.entrega parcial,estado.not.ilike.anulado)")
+    // Desde SQL 215 también quedan fuera los depurados ("no entregado").
+    return q.or(FILTRO_ABIERTOS_POSTGREST)
   }
   const desde = opciones?.desde === undefined ? desdeDePeriodo(PERIODO_LISTADO_DEFECTO, hoyBogotaISO()) : opciones.desde
   return desde ? q.gte("fecha", desde) : q
@@ -297,7 +299,7 @@ export async function deleteOrder(idpedido: number) {
     // Check if ocargue is null or empty
     const { data: order, error: fetchError } = await supabase
       .from("pedidoscabecera")
-      .select("ocargue")
+      .select("ocargue, aprobado, revisioncartera")
       .eq("idpedido", idpedido)
       .single()
 
@@ -310,6 +312,16 @@ export async function deleteOrder(idpedido: number) {
         success: false,
         message: "No se puede eliminar el pedido porque ya tiene O.Cargue asignada.",
       }
+    }
+
+    // Candado en servidor (gerencia 2026-10-03): el borrado físico es solo para
+    // pedidos NUEVOS sin revisión de cartera ni aprobación. Lo demás se anula o
+    // se depura (queda rastro), nunca se borra.
+    if (normalizarEstado(order.aprobado) === "si") {
+      return { success: false, message: "No se puede eliminar un pedido aprobado. Anúlalo o depúralo desde Gestionar pedidos." }
+    }
+    if (order.revisioncartera && String(order.revisioncartera).trim() !== "") {
+      return { success: false, message: "No se puede eliminar un pedido con revisión de cartera. Anúlalo o depúralo desde Gestionar pedidos." }
     }
 
     // Delete details first (if no cascade)
@@ -564,7 +576,8 @@ export async function getOrderFiltersData() {
 
     console.log("[v0] Raw order filters data:", data)
 
-    const filteredData = data?.filter((order) => order.estado !== "entregado") || []
+    // Fuera los entregados y los depurados ("no entregado"); el resto sigue igual que antes.
+    const filteredData = data?.filter((order) => order.estado !== "entregado" && normalizarEstado(order.estado) !== "no entregado") || []
 
     console.log("[v0] Filtered order data (excluding entregado):", filteredData)
 
