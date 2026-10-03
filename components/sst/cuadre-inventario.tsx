@@ -126,7 +126,7 @@ export function CuadreInventario() {
   const ordenNatural = (a: string, b: string) => a.localeCompare(b, "es", { numeric: true, sensitivity: "base" })
   // Vista del conteo abierto: la hoja de conteo (no cambia) o "Diferencias",
   // donde el revisor ve la novedad de cada línea, el código propuesto y aplica.
-  const [vista, setVista] = useState<"conteo" | "diferencias">("conteo")
+  const [vista, setVista] = useState<"hoja" | "diferencias" | "correcciones" | "acta">("hoja")
   // Propuesta por línea (id del detalle → código y pareja), editable por el revisor.
   const [propuestas, setPropuestas] = useState<Map<number, { codigo: string; parejaId: number | null; aviso: string | null; coincidencia: string | null }>>(new Map())
   const [aplicando, setAplicando] = useState(false)
@@ -172,6 +172,8 @@ export function CuadreInventario() {
 
   async function abrir(c: SigInventarioCuadre) {
     setSel(c)
+    setVista("hoja")
+    setPropuestas(new Map())
     setFirma({
       firmante: c.cliente_firmante ?? "",
       cargo: c.cliente_cargo ?? "",
@@ -675,21 +677,20 @@ export function CuadreInventario() {
     const corregido = sel.estado === "aprobado"
 
     // ---------- Vista DIFERENCIAS: novedad → código → aplicar ----------
-    if (vista === "diferencias") {
-      const aplicadasDe = (d: SigInventarioCuadreDetalle) => ajustesDelConteo.filter((a) => claveLinea(a) === claveLinea(d))
-      const idsAplicables = lineasDif.filter((d) => pendienteDe(d) !== 0).map((d) => d.id).filter((id) => { const p = propuestas.get(id); const o = p ? opcionDe(p.codigo) : undefined; return !!o?.aplicable && (!o.pareja || !!p?.parejaId) })
-      return (
+    const aplicadasDe = (d: SigInventarioCuadreDetalle) => ajustesDelConteo.filter((a) => claveLinea(a) === claveLinea(d))
+    const idsAplicables = lineasDif.filter((d) => pendienteDe(d) !== 0).map((d) => d.id).filter((id) => { const p = propuestas.get(id); const o = p ? opcionDe(p.codigo) : undefined; return !!o?.aplicable && (!o.pareja || !!p?.parejaId) })
+    // Correcciones de ESTE conteo (incluye anuladas si se pidió verlas): trazabilidad y reverso.
+    const correccionesConteo = ajustes
+      .filter((a) => a.cuadre_id === sel.id)
+      .sort((a, b) => (a.producto || "").localeCompare(b.producto || "") || ordenNatural(a.lote || "", b.lote || "") || a.id - b.id)
+    const vistaDiferencias = (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setVista("conteo")}>
-                <ArrowLeft className="mr-1 h-4 w-4" /> Volver al conteo
-              </Button>
-              <h2 className="text-lg font-bold" style={{ color: SST_TOKENS.ink }}>
-                Diferencias · Conteo #{sel.id} · {sel.fecha}
-              </h2>
-              <Badge style={{ background: est.color, color: "white" }}>{est.label}</Badge>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              {corregido
+                ? "Conteo aprobado: cada línea con diferencia muestra la corrección que se aplicó (código, cantidad y movimiento)."
+                : "Revisa cada diferencia con la novedad del contador, confirma el código y aplícala."}
+            </p>
             <div className="flex gap-2">
               <Button size="sm" variant="ghost" onClick={() => setVerDiccionario(true)} title="Diccionario de novedades y umbral de clave">
                 <Settings2 className="mr-1 h-4 w-4" /> Diccionario
@@ -859,8 +860,7 @@ export function CuadreInventario() {
             </div>
           </Card>
         </div>
-      )
-    }
+    )
 
     return (
       <div className="space-y-4">
@@ -876,18 +876,9 @@ export function CuadreInventario() {
             {sel.creado_por && <span className="text-xs text-muted-foreground">por {sel.creado_por}</span>}
           </div>
           <div className="flex gap-2">
-            <div className="inline-flex self-center overflow-hidden rounded-md border text-[11px]" title="Orden del conteo: por ubicación de menor a mayor (como se recorre el piso) o por producto">
-              <button type="button" onClick={() => cambiarAgrupar("ubicacion")} className={`px-2 py-1 ${agrupar === "ubicacion" ? "bg-muted font-semibold" : "text-muted-foreground"}`}>Por ubicación</button>
-              <button type="button" onClick={() => cambiarAgrupar("producto")} className={`px-2 py-1 ${agrupar === "producto" ? "bg-muted font-semibold" : "text-muted-foreground"}`}>Por producto</button>
-            </div>
-            {editable && (
-              <span className="self-center text-[11px] text-muted-foreground">
-                Cada línea se guarda sola al contarla — varias personas pueden contar a la vez sin pisarse.
-              </span>
-            )}
-            {(sel.estado === "contado" || sel.estado === "cerrado") && lineasDif.length > 0 && (
-              <Button size="sm" onClick={abrirDiferencias} style={{ background: SST_TOKENS.navy, color: "white" }} title="Revisar cada diferencia con su novedad, confirmar el código (701/702/309/311/653/551) y aplicarla">
-                <ListChecks className="mr-1 h-4 w-4" /> Revisar diferencias{pendientesCount ? ` (${pendientesCount})` : ""}
+            {(sel.estado === "contado" || sel.estado === "cerrado") && pendientesCount > 0 && (
+              <Button size="sm" onClick={abrirDiferencias} style={{ background: SST_TOKENS.navy, color: "white" }} title="Revisar cada diferencia con su novedad, confirmar el código y aplicarla">
+                <ListChecks className="mr-1 h-4 w-4" /> Revisar diferencias ({pendientesCount})
               </Button>
             )}
             {sel.estado === "cerrado" && (
@@ -903,22 +894,48 @@ export function CuadreInventario() {
           </div>
         </div>
 
+        {/* Tarjetas: las dos de la derecha abren su pestaña (Diferencias / Correcciones). */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <SigKpi label={corregido ? "Sistema (ajustado)" : "Sistema"} value={fmt(corregido ? detalle.reduce((s, d) => s + (Number(d.conteo) || 0), 0) : sel.total_sistema)} accent={SST_TOKENS.navy} />
           <SigKpi label="Conteo físico" value={fmt(detalle.reduce((s, d) => s + (Number(d.conteo) || 0), 0))} accent={SST_TOKENS.navy} />
-          {corregido ? (
-            <>
-              <SigKpi label="Diferencia" value="0" accent={SST_TOKENS.ok} valueColor={SST_TOKENS.ok} />
-              <SigKpi label={`Hallazgo corregido (701/702)`} value={`${difTotal > 0 ? "+" : ""}${fmt(difTotal)} · ${conDif} ítems`} accent={SST_TOKENS.navy} />
-            </>
-          ) : (
-            <>
-              <SigKpi label="Diferencia" value={fmt(difTotal)} accent={difTotal === 0 ? SST_TOKENS.ok : SST_TOKENS.bad} valueColor={difTotal === 0 ? SST_TOKENS.ok : SST_TOKENS.bad} />
-              <SigKpi label="Ítems con diferencia" value={conDif} accent={conDif ? SST_TOKENS.bad : SST_TOKENS.ok} valueColor={conDif ? SST_TOKENS.bad : SST_TOKENS.ok} />
-            </>
-          )}
+          <div role="button" tabIndex={0} className="cursor-pointer rounded-lg transition hover:ring-2 hover:ring-offset-1" title="Abrir Diferencias" onClick={abrirDiferencias} onKeyDown={(e) => e.key === "Enter" && abrirDiferencias()}>
+            {corregido ? (
+              <SigKpi label="Diferencia · ver" value="0" accent={SST_TOKENS.ok} valueColor={SST_TOKENS.ok} />
+            ) : (
+              <SigKpi label={`Diferencia · ver${pendientesCount ? ` (${pendientesCount} pendientes)` : ""}`} value={fmt(difTotal)} accent={difTotal === 0 ? SST_TOKENS.ok : SST_TOKENS.bad} valueColor={difTotal === 0 ? SST_TOKENS.ok : SST_TOKENS.bad} />
+            )}
+          </div>
+          <div role="button" tabIndex={0} className="cursor-pointer rounded-lg transition hover:ring-2 hover:ring-offset-1" title="Abrir Correcciones de este conteo" onClick={() => setVista("correcciones")} onKeyDown={(e) => e.key === "Enter" && setVista("correcciones")}>
+            {corregido ? (
+              <SigKpi label="Hallazgo corregido · ver" value={`${difTotal > 0 ? "+" : ""}${fmt(difTotal)} · ${conDif} ítems`} accent={SST_TOKENS.navy} />
+            ) : (
+              <SigKpi label="Ítems con diferencia · ver" value={conDif} accent={conDif ? SST_TOKENS.bad : SST_TOKENS.ok} valueColor={conDif ? SST_TOKENS.bad : SST_TOKENS.ok} />
+            )}
+          </div>
         </div>
 
+        <Tabs value={vista} onValueChange={(v) => { setVista(v as any); if (v === "diferencias") interpretar(true) }}>
+          <TabsList>
+            <TabsTrigger value="hoja">Hoja de conteo</TabsTrigger>
+            <TabsTrigger value="diferencias">Diferencias{lineasDif.length ? ` (${pendientesCount ? pendientesCount + " pendientes" : lineasDif.length})` : ""}</TabsTrigger>
+            <TabsTrigger value="correcciones">Correcciones ({correccionesConteo.filter((a) => a.activo !== false).length})</TabsTrigger>
+            <TabsTrigger value="acta">Acta{sel.firmado ? " · firmada" : ""}</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="hoja" className="space-y-3 pt-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="inline-flex overflow-hidden rounded-md border text-[11px]" title="Orden del conteo: por ubicación de menor a mayor (como se recorre el piso) o por producto">
+                <button type="button" onClick={() => cambiarAgrupar("ubicacion")} className={`px-2 py-1 ${agrupar === "ubicacion" ? "bg-muted font-semibold" : "text-muted-foreground"}`}>Por ubicación</button>
+                <button type="button" onClick={() => cambiarAgrupar("producto")} className={`px-2 py-1 ${agrupar === "producto" ? "bg-muted font-semibold" : "text-muted-foreground"}`}>Por producto</button>
+              </div>
+              {editable ? (
+                <span className="text-[11px] text-muted-foreground">
+                  Cada línea se guarda sola al contarla — varias personas pueden contar a la vez sin pisarse. En "Novedad" el contador escribe qué pasó (avería, cruce de lote, mal ubicado…).
+                </span>
+              ) : (
+                <span className="text-[11px] text-muted-foreground">Hoja de conteo tal como se digitó. Las diferencias y sus correcciones están en las otras pestañas.</span>
+              )}
+            </div>
         <Card className="overflow-hidden">
           {loadingDet ? (
             <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
@@ -1047,7 +1064,107 @@ export function CuadreInventario() {
             </div>
           )}
         </Card>
+          </TabsContent>
 
+          <TabsContent value="diferencias" className="pt-3">{vistaDiferencias}</TabsContent>
+
+          {/* CORRECCIONES DE ESTE CONTEO: trazabilidad (código, cantidad, novedad, movimiento) y reverso */}
+          <TabsContent value="correcciones" className="space-y-3 pt-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                Correcciones generadas por este conteo, fechadas {sel.fecha ? fechaAnteriorTexto(sel.fecha) : "la víspera"}: código, cantidad, la novedad como motivo y el movimiento real que generó.
+                Una contabilizada se reversa con tu clave (queda enlazada a su reverso); una anulada antes de contabilizar se puede reactivar.
+              </p>
+              <div className="flex gap-2">
+                <Button size="sm" variant="ghost" onClick={() => setVerDiccionario(true)} title="Diccionario de novedades y umbral de clave">
+                  <Settings2 className="mr-1 h-4 w-4" /> Diccionario y umbral
+                </Button>
+                <Button size="sm" variant={verAnulados ? "secondary" : "ghost"} onClick={() => setVerAnulados((v) => !v)} title="Mostrar las correcciones anuladas para poder reactivarlas">
+                  <Undo2 className="mr-1 h-4 w-4" /> {verAnulados ? "Ocultar anuladas" : "Ver anuladas"}
+                </Button>
+              </div>
+            </div>
+            {correccionesConteo.length === 0 ? (
+              <Card className="p-6 text-center text-sm text-muted-foreground">
+                Este conteo no tiene correcciones{sel.estado === "contado" || sel.estado === "cerrado" ? ": se aplican desde la pestaña Diferencias" : ""}.
+              </Card>
+            ) : (
+              <Card className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-[11px] uppercase text-muted-foreground">
+                      <th className="px-3 py-2">Fecha</th>
+                      <th className="px-3 py-2">Producto</th>
+                      <th className="px-3 py-2">Lote</th>
+                      <th className="px-3 py-2">Ubic.</th>
+                      <th className="px-3 py-2 text-center">Cód.</th>
+                      <th className="px-3 py-2 text-right">Cantidad</th>
+                      <th className="px-3 py-2">Motivo (novedad)</th>
+                      <th className="px-3 py-2">Estado</th>
+                      <th className="px-3 py-2">Mov.</th>
+                      <th className="px-3 py-2">Aprobó</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {correccionesConteo.map((a) => {
+                      const aprobado = (a.estado ?? "registrado") === "aprobado"
+                      const rev = codigoReversoDe(a.cod_movimiento, a.direccion)
+                      return (
+                        <tr key={a.id} className={`group border-b last:border-0 ${a.activo === false ? "opacity-60" : ""}`}>
+                          <td className="px-3 py-1.5 whitespace-nowrap">{a.fecha}</td>
+                          <td className="px-3 py-1.5">
+                            <div className="font-medium">{a.producto}</div>
+                            {a.codproducto && <div className="text-[11px] text-muted-foreground">{a.codproducto} · #{a.id}</div>}
+                          </td>
+                          <td className="px-3 py-1.5 text-muted-foreground">{a.lote}</td>
+                          <td className="px-3 py-1.5 text-muted-foreground">{a.location}</td>
+                          <td className="px-3 py-1.5 text-center"><Badge style={{ background: SST_TOKENS.navy, color: "white" }} title={a.tipo ?? ""}>{a.cod_movimiento || "—"}</Badge></td>
+                          <td className="px-3 py-1.5 text-right font-medium" style={{ color: (a.cantidad ?? 0) < 0 ? SST_TOKENS.bad : SST_TOKENS.ok }}>{(a.cantidad ?? 0) > 0 ? "+" : ""}{fmt(a.cantidad)}</td>
+                          <td className="px-3 py-1.5 text-[12px]" title={a.soporte ?? ""}>{a.motivo || "—"}</td>
+                          <td className="px-3 py-1.5">
+                            {a.activo === false ? (
+                              <Badge variant="outline">Anulada</Badge>
+                            ) : aprobado ? (
+                              <Badge style={{ background: SST_TOKENS.ok, color: "white" }}>Contabilizada</Badge>
+                            ) : (
+                              <Badge style={{ background: SST_TOKENS.warn, color: "white" }}>Registrada</Badge>
+                            )}
+                            {a.tipo === "reverso" && <div className="mt-0.5 text-[11px] text-muted-foreground">reverso</div>}
+                            {reversadas.has(a.id) && <div className="mt-0.5 text-[11px]" style={{ color: SST_TOKENS.warn }}>reversada · #{reversadas.get(a.id)}</div>}
+                          </td>
+                          <td className="px-3 py-1.5 text-xs text-muted-foreground">{a.invtrans_id ? `#${a.invtrans_id}` : "—"}</td>
+                          <td className="px-3 py-1.5 text-xs">{a.aprobado_por || a.responsable || "—"}{a.aprobado_fecha ? <div className="text-[11px] text-muted-foreground">{String(a.aprobado_fecha).slice(0, 10)}</div> : null}</td>
+                          <td className="px-3 py-1.5">
+                            <span className="flex gap-1.5">
+                              {a.activo === false ? (
+                                !a.invtrans_id && (
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => reactivar(a)}>
+                                    <Undo2 className="mr-1 h-3 w-3" /> Reactivar
+                                  </Button>
+                                )
+                              ) : aprobado && !!a.invtrans_id && a.tipo !== "reverso" && !reversadas.has(a.id) && !!rev ? (
+                                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setReversoDlg({ ajuste: a, clave: "", motivo: "" })} title={`Reversar con ${rev.etiqueta} (requiere clave)`}>
+                                  <Repeat className="mr-1 h-3 w-3" /> Reversar
+                                </Button>
+                              ) : !aprobado ? (
+                                <>
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => aprobar(a)}><CheckCircle2 className="mr-1 h-3 w-3" /> Aprobar</Button>
+                                  <button onClick={() => borrarAjuste(a)} title="Eliminar (se puede reactivar)" className="text-muted-foreground hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                                </>
+                              ) : null}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="acta" className="pt-3">
         {/* ACTA DE REVISIÓN DE INVENTARIO — firma del cliente (auditoría) */}
         <Card className="p-3">
           <div className="mb-2 flex items-center justify-between">
@@ -1082,6 +1199,8 @@ export function CuadreInventario() {
             </Button>
           </div>
         </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     )
   }
