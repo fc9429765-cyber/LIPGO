@@ -50,10 +50,13 @@ export async function getPendientesPorPantalla(
     const horaBogota = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Bogota", hour: "numeric", hour12: false }).format(new Date()))
     const mananaDomingo = diaSemana(manana) === 0
 
-    const [sinCerrar, turnos, enPatio, sinMarcar, ausBorrador, ajustesInv, requisiciones, usaProgramacion, programacionManana] = await Promise.all([
+    const [sinCerrar, turnos, enPatio, sinProcesarAnteriores, sinMarcar, ausBorrador, ajustesInv, requisiciones, usaProgramacion, programacionManana] = await Promise.all([
       cuenta(head("cabeceraoc").eq("idempresa", empresaId).not("iniciocargue", "is", null).is("fincargue", null)),
       cuenta(head("solicitudesturnos").eq("idempresa", empresaId).eq("estado", "pendiente")),
       cuenta(head("citasvehiculos").eq("idempresa", empresaId).is("estatus", null).gte("fechallegada", hoy)),
+      // Vehículos de DÍAS ANTERIORES que nadie cerró ni eliminó (BSC veh_sin_procesar, SQL 219):
+      // gerencia 2026-10-03, "45 sin procesar y no sucede nada". Nivel alto: es trabajo no hecho.
+      cuenta(head("citasvehiculos").eq("idempresa", empresaId).is("estatus", null).lt("fechallegada", hoy)),
       cuenta(head("registroasistencia").eq("idempresa", empresaId).eq("fecha", hoy).not("puesto", "is", null).is("horaingreso", null).is("asistencia", null)),
       cuenta(head("ausentismosst").eq("idempresa", empresaId).eq("estado_registro", "BORRADOR")),
       cuenta(head("inv_ajustes_pendientes").eq("idempresa", empresaId).eq("estado", "pendiente")),
@@ -88,6 +91,8 @@ export async function getPendientesPorPantalla(
     if (sinCerrar) out.push({ modulo: "Centro de Coordinación", cantidad: sinCerrar, texto: plural(sinCerrar, "vehículo sin cerrar", "vehículos sin cerrar"), nivel: "alto" })
     if (turnos) out.push({ modulo: "Aprobar Turnos", cantidad: turnos, texto: plural(turnos, "turno por aprobar", "turnos por aprobar"), nivel: "medio" })
     if (enPatio) out.push({ modulo: "Registrar Vehículos", cantidad: enPatio, texto: plural(enPatio, "vehículo en patio", "vehículos en patio"), nivel: "medio" })
+    // Se gestionan en Ver Vehículos (tarjeta "Placas pendientes por cerrar": cerrar con su orden o eliminar).
+    if (sinProcesarAnteriores) out.push({ modulo: "Ver Vehículos", cantidad: sinProcesarAnteriores, texto: plural(sinProcesarAnteriores, "vehículo sin procesar de días anteriores", "vehículos sin procesar de días anteriores"), nivel: "alto" })
     if (sinMarcar) out.push({ modulo: "Tabla Asistencia", cantidad: sinMarcar, texto: plural(sinMarcar, "persona sin marcar", "personas sin marcar"), nivel: sinMarcar > 3 ? "alto" : "medio" })
     if (ausBorrador) out.push({ modulo: "Novedades de personal", cantidad: ausBorrador, texto: plural(ausBorrador, "ausentismo sin completar", "ausentismos sin completar"), nivel: "medio" })
     if (ajustesInv) out.push({ modulo: "Transacciones de Inventario", cantidad: ajustesInv, texto: plural(ajustesInv, "ajuste por aprobar", "ajustes por aprobar"), nivel: "medio" })

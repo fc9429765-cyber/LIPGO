@@ -13,8 +13,8 @@ import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { APRENDIZAJE_POR_MODULO } from "@/lib/aprendizaje-content"
 import { GuiaModulo } from "@/components/guia-modulo-panel"
-import { ModuleKpiHeader, groupKeyOf } from "@/components/module-kpi-header"
-import { AlertasIndicadores } from "@/components/alertas-indicadores"
+import { groupKeyOf } from "@/components/module-kpi-header"
+import { IndicadoresPantalla } from "@/components/indicadores-pantalla"
 import { etiquetaDeGrupo } from "@/lib/navegacion"
 import type { GroupKey } from "@/lib/dashboard-data"
 
@@ -44,14 +44,20 @@ export function BotonesContextoModulo({ selectedModule, className }: { selectedM
 
       {gk && (
         <Sheet open={kpisAbiertos} onOpenChange={setKpisAbiertos}>
-          <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-3xl">
+          <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-2xl">
             <SheetHeader>
               <SheetTitle>Indicadores · {etiquetaDeGrupo(gk as GroupKey)}</SheetTitle>
-              <SheetDescription>Los mismos indicadores del portal del área, para la pantalla en la que estás. Siguen el proyecto seleccionado arriba.</SheetDescription>
+              <SheetDescription>Los indicadores del BSC de esta pantalla y del área, con valor, meta y semáforo del mes en curso para el proyecto seleccionado. La campana activa el aviso por correo.</SheetDescription>
             </SheetHeader>
             <div className="px-4 pb-6">
-              <ModuleKpiHeader selectedModule={selectedModule} />
-              <AlertasIndicadores groupKey={gk} moduleName={selectedModule} />
+              <IndicadoresPantalla
+                groupKey={gk}
+                moduleName={selectedModule}
+                onNavegar={(m) => {
+                  setKpisAbiertos(false)
+                  window.dispatchEvent(new CustomEvent("lipgo:navigate-module", { detail: m }))
+                }}
+              />
             </div>
           </SheetContent>
         </Sheet>

@@ -2106,6 +2106,33 @@ async function _computeIndicadoresValores(
       return q
     })
 
+    // --- Vehículos SIN PROCESAR (BSC IND-VEH-01, SQL 219): citasvehiculos con estatus nulo,
+    //     es decir, registrados en portería y nunca cerrados con una orden ni eliminados.
+    //     Foto de hoy, SIN filtro de período (el atraso acumulado es justamente lo que se
+    //     quiere ver). Misma definición que la tarjeta "Vehículos no procesados"
+    //     (lib/pedidos-kpis-actions.ts getVehiculosNoProcesados). Falla-seguro: sin lectura.
+    let vehSinProcesar = Number.NaN
+    let vehSinProcesarBase = "sin lectura"
+    try {
+      const { data: sp, count: spCount } = await supabase
+        .from("citasvehiculos")
+        .select("fechallegada", { count: "exact" })
+        .in("idempresa", clientes)
+        .is("estatus", null)
+        .order("fechallegada", { ascending: true })
+        .limit(1000)
+      const filas: any[] = sp ?? []
+      const total = spCount ?? filas.length
+      const hoyV = hoyBogotaISO()
+      const deHoy = filas.filter((r) => String(r.fechallegada ?? "").slice(0, 10) === hoyV).length
+      const anteriores = Math.max(0, total - deHoy)
+      const masAntiguo = anteriores > 0 && filas[0]?.fechallegada ? String(filas[0].fechallegada).slice(0, 10) : null
+      vehSinProcesar = total
+      vehSinProcesarBase = total === 0 ? "todos los vehículos cerrados" : `${deHoy} de hoy · ${anteriores} de días anteriores${masAntiguo ? ` · el más antiguo del ${masAntiguo}` : ""}`
+    } catch (e: any) {
+      console.warn("[sig] vehículos sin procesar:", e?.message ?? e)
+    }
+
     // --- Inventario (invtrans): exactitud y rechazos (sin filtro de fecha: creado suele venir nulo) ---
     const totInv = await contar("invtrans", (q: any) => q)
     const aprobInv = await contar("invtrans", (q: any) => q.ilike("status", "aprobado"))
@@ -2557,6 +2584,8 @@ async function _computeIndicadoresValores(
       sla_global: { valor: slaGlobal, base: "promedio de servicio" },
       lip_facturacion: { valor: lipFacturacion, base: `${factTot - factPend}/${factTot} gestionadas` },
       vehiculos_atendidos: { valor: vehiculos, base: "" },
+      // Vehículos registrados en portería sin cerrar ni eliminar (foto de hoy, meta 0).
+      veh_sin_procesar: { valor: vehSinProcesar, base: vehSinProcesarBase },
       inv_exactitud: { valor: pct(aprobInv, totInv), base: `${aprobInv}/${totInv}` },
       inv_rechazos: { valor: rechInv, base: "" },
       // ERI físico del almacén — automático por el cruce mensual (libro vs stock vivo).

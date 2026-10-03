@@ -465,6 +465,46 @@ export async function getDashboardRecepcionData(
       if (porUnidadRec.has(String(r.ordendecargue ?? "").trim())) r.pesovascula = 0
     }
 
+    // PATIO EN VIVO (gerencia 2026-10-03): la lista de vehículos activos y su conteo deben
+    // mostrar TODO lo que sigue abierto hoy, aunque la orden sea de días anteriores (un
+    // vehículo pesado ayer y sin atender sigue en patio). Antes salían solo las órdenes del
+    // período consultado (en la vista diaria, las de hoy), por eso "solo mostraba dos".
+    // Ventana: últimos 7 días; las métricas del período (órdenes, toneladas, tiempos) NO cambian.
+    let abiertas: RawRow[] = rows.filter((r) => r.estado !== "Fin Operación" && r.estado !== "Finalizado LIP")
+    try {
+      const hace7 = new Date(new Date(`${todayReal}T12:00:00`).getTime() - 7 * 86400000).toISOString().slice(0, 10)
+      const { data: ab } = await supabase
+        .from(tabla)
+        .select("*")
+        .eq("idempresa", empresaId)
+        .gte("fechacargue", hace7)
+        .lte("fechacargue", todayReal)
+        .neq("tipooperacion", "proyeccion")
+        .neq("tipooperacion", "Tolva")
+        .neq("tipooperacion", "Tolva f")
+        .not("estado", "in", '("Fin Operación","Finalizado LIP")')
+        .order("fechacargue", { ascending: true })
+        .limit(500)
+      if (ab) {
+        const vistas = new Set<string>()
+        abiertas = (ab as any[])
+          .map((r) => {
+            if (usaPesoOrden) r.pesovascula = r.pesoorden ?? null
+            if (porUnidadRec.has(String(r.ordendecargue ?? "").trim())) r.pesovascula = 0
+            return r as RawRow
+          })
+          .filter((r) => r.estado !== "Fin Operación" && r.estado !== "Finalizado LIP")
+          .filter((r) => {
+            const k = `${r.ordendecargue}|${r.placa ?? ""}`
+            if (vistas.has(k)) return false
+            vistas.add(k)
+            return true
+          })
+      }
+    } catch (e: any) {
+      console.warn("[dashboard-recepcion] patio en vivo:", e?.message ?? e)
+    }
+
     // ========================================================================
     // KPIs Vista Diaria
     // ========================================================================
@@ -492,9 +532,8 @@ export async function getDashboardRecepcionData(
         : 0
 
     // Vehículos activos en patio (estado != Fin Operación)
-    const vehiculosActivosPatio = rows.filter(
-      (r) => r.estado !== "Fin Operación" && r.estado !== "Finalizado LIP",
-    ).length
+    // Vehículos activos en patio AHORA (abiertos de los últimos 7 días, ver arriba).
+    const vehiculosActivosPatio = abiertas.length
 
     // Rendimiento actual (Ton/Hr): volumen / horas transcurridas
     const horasTranscurridas = Math.max(1, currentHour - 6) // Asumiendo jornada desde las 6am
@@ -571,8 +610,7 @@ export async function getDashboardRecepcionData(
     // ========================================================================
     const ESTADOS_CRITICOS = new Set(["Sin lote", "Por pesar"])
 
-    const vehiculosActivos: VehiculoActivo[] = rows
-      .filter((r) => r.estado !== "Fin Operación" && r.estado !== "Finalizado LIP")
+    const vehiculosActivos: VehiculoActivo[] = abiertas
       .map((r) => {
         const tiempo = parseMinutes(r.tiempo_en_proceso_min)
         const estado = (r.estado || "Sin estado").trim()
@@ -592,7 +630,7 @@ export async function getDashboardRecepcionData(
         }
       })
       .sort((a, b) => b.tiempoEnProcesoMin - a.tiempoEnProcesoMin)
-      .slice(0, 20)
+      .slice(0, 60)
 
     // Resumen agregado del live tracker.
     const horasAcumuladasMin = vehiculosActivos.reduce(

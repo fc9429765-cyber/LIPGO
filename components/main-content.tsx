@@ -48,6 +48,7 @@ const DashboardRecepcion = dynamic(() => import("@/components/dashboard-recepcio
 const OrderEditPage = dynamic(() => import("@/components/orders/order-edit-page").then((m) => m.OrderEditPage), { loading: ModuleLoading })
 const ProductosWithCategories = dynamic(() => import("@/components/configuration/productos-with-categories").then((m) => m.ProductosWithCategories), { loading: ModuleLoading })
 const VehicleAppointmentsForm = dynamic(() => import("@/components/vehicle-appointments-form").then((m) => m.VehicleAppointmentsForm), { loading: ModuleLoading })
+const VehiculosNoProcesadosCard = dynamic(() => import("@/components/vehiculos-no-procesados-card").then((m) => m.VehiculosNoProcesadosCard), { loading: () => null })
 const BasculaForm = dynamic(() => import("@/components/bascula-form").then((m) => m.BasculaForm), { loading: ModuleLoading })
 const BasculaHistory = dynamic(() => import("@/components/bascula-history").then((m) => m.BasculaHistory), { loading: ModuleLoading })
 const GenerateLoadOrders = dynamic(() => import("@/components/generate-load-orders").then((m) => m.GenerateLoadOrders), { loading: ModuleLoading })
@@ -632,7 +633,12 @@ export function MainContent({
             </PermissionGuard>
           ) : name === "Ver Vehículos" ? (
             <PermissionGuard moduleName="Ver Vehículos">
-              <GenericCrudTable moduleDef={configModules["citas_vehiculos"]} hideNewButton={true} />
+              {/* Placas sin procesar arriba de la tabla (gerencia 2026-10-03): aquí se cierran
+                  con su orden o se eliminan; es el destino del pendiente rojo del área. */}
+              <div className="space-y-4">
+                <VehiculosNoProcesadosCard />
+                <GenericCrudTable moduleDef={configModules["citas_vehiculos"]} hideNewButton={true} />
+              </div>
             </PermissionGuard>
           ) : name === "Ver historial de Inspección" ? (
             <PermissionGuard moduleName="Ver historial de Inspección">

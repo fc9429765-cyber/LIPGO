@@ -22,6 +22,10 @@ export const KPI_DEFS: Record<string, KpiDef> = {
   desp_ordenes: { nombre: "Órdenes", fmt: "num" },
   desp_toneladas: { nombre: "Toneladas", fmt: "ton" },
   vehiculos_atendidos: { nombre: "Vehículos atendidos", fmt: "num" },
+  // Vehículos registrados en portería (citasvehiculos) que nadie cerró ni eliminó (estatus
+  // nulo): foto de hoy, sin período. Gerencia 2026-10-03: "45 sin procesar y no sucede
+  // nada; esto debe ser una alerta". Meta 0 → cualquier pendiente pinta en rojo y avisa.
+  veh_sin_procesar: { nombre: "Vehículos sin procesar", fmt: "num", meta: 0, higherBetter: false },
   lip_tiempo_cargue: { nombre: "Tiempo de cargue", fmt: "min", higherBetter: false },
   lip_evidencia: { nombre: "Evidencia de cargue", fmt: "pct", meta: 98, higherBetter: true },
   lip_facturacion: { nombre: "Facturación gestionada", fmt: "pct", meta: 98, higherBetter: true },
@@ -66,7 +70,7 @@ export const AREA_KPIS: Record<string, string[]> = {
   // Pedidos del cliente: cumplimiento de la promesa, atraso de hoy, completitud y anticipación.
   pedidos: ["ped_a_tiempo", "ped_atrasados", "ped_completos", "ped_mismo_dia"],
   // Operaciones (Cargue/Descargue): servicio, cumplimiento, calidad, volumen.
-  despachos: ["desp_cumplimiento", "sla_tiempos", "lip_evidencia", "desp_meta_ton", "sat_conductor"],
+  despachos: ["veh_sin_procesar", "desp_cumplimiento", "sla_tiempos", "lip_evidencia", "desp_meta_ton", "sat_conductor"],
   // Almacenamiento e Inventarios: exactitud world-class.
   inventarios: ["inv_eri", "inv_exactitud", "inv_rechazos"],
   produccion: ["desp_meta_ton", "desp_toneladas"],
@@ -91,10 +95,11 @@ export const SUBMODULO_KPIS: Record<string, string[]> = {
   "Generar Órdenes de Cargue": ["desp_ordenes", "desp_cumplimiento"],
   "Generar Órdenes de Descargue": ["desp_ordenes"],
   "Generar Orden de Distribución": ["desp_ordenes", "lip_facturacion"],
-  "Gestión de Ordenes": ["desp_cumplimiento", "sla_tiempos"],
+  "Gestión de Ordenes": ["veh_sin_procesar", "desp_cumplimiento", "sla_tiempos"],
+  "Dashboard Despachos/Recepción": ["veh_sin_procesar", "desp_cumplimiento", "sla_tiempos", "desp_meta_ton", "vehiculos_atendidos"],
   "Recepción de Traslado": ["inv_exactitud"],
-  "Registrar Vehículos": ["vehiculos_atendidos"],
-  "Ver Vehículos": ["vehiculos_atendidos"],
+  "Registrar Vehículos": ["veh_sin_procesar", "vehiculos_atendidos"],
+  "Ver Vehículos": ["veh_sin_procesar", "vehiculos_atendidos"],
   "Registro sanitario": ["vehiculos_atendidos"],
   "Ver historial de Inspección": ["vehiculos_atendidos"],
   Báscula: ["desp_toneladas"],
@@ -195,7 +200,7 @@ const KPI_ICON: Record<string, string> = {
   legal_cumplimiento: "shield", sgsst_0312: "shield", sst_ipevr_cumpl: "shield",
   desp_meta_ton: "package", desp_toneladas: "package", desp_ordenes: "package",
   inv_exactitud: "package", inv_eri: "package", inv_rechazos: "lock",
-  vehiculos_atendidos: "truck", lip_tiempo_cargue: "clock", lip_evidencia: "file",
+  vehiculos_atendidos: "truck", veh_sin_procesar: "car", lip_tiempo_cargue: "clock", lip_evidencia: "file",
   lip_facturacion: "receipt", gh_recobro: "receipt",
   gh_activos: "activity", gh_cobertura: "activity", sat_cliente: "activity", sat_conductor: "activity",
   gh_ausentismo: "alert", sst_at_count: "alert", sst_at_dias: "alert", sst_frecuencia: "alert",

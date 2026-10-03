@@ -29,6 +29,13 @@ describe("semáforo de los indicadores de pedidos", () => {
   it("indicadores informativos no tienen semáforo", () => {
     expect(kpiSev(KPI_DEFS.ped_mismo_dia, 70)).toBe("none")
   })
+  it("vehículos sin procesar: meta 0, cualquier pendiente es crítico", () => {
+    const def = KPI_DEFS.veh_sin_procesar
+    expect(def.meta).toBe(0)
+    expect(kpiSev(def, 0)).toBe("good")
+    expect(kpiSev(def, 1)).toBe("crit")
+    expect(kpiSev(def, 45)).toBe("crit")
+  })
 })
 
 describe("redactarAviso y htmlAviso", () => {
