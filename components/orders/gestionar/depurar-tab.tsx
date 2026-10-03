@@ -222,7 +222,7 @@ export function DepurarTab({ empresaId, onDepurado, onVerDetalle }: { empresaId:
 
   // ───────────── Modo lista ─────────────
   return (
-    <div className="flex flex-col gap-3 pb-24">
+    <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setModo("tarjetas")}><ArrowLeft className="h-3.5 w-3.5" /> Tarjetas</Button>
@@ -236,6 +236,35 @@ export function DepurarTab({ empresaId, onDepurado, onVerDetalle }: { empresaId:
           {b.v > 0 && <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => seleccionar(actual.lista.filter((c) => c.calc.antiguedadDias > 90))}>Solo los de más de 90 días ({NUM.format(b.v)})</Button>}
         </div>
       </div>
+
+      {/* Barra de acción: pegada arriba mientras se recorre la lista (no flota al pie,
+          donde la barra lateral o LIPbot podían taparla). */}
+      {sel.size > 0 ? (
+        <div className="sticky top-2 z-20 hidden flex-wrap items-center justify-between gap-3 rounded-2xl bg-marca px-5 py-3 text-white shadow-xl md:flex">
+          <div className="flex flex-wrap items-center gap-4">
+            <span className="lg-num text-[15px] font-bold">{NUM.format(sel.size)} seleccionados</span>
+            <span className="text-sm opacity-85">{NUM.format(conMotivoPropio)} con motivo propio · {NUM.format(sel.size - conMotivoPropio)} con el motivo del lote</span>
+            <label className="flex items-center gap-2 text-sm">
+              <span className="opacity-85">Motivo del lote</span>
+              <Select value={motivoLote} onValueChange={(v) => setMotivoLote(v as MotivoClave)}>
+                <SelectTrigger className="h-9 w-[230px] bg-white text-foreground"><SelectValue /></SelectTrigger>
+                <SelectContent>{MOTIVOS_DEPURACION.map((x) => <SelectItem key={x.clave} value={x.clave}>{x.texto}</SelectItem>)}</SelectContent>
+              </Select>
+            </label>
+            {sel.size > 2000 && <span className="text-xs text-amber-200">Máximo 2.000 por tanda</span>}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" className="border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setSel(new Set())}>Quitar selección</Button>
+            <Button className="gap-1.5 bg-turquesa text-[#042F2E] hover:bg-turquesa/90" onClick={abrirConfirmacion} disabled={sel.size > 2000}><Lock className="h-4 w-4" /> Depurar {NUM.format(sel.size)} pedidos…</Button>
+          </div>
+        </div>
+      ) : (
+        candidatos.length > 0 && (
+          <p className="hidden items-center gap-2 rounded-xl border border-dashed border-border px-4 py-2.5 text-xs text-muted-foreground md:flex">
+            <Lock className="h-3.5 w-3.5" /> Marca los pedidos (o usa "Seleccionar los filtrados") y aparecerá aquí el botón <b className="font-semibold">Depurar</b>. Marcar no cambia nada: el pedido deja de estar pendiente solo al confirmar con tu clave{data.simulaEnEsteEntorno ? " (en esta previsualización solo se simula)" : ""}.
+          </p>
+        )
+      )}
 
       {candidatos.length === 0 ? (
         <div className="lg-card"><EstadoVacio titulo="No hay candidatos en esta lista" texto="Todos los pedidos abiertos tienen rastro logístico o aún no cumplen la antigüedad." /></div>
@@ -349,27 +378,6 @@ export function DepurarTab({ empresaId, onDepurado, onVerDetalle }: { empresaId:
             <p className="px-1 text-center text-xs text-muted-foreground">En celular, Depurar pendientes es solo lectura: la depuración con clave se hace en escritorio.</p>
           </div>
         </>
-      )}
-
-      {sel.size > 0 && (
-        <div className="fixed inset-x-3 bottom-3 z-30 hidden flex-wrap items-center justify-between gap-3 rounded-2xl bg-marca px-5 py-3.5 text-white shadow-2xl md:flex lg:inset-x-auto lg:left-1/2 lg:w-[min(1100px,calc(100vw-2rem))] lg:-translate-x-1/2">
-          <div className="flex flex-wrap items-center gap-4">
-            <span className="lg-num text-[15px] font-bold">{NUM.format(sel.size)} seleccionados</span>
-            <span className="text-sm opacity-85">{NUM.format(conMotivoPropio)} con motivo propio · {NUM.format(sel.size - conMotivoPropio)} con el motivo del lote</span>
-            <label className="flex items-center gap-2 text-sm">
-              <span className="opacity-85">Motivo del lote</span>
-              <Select value={motivoLote} onValueChange={(v) => setMotivoLote(v as MotivoClave)}>
-                <SelectTrigger className="h-9 w-[230px] bg-white text-foreground"><SelectValue /></SelectTrigger>
-                <SelectContent>{MOTIVOS_DEPURACION.map((x) => <SelectItem key={x.clave} value={x.clave}>{x.texto}</SelectItem>)}</SelectContent>
-              </Select>
-            </label>
-            {sel.size > 2000 && <span className="text-xs text-amber-200">Máximo 2.000 por tanda</span>}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" className="border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setSel(new Set())}>Quitar selección</Button>
-            <Button className="gap-1.5 bg-turquesa text-[#042F2E] hover:bg-turquesa/90" onClick={abrirConfirmacion} disabled={sel.size > 2000}><Lock className="h-4 w-4" /> Depurar {NUM.format(sel.size)} pedidos…</Button>
-          </div>
-        </div>
       )}
 
       <Dialog open={confirmando && !resultado} onOpenChange={(o) => !o && !trabajando && setConfirmando(false)}>
