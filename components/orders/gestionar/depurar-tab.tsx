@@ -297,7 +297,7 @@ export function DepurarTab({ empresaId, onDepurado, onVerDetalle }: { empresaId:
                   <th className="px-3 py-2.5 text-left font-semibold">Promesa</th>
                   <th className="px-3 py-2.5 text-right font-semibold">Antig.</th>
                   <th className="px-3 py-2.5 text-right font-semibold">{lista === "parcial" ? "Cargado" : "Kilos"}</th>
-                  <th className="px-3 py-2.5 text-left font-semibold">Estado y pista</th>
+                  <th className="px-3 py-2.5 text-left font-semibold">Pista</th>
                   <th className="px-3 py-2.5 text-left font-semibold">Motivo</th>
                 </tr>
               </thead>
@@ -305,7 +305,6 @@ export function DepurarTab({ empresaId, onDepurado, onVerDetalle }: { empresaId:
                 {visibles.map((c) => {
                   const marcado = sel.has(c.idpedido)
                   const m = motivoDe(c)
-                  const nuncaAprobado = c.pistas.includes("Nunca aprobado")
                   return (
                     <tr key={c.idpedido} className={`border-t border-border/60 ${marcado ? "bg-acento-tinte/40" : "hover:bg-muted/30"}`}>
                       <td className="px-3 py-2 align-middle"><Checkbox aria-label={`Seleccionar pedido ${c.idpedido}`} checked={marcado} onCheckedChange={() => toggle(c.idpedido)} /></td>
@@ -334,10 +333,15 @@ export function DepurarTab({ empresaId, onDepurado, onVerDetalle }: { empresaId:
                         )}
                       </td>
                       <td className="px-3 py-2 align-middle">
-                        <span className="flex flex-wrap gap-1">
-                          <Chip tono="neutro">{nuncaAprobado ? "Nunca aprobado" : c.tipo === "parcial" ? "Parcial" : "Aprobado · sin OC"}</Chip>
-                          {c.pistas.filter((p) => p !== "Nunca aprobado").map((p) => <Chip key={p} tono={p.startsWith("Reemplazado") ? "info" : "atencion"}>{p}</Chip>)}
-                        </span>
+                        {/* Todos los candidatos están sin orden de cargue y casi todos aprobados:
+                            solo se muestran las pistas que distinguen un pedido de otro. */}
+                        {c.pistas.length === 0 ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <span className="flex flex-wrap gap-1">
+                            {c.pistas.map((p) => <Chip key={p} tono={p.startsWith("Reemplazado") ? "info" : "atencion"}>{p}</Chip>)}
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2 align-middle">
                         <Select value={m} onValueChange={(v) => setMotivos((mm) => new Map(mm).set(c.idpedido, v as MotivoClave))}>

@@ -463,6 +463,11 @@ export async function getLineasPedido(empresaId: number | null | undefined, idpe
 // ─────────────────────────────── Depuración ───────────────────────────────
 
 const EN_PREVIEW = process.env.NEXT_PUBLIC_VERCEL_ENV === "preview"
+// Proyecto de PRUEBAS (gerencia 2026-10-03): ID4 Cedi Medellín ya no va a operar, así
+// que en la previsualización la depuración escribe de verdad solo ahí; en los demás
+// proyectos sigue simulando hasta publicar.
+const EMPRESAS_PRUEBA_EN_PREVIEW = new Set<number>([4])
+const simulaEn = (empresaId: number) => EN_PREVIEW && !EMPRESAS_PRUEBA_EN_PREVIEW.has(Number(empresaId))
 
 function pistasDe(p: PedidoCola, posteriores: any[] | undefined): { pistas: string[]; reemplazadoPor: number | null; motivoSugerido: MotivoDepuracion["clave"] | null } {
   const pistas: string[] = []
@@ -550,7 +555,7 @@ export async function getCandidatosDepuracion(empresaId: number | null | undefin
         sinRastro: candidatos.filter((p) => p.calc.candidatoDepuracion === "sin_rastro").map(enriquecer).sort(orden),
         parciales: candidatos.filter((p) => p.calc.candidatoDepuracion === "parcial").map(enriquecer).sort(orden),
         consignado: { sinRastro: cSin, parciales: cPar },
-        simulaEnEsteEntorno: EN_PREVIEW,
+        simulaEnEsteEntorno: simulaEn(empresaId),
       },
     }
   } catch (e: any) {
@@ -570,7 +575,7 @@ export async function depurarPedidos(input: { empresaId: number | null | undefin
     if (!Number.isFinite(Number(it.idpedido))) return { success: false, message: "Pedido inválido en la selección." }
     if (!clavesMotivo.has(it.motivo)) return { success: false, message: `Motivo inválido en el pedido #${it.idpedido}.` }
   }
-  const simular = input.simular ?? EN_PREVIEW
+  const simular = input.simular ?? simulaEn(empresaId)
   try {
     const sbLectura: any = await getSupabaseAdminAsSystem()
     const acceso = await accesoPedidos(sbLectura, empresaId)
