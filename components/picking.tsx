@@ -638,6 +638,9 @@ const loadOrders = async () => {
       setAlternoScannedPallets(new Map())
       setScanningAlterno(false)
       setSimpleAverias(new Map())
+      // Los motivos de faltante son de ESTA orden: no pueden arrastrarse a la siguiente.
+      setJustificaciones(new Map())
+      setMotivoFaltante("")
       setSimpleAlterno(new Map())
     } else {
       toast({
@@ -744,6 +747,8 @@ const loadOrders = async () => {
     const required = item.cantidad
     const totalNet = getSimpleTotalNet(item.id, currentQuantity)
     if (totalNet < required) {
+      // Se arranca con el motivo que ya tenga ESA línea, nunca con el de otra.
+      setMotivoFaltante(justificaciones.get(item.id) ?? "")
       setLowQtyConfirm({ itemId: item.id, net: totalNet, required, mode: "simple" })
       return
     }
@@ -753,6 +758,7 @@ const loadOrders = async () => {
   // Solicita la verificación por QR con cantidad parcial: siempre pide
   // confirmación porque el neto es menor a la cantidad del pedido.
   const requestPartialQRVerification = (itemId: number, net: number, required: number) => {
+    setMotivoFaltante(justificaciones.get(itemId) ?? "")
     setLowQtyConfirm({ itemId, net, required, mode: "qr" })
   }
 
@@ -1695,7 +1701,7 @@ const loadOrders = async () => {
         )}
 
         {/* Confirmación al verificar una cantidad menor a la del pedido */}
-        <Dialog open={lowQtyConfirm !== null} onOpenChange={(open) => !open && setLowQtyConfirm(null)}>
+        <Dialog open={lowQtyConfirm !== null} onOpenChange={(open) => { if (!open) { setLowQtyConfirm(null); setMotivoFaltante("") } }}>
           <DialogContent className="max-w-md w-[95vw]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-base">
@@ -2039,7 +2045,7 @@ const loadOrders = async () => {
       )}
 
       {/* Confirmación al verificar una cantidad menor a la del pedido */}
-      <Dialog open={lowQtyConfirm !== null} onOpenChange={(open) => !open && setLowQtyConfirm(null)}>
+      <Dialog open={lowQtyConfirm !== null} onOpenChange={(open) => { if (!open) { setLowQtyConfirm(null); setMotivoFaltante("") } }}>
         <DialogContent className="max-w-md w-[95vw]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
