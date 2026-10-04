@@ -25,7 +25,7 @@ import { MOTIVOS_DEPURACION, type MotivoDepuracion } from "@/lib/pedidos-estado"
 import { NUM, fechaNum, horaCorta, tTexto } from "./formato"
 
 type Lista = "sin_rastro" | "parcial"
-type FiltroAnt = "todos" | ">90" | "31-90" | "0-30" | "mes" | "pista" | "nunca"
+type FiltroAnt = "todos" | ">90" | "31-90" | "0-30" | "mes" | "corte" | "pista" | "nunca"
 type MotivoClave = MotivoDepuracion["clave"]
 const POR_PAGINA = 50
 
@@ -46,6 +46,8 @@ export function DepurarTab({ empresaId, onDepurado, onVerDetalle }: { empresaId:
   const [lista, setLista] = useState<Lista>("sin_rastro")
   const [filtro, setFiltro] = useState<FiltroAnt>("todos")
   const [busqueda, setBusqueda] = useState("")
+  /** Fecha de corte para depurar por tandas ("todo lo anterior a…"). Arranca en el 1.º del mes. */
+  const [corte, setCorte] = useState("")
   const [pagina, setPagina] = useState(0)
   const [sel, setSel] = useState<Set<number>>(new Set())
   const [motivoLote, setMotivoLote] = useState<MotivoClave>("vencido")
@@ -67,33 +69,56 @@ export function DepurarTab({ empresaId, onDepurado, onVerDetalle }: { empresaId:
     })
   }
   useEffect(cargar, [empresaId]) // eslint-disable-line react-hooks/exhaustive-deps
+  // El corte arranca en el primer día del mes en curso: lo de antes es lo que ya no se va a entregar.
+  useEffect(() => {
+    if (data?.hoy && !corte) setCorte(`${String(data.hoy).slice(0, 7)}-01`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.hoy])
 
   const candidatos = useMemo(() => (data ? (lista === "sin_rastro" ? data.sinRastro : data.parciales) : []), [data, lista])
+
+  // CORTE POR FECHA. Gerencia (2026-10-04): "depurar todos esos pedidos, los que estén antes de
+  // agosto". El botón "Anteriores a <mes>" corta en el mes en curso; esto permite cualquier
+  // fecha. La referencia es la misma de la antigüedad: la más reciente entre registro y promesa.
+  const fechaRefDe = (c: CandidatoDepuracion) => {
+    const reg = String(c.fecha ?? "").slice(0, 10)
+    const prom = String(c.fecha_programada ?? "").slice(0, 10)
+    return prom && prom > reg ? prom : reg
+  }
+  const anteriorAlCorte = (c: CandidatoDepuracion) => {
+    const f = fechaRefDe(c)
+    return !!f && !!corte && f < corte
+  }
+
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
     return candidatos.filter((c) => {
       if (filtro === "pista" && !c.reemplazadoPor) return false
       if (filtro === "nunca" && !c.pistas.includes("Nunca aprobado")) return false
       if (filtro === "mes" && !c.calc.anteriorAlMes) return false
+      if (filtro === "corte" && !anteriorAlCorte(c)) return false
       if ((filtro === ">90" || filtro === "31-90" || filtro === "0-30") && bucket(c.calc.antiguedadDias) !== filtro) return false
       if (q && ![String(c.idpedido), c.pedido, c.orden_de_compra, c.cliente].some((v) => (v ?? "").toLowerCase().includes(q))) return false
       return true
     })
-  }, [candidatos, filtro, busqueda])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidatos, filtro, busqueda, corte])
   const paginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA))
   const pag = Math.min(pagina, paginas - 1)
   const visibles = filtrados.slice(pag * POR_PAGINA, pag * POR_PAGINA + POR_PAGINA)
 
   const conteos = useMemo(() => {
-    const c = { todos: candidatos.length, ">90": 0, "31-90": 0, "0-30": 0, mes: 0, pista: 0, nunca: 0 } as Record<FiltroAnt, number>
+    const c = { todos: candidatos.length, ">90": 0, "31-90": 0, "0-30": 0, mes: 0, corte: 0, pista: 0, nunca: 0 } as Record<FiltroAnt, number>
     for (const x of candidatos) {
       c[bucket(x.calc.antiguedadDias)]++
       if (x.calc.anteriorAlMes) c.mes++
+      if (anteriorAlCorte(x)) c.corte++
       if (x.reemplazadoPor) c.pista++
       if (x.pistas.includes("Nunca aprobado")) c.nunca++
     }
     return c
-  }, [candidatos])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidatos, corte])
 
   const motivoDe = (c: CandidatoDepuracion): MotivoClave => motivos.get(c.idpedido) ?? c.motivoSugerido ?? motivoLote
   const seleccionados = candidatos.filter((c) => sel.has(c.idpedido))
@@ -239,6 +264,14 @@ export function DepurarTab({ empresaId, onDepurado, onVerDetalle }: { empresaId:
           <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => seleccionar(filtrados)} disabled={filtrados.length === 0}><Check className="h-3.5 w-3.5" /> Seleccionar los {NUM.format(filtrados.length)} filtrados</Button>
           {conteos.mes > 0 && <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => seleccionar(actual.lista.filter((c) => c.calc.anteriorAlMes))}>Anteriores a {nombreMes(data.hoy)} ({NUM.format(conteos.mes)})</Button>}
           {b.v > 0 && <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => seleccionar(actual.lista.filter((c) => c.calc.antiguedadDias > 90))}>Solo los de más de 90 días ({NUM.format(b.v)})</Button>}
+          {/* Corte libre: permite depurar por tandas ("todo lo anterior a agosto") sin depender del mes en curso. */}
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            Anteriores al
+            <Input type="date" value={corte} onChange={(e) => { setCorte(e.target.value); setPagina(0) }} className="h-8 w-[150px]" />
+          </label>
+          <Button size="sm" variant="outline" className="h-8 text-xs" disabled={conteos.corte === 0} onClick={() => seleccionar(actual.lista.filter(anteriorAlCorte))}>
+            Seleccionar los {NUM.format(conteos.corte)} anteriores a esa fecha
+          </Button>
         </div>
       </div>
 
@@ -283,6 +316,7 @@ export function DepurarTab({ empresaId, onDepurado, onVerDetalle }: { empresaId:
             {([
               ["todos", "Todos"],
               ["mes", `Anteriores a ${nombreMes(data.hoy)}`],
+              ...(corte ? ([["corte", `Antes del ${fechaNum(corte)}`]] as [FiltroAnt, string][]) : []),
               [">90", "Más de 90 d"],
               ["31-90", "31–90 d"],
               ["0-30", "Hasta 30 d"],
