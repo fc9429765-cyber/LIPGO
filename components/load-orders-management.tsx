@@ -23,7 +23,9 @@ import {
   Pencil,
   Trash2,
   RefreshCwIcon,
+  Search,
 } from "lucide-react"
+import { Orden360Dialog } from "@/components/orders/orden-360"
 import {
   Dialog,
   DialogContent,
@@ -85,6 +87,8 @@ interface LoadOrdersManagementProps {
 export function LoadOrdersManagement({ initialSearch, onInitialSearchApplied }: LoadOrdersManagementProps = {}) {
   const [orders, setOrders] = useState<LoadOrder[]>([])
   const [loading, setLoading] = useState(true)
+  // Ciclo completo de una orden (orden → asignación de lotes → despacho).
+  const [orden360, setOrden360] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<"pendiente" | "finalizada" | "todas">("todas")
   // Periodo que se CARGA del servidor (ver lib/periodo-listados.ts); no aplica a
   // "Pendientes", que siempre trae todas.
@@ -490,6 +494,12 @@ export function LoadOrdersManagement({ initialSearch, onInitialSearchApplied }: 
         )}
 
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          {/* Ciclo completo de cualquier orden: se escribe el número y se ve qué pidió,
+              qué lotes se asignaron y qué se despachó (gerencia 2026-10-04). */}
+          <Button variant="outline" className="gap-1.5" onClick={() => setOrden360("")} title="Escribe el número de una orden y mira su ciclo completo">
+            <Search className="h-4 w-4" />
+            Ciclo de una orden
+          </Button>
           <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
             <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Filtrar por estado" />
@@ -730,6 +740,12 @@ export function LoadOrdersManagement({ initialSearch, onInitialSearchApplied }: 
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            {/* Ciclo completo de la orden (gerencia 2026-10-04): qué pidió,
+                                qué lotes se asignaron y qué se despachó de verdad. */}
+                            <DropdownMenuItem onClick={() => setOrden360(order.ordendecargue)} className="text-xs">
+                              <Search className="mr-2 h-3 w-3" />
+                              Ver ciclo completo
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleEditFechaCargue(order)} className="text-xs">
                               <Pencil className="mr-2 h-3 w-3" />
                               Editar Fecha Cargue
@@ -885,6 +901,9 @@ export function LoadOrdersManagement({ initialSearch, onInitialSearchApplied }: 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Ciclo completo de la orden: qué pidió, qué lotes se asignaron, qué se despachó. */}
+      <Orden360Dialog ordendecargue={orden360} open={orden360 !== null} onOpenChange={(v) => !v && setOrden360(null)} />
     </div>
   )
 }
