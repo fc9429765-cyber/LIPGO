@@ -11,13 +11,16 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { AyudaClaveAutorizacion } from "@/components/mi-clave-autorizacion"
+import { Orden360Dialog } from "@/components/orders/orden-360"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { SST_TOKENS } from "@/components/sst/sst-utils"
 import { SigHeader, SigFilterBar, SigField, SigKpi, sigControl } from "@/components/sst/sig-ui"
 import { useAuth } from "@/components/auth-provider"
-import { getPanelInventarioLIP, getKardexInventario, getMovimientosProducto, getTiposMovimiento, getCuadreDiario, getPreservacionInventario, getConciliacionMensualInventario, guardarCierreMesInventario, getConciliacionPedidosVsSalidas, getAuditoriaOrdenPedidoSalida, guardarCuadreManualPedidoSalida, getOrCrearActaCruce, corregirLineaActaCruce, firmarActaCruce, getProductosInventario, getConteoFisicoDelMes } from "@/lib/sig-actions"
-import { Loader2, Boxes, TrendingDown, ArrowDownToLine, AlertTriangle, RefreshCw, CalendarClock, Layers, FileText, BookOpen, ZoomIn, ClipboardList, ShieldAlert, FolderOpen, ExternalLink, CheckCircle2 } from "lucide-react"
+import { getPanelInventarioLIP, getKardexInventario, getMovimientosProducto, getTiposMovimiento, getCuadreDiario, getPreservacionInventario, getConciliacionMensualInventario, guardarCierreMesInventario, getConciliacionPedidosVsSalidas, getConciliacionOrdenVsSalidas, getAuditoriaOrdenPedidoSalida, guardarCuadreManualPedidoSalida, getOrCrearActaCruce, corregirLineaActaCruce, firmarActaCruce, getProductosInventario, getConteoFisicoDelMes } from "@/lib/sig-actions"
+import { Truck, Loader2, Boxes, TrendingDown, ArrowDownToLine, AlertTriangle, RefreshCw, CalendarClock, Layers, FileText, BookOpen, ZoomIn, ClipboardList, ShieldAlert, FolderOpen, ExternalLink, CheckCircle2 } from "lucide-react"
 import { ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts"
 
 const DONUT_COLORS = ["#1E8449", "#0D3B6E", "#00B4CC", "#E0A800", "#7e57c2", "#C0392B"]
@@ -52,6 +55,9 @@ export function PanelInventarioLIP() {
   const [anio, setAnio] = useState<string>(String(hoyDefault.getFullYear()))
   const [mes, setMes] = useState<string>(String(hoyDefault.getMonth() + 1).padStart(2, "0"))
   const [kardex, setKardex] = useState<any[]>([])
+  // Base fija y cierre del periodo que explican el Kardex (Conteo total aprobado / sistema al corte / stock vivo).
+  const [kardexInfo, setKardexInfo] = useState<{ base: { fecha: string; descripcion: string } | null; cierre: { fecha: string | null; descripcion: string; esVivo: boolean } } | null>(null)
+  const [cuadreInfo, setCuadreInfo] = useState<{ base: { fecha: string | null; descripcion: string; saldo: number } | null; cierre?: { descripcion: string; esVivo: boolean; saldo: number }; saldoFinalCalculado?: number } | null>(null)
   const [loadingKardex, setLoadingKardex] = useState(false)
   const [filtroProd, setFiltroProd] = useState<string>("")
   const [drill, setDrill] = useState<{
@@ -59,6 +65,10 @@ export function PanelInventarioLIP() {
     movs: any[]
     saldoInicialPeriodo?: number
     saldoFinalPeriodo?: number
+    saldoCierre?: number
+    descuadre?: number
+    baseDescripcion?: string | null
+    cierreDescripcion?: string
     resumen?: { entradas: number; salidas: number; traslados: number; ajustes: number; merma: number }
   } | null>(null)
   const [loadingDrill, setLoadingDrill] = useState(false)
@@ -77,11 +87,22 @@ export function PanelInventarioLIP() {
   const firmaActaRef = useRef<SignaturePadHandle | null>(null)
   const [pedSal, setPedSal] = useState<{ filas: any[]; resumen: any } | null>(null)
   const [loadingPedSal, setLoadingPedSal] = useState(false)
+  // Conciliación del DESPACHO: la orden de cargue contra lo que salió del inventario.
+  const [ordSal, setOrdSal] = useState<{ filas: any[]; resumen: any } | null>(null)
+  const [loadingOrdSal, setLoadingOrdSal] = useState(false)
+  const [filtroAlertaOrden, setFiltroAlertaOrden] = useState("DISC")
+  const [filtroOrdenOC, setFiltroOrdenOC] = useState("")
   const [filtroAlerta, setFiltroAlerta] = useState("DISC") // DISC | "" (todas) | OK | CANTIDAD_DIFERENTE | PEDIDO_SIN_SALIDA | SALIDA_SIN_PEDIDO
   const [filtroOrden, setFiltroOrden] = useState("")
   const [auditoria, setAuditoria] = useState<{ ocargue: string; producto?: string; data: any } | null>(null)
   const [loadingAud, setLoadingAud] = useState(false)
   const [modoEdicion, setModoEdicion] = useState(false)
+  // Ciclo completo de una orden (pidió · asignó · despachó), abierto desde la conciliación.
+  const [orden360, setOrden360] = useState<string | null>(null)
+  // Cuadre manual con clave personal (gerencia 2026-10-04): líneas pendientes de confirmar.
+  const [pendienteCuadre, setPendienteCuadre] = useState<any[] | null>(null)
+  const [claveCuadre, setClaveCuadre] = useState("")
+  const [errorClaveCuadre, setErrorClaveCuadre] = useState("")
   const [edits, setEdits] = useState<{ ped: Record<number, string>; pedU: Record<number, string> }>({ ped: {}, pedU: {} })
   const [savingCuadre, setSavingCuadre] = useState(false)
   const [tab, setTab] = useState("dashboard")
@@ -115,6 +136,13 @@ export function PanelInventarioLIP() {
         if (!anio && r.data?.anio) setAnio(r.data.anio)
       } else toast({ title: "No se pudo cargar el panel", description: r.error })
       setLoading(false)
+    }).catch((e: any) => {
+      // Sin este catch, si la acción del servidor falla (tiempo agotado, red),
+      // la promesa quedaba rechazada sin manejar y el panel se quedaba en el
+      // spinner para siempre ("no me cargan los datos", 2026-10-02).
+      if (cancel) return
+      toast({ title: "No se pudo cargar el panel", description: e?.message || "Error de red o tiempo agotado. Intenta de nuevo." })
+      setLoading(false)
     })
     return () => { cancel = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -128,6 +156,7 @@ export function PanelInventarioLIP() {
     else if (tab === "preservacion") cargarPreservacion()
     else if (tab === "conciliacion") cargarConciliacion()
     else if (tab === "pedidos_salidas") cargarPedidosSalidas()
+    else if (tab === "orden_salidas") cargarOrdenSalidas()
     else if (tab === "cruce") cargarCruce()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, selectedEmpresaId, anio, mes])
@@ -135,8 +164,10 @@ export function PanelInventarioLIP() {
   async function cargarKardex() {
     setLoadingKardex(true)
     const r = await getKardexInventario(selectedEmpresaId ?? null, anio || null, mes || null)
-    if (r.success) setKardex(r.data.filas)
-    else toast({ title: "No se pudo cargar el kardex", description: r.error })
+    if (r.success) {
+      setKardex(r.data.filas)
+      setKardexInfo({ base: r.data.base ?? null, cierre: r.data.cierre })
+    } else toast({ title: "No se pudo cargar el kardex", description: r.error })
     setLoadingKardex(false)
   }
 
@@ -156,6 +187,10 @@ export function PanelInventarioLIP() {
         movs: r.data,
         saldoInicialPeriodo: r.saldoInicialPeriodo,
         saldoFinalPeriodo: r.saldoFinalPeriodo,
+        saldoCierre: r.saldoCierre,
+        descuadre: r.descuadre,
+        baseDescripcion: r.baseDescripcion,
+        cierreDescripcion: r.cierreDescripcion,
         resumen,
       })
     } else toast({ title: "No se pudo cargar el detalle", description: r.error })
@@ -172,8 +207,10 @@ export function PanelInventarioLIP() {
   async function cargarCuadreDiario() {
     setLoadingCD(true)
     const r = await getCuadreDiario(selectedEmpresaId ?? null, anio || null, mes || null)
-    if (r.success) setCuadreD(r.data)
-    else toast({ title: "No se pudo cargar el cuadre diario", description: r.error })
+    if (r.success) {
+      setCuadreD(r.data)
+      setCuadreInfo({ base: r.base ?? null, cierre: r.cierre, saldoFinalCalculado: r.saldoFinalCalculado })
+    } else toast({ title: "No se pudo cargar el cuadre diario", description: r.error })
     setLoadingCD(false)
   }
   async function cargarPreservacion() {
@@ -316,6 +353,21 @@ export function PanelInventarioLIP() {
     }
     setLoadingPedSal(false)
   }
+  async function cargarOrdenSalidas() {
+    if (!selectedEmpresaId) {
+      setOrdSal(null)
+      return
+    }
+    setLoadingOrdSal(true)
+    const r = await getConciliacionOrdenVsSalidas(selectedEmpresaId)
+    if (r.success) setOrdSal({ filas: r.data?.filas ?? [], resumen: r.data?.resumen ?? {} })
+    else {
+      setOrdSal(null)
+      toast({ title: "No se pudo cargar orden vs salidas", description: r.error })
+    }
+    setLoadingOrdSal(false)
+  }
+
   async function abrirAuditoria(f: any) {
     setModoEdicion(false)
     setEdits({ ped: {}, pedU: {} })
@@ -344,19 +396,29 @@ export function PanelInventarioLIP() {
       toast({ title: "Sin cambios", description: "No hay cantidades de pedido modificadas." })
       return
     }
-    const msg = `Vas a guardar en Supabase ${peds.length} línea(s) de pedido (unidades/cargadas).\nEsto NO modifica el inventario.\n\n¿Confirmar el cuadre manual?`
-    if (!window.confirm(msg)) return
+    // Gerencia 2026-10-04: esta acción pide CLAVE. No toca el inventario físico, pero reescribe
+    // el lado del pedido y con eso puede hacer desaparecer una diferencia de la conciliación.
+    setPendienteCuadre(peds)
+    setClaveCuadre("")
+    setErrorClaveCuadre("")
+  }
+
+  /** Ejecuta el cuadre manual ya confirmado con la clave personal. */
+  async function confirmarCuadreConClave() {
+    if (!pendienteCuadre || !auditoria) return
     setSavingCuadre(true)
-    const r = await guardarCuadreManualPedidoSalida({ pedidos: peds, actor })
+    const r = await guardarCuadreManualPedidoSalida({ pedidos: pendienteCuadre, actor, clave: claveCuadre, idempresa: selectedEmpresaId })
     setSavingCuadre(false)
     if (r.success) {
-      toast({ title: "Cuadre manual guardado", description: `${r.data?.pedidos ?? 0} línea(s) de pedido actualizada(s).` })
+      toast({ title: "Cuadre manual guardado", description: `${r.data?.pedidos ?? 0} línea(s) de pedido actualizada(s). Queda registrado quién autorizó.` })
+      setPendienteCuadre(null)
+      setClaveCuadre("")
       setModoEdicion(false)
       setEdits({ ped: {}, pedU: {} })
       await abrirAuditoria({ ocargue: auditoria.ocargue, producto: auditoria.producto })
       cargarPedidosSalidas()
     } else {
-      toast({ title: "No se pudo guardar el cuadre", description: r.error })
+      setErrorClaveCuadre(r.error || "No se pudo guardar el cuadre.")
     }
   }
 
@@ -527,6 +589,7 @@ export function PanelInventarioLIP() {
           <TabsTrigger value="kardex">Inventario detalle (Kardex)</TabsTrigger>
           <TabsTrigger value="diario">Cuadre diario</TabsTrigger>
           <TabsTrigger value="preservacion">Preservación / FIFO</TabsTrigger>
+          <TabsTrigger value="orden_salidas">Orden de cargue vs salidas</TabsTrigger>
           <TabsTrigger value="pedidos_salidas">Conciliación pedidos vs salidas</TabsTrigger>
           <TabsTrigger value="cruce">Acta de Cruce (apertura de mes)</TabsTrigger>
         </TabsList>
@@ -546,10 +609,10 @@ export function PanelInventarioLIP() {
 
           {/* KPIs de gestión de almacén (alto nivel) */}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            <KPI label="ERI — Exactitud de registro" valor={k.eri} unidad="%" Icon={Boxes} color={colorExact(k.eri)} sub="lotes exactos / evaluados (cruce)" />
+            <KPI label="ERI — Exactitud de registro" valor={k.eri === null || k.eri === undefined ? "—" : k.eri} unidad={k.eri === null || k.eri === undefined ? undefined : "%"} Icon={Boxes} color={k.eri === null || k.eri === undefined ? SST_TOKENS.navy : colorExact(k.eri)} sub={k.eriBase || "conteos físicos aprobados"} />
             <KPI label="Rotación de inventario" valor={k.rotacion} unidad="x" Icon={RefreshCw} color={SST_TOKENS.navy} sub="despacho / stock" />
             <KPI label="Días de inventario" valor={fmt(k.diasInventario)} unidad="días" Icon={CalendarClock} color={k.diasInventario > 60 ? SST_TOKENS.warn : SST_TOKENS.ok} sub="cobertura de stock" />
-            <KPI label="Stock (libro)" valor={fmt(k.saldoFisico)} unidad="und" Icon={Boxes} color={SST_TOKENS.navy} sub={`${fmt(k.skusConStock)} SKUs con stock`} />
+            <KPI label="Stock (sistema)" valor={fmt(k.saldoFisico)} unidad="und" Icon={Boxes} color={SST_TOKENS.navy} sub={`${fmt(k.skusConStock)} SKUs con stock · stock vivo`} />
             <KPI label="SKUs activos" valor={fmt(k.skusActivos)} Icon={Layers} color={SST_TOKENS.navy} sub="con movimiento en el periodo" />
             <KPI label="SKUs sin movimiento" valor={fmt(k.skusSinMovimiento)} Icon={AlertTriangle} color={k.skusSinMovimiento ? SST_TOKENS.warn : SST_TOKENS.ok} sub="stock sin rotar (slow movers)" />
           </div>
@@ -623,7 +686,7 @@ export function PanelInventarioLIP() {
 
           <Card className="p-3">
             <p className="text-[11px] text-muted-foreground">
-              <b>Nomenclatura LIPgo:</b> stock perpetuo (recepción 101, despacho 601, traslado 311, ajuste 701/702, inicial 561, merma 551). <b>ERI</b> por conteo físico (Cuadre). <b>Rotación</b> = despacho/stock; <b>días de inventario</b> = cobertura. <b>ABC</b> = Pareto por salidas. <b>Ingresos</b> = aprobación de producción (PT) / órdenes de descargue (Cedis) / devoluciones. <b>Salidas</b> = órdenes de cargue / reproceso (avería). Los traslados internos no alteran el stock. Las diferencias del cuadre se concilian; el residual se ajusta con documento soporte.
+              <b>Una sola fuente:</b> el stock es el stock vivo que la base recalcula con cada transacción (recepción 101, despacho 601, traslado 311, ajuste 701/702, inicial 561, merma 551). El <b>Conteo total aprobado</b> es la base fija con la que arranca cada mes; Kardex, detalle y cuadre diario parten de ahí y avanzan transacción por transacción. <b>ERI</b> = ítems exactos / contados en los conteos físicos aprobados. <b>Rotación</b> = despacho/stock; <b>días de inventario</b> = cobertura. <b>ABC</b> = Pareto por salidas. <b>Ingresos</b> = aprobación de ingresos (producción / descargue) y devoluciones. <b>Salidas</b> = órdenes de cargue, averías y reprocesos. Los traslados internos no alteran el stock.
             </p>
           </Card>
         </>
@@ -640,7 +703,7 @@ export function PanelInventarioLIP() {
             <>
               <p className="text-xs text-muted-foreground">
                 <ClipboardList className="mr-1 inline h-3.5 w-3.5" />
-                <b>{selectedEmpresaNombre}</b> · solo <b>Producto Terminado + Sub Producto</b> (el empaque y la materia prima se concilian aparte). El inventario y los despachos se llevan <b>por lote</b>. Apertura = <b>inventario inicial (561)</b>; el cierre de cada mes es el inicial del siguiente. <b>Ingresos</b> = producción/descargue + devoluciones · <b>Salidas</b> = cargue (601) + <b>merma de proceso</b> (reproceso 551 + cuadre físico por lote). Traslados, proyección y tolva NO se cuentan. El <b>saldo final conciliado coincide con el stock físico</b>. Cada mes genera un acta PDF en <code>inventario/cierres/{selectedEmpresaId}/AAAA-MM/</code>.
+                <b>{selectedEmpresaNombre}</b> · solo <b>Producto Terminado + Sub Producto</b> (el empaque y la materia prima se concilian aparte). <b>Saldo inicial</b> de cada mes = su <b>Conteo total aprobado</b> (si no hay, el sistema al corte del día 1). <b>Ingresos</b> = aprobación de ingresos + devoluciones · <b>Salidas</b> = cargue (601) + reproceso/avería (551) · <b>Ajustes</b> = 701/702. <b>Saldo final</b> = base del mes siguiente (stock vivo en el mes en curso). Todo por la fecha de cada transacción; la proyección no se cuenta (no es inventario) y los ingresos de producción por tolva sí. Lo que las transacciones no cubren queda en <b>"Sin soporte"</b> y debe llevarse a cero con su corrección documentada; nunca se fuerza el cuadre. Cada mes genera un acta PDF en <code>inventario/cierres/{selectedEmpresaId}/AAAA-MM/</code>.
               </p>
               {loadingConc ? (
                 <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" style={{ color: SST_TOKENS.navy }} /></div>
@@ -650,19 +713,19 @@ export function PanelInventarioLIP() {
                 <>
                 {conc?.resumen && (
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-                    <KPI label={conc.resumen.aperturaAjustada ? "Inventario inicial (apertura real)" : "Inventario inicial (561)"} valor={fmt(conc.resumen.invInicial)} unidad="und" Icon={ArrowDownToLine} color={SST_TOKENS.navy} sub={conc.resumen.aperturaAjustada ? `incluye migración · digitado 561: ${fmt(conc.resumen.invInicial561)}` : "apertura del periodo"} />
+                    <KPI label="Saldo inicial del periodo" valor={fmt(conc.resumen.invInicial)} unidad="und" Icon={ArrowDownToLine} color={SST_TOKENS.navy} sub={concFilas[0]?.baseDescripcion || "base fija del primer mes"} />
                     <KPI label="Merma de proceso" valor={fmt(conc.resumen.mermaMesEnCurso ?? 0)} unidad="und" Icon={AlertTriangle} color={SST_TOKENS.warn} sub={`reproceso/avería · mes ${conc.resumen.mesMerma ?? "—"}`} />
                     <KPI
-                      label="Ajuste / depuración (meses cerrados)"
+                      label="Sin soporte (meses cerrados)"
                       valor={fmt((conc.resumen.mermaProceso ?? 0) - (conc.resumen.ajusteMesEnCurso ?? 0))}
                       unidad="und"
                       Icon={RefreshCw}
-                      color={Math.abs((conc.resumen.mermaProceso ?? 0) - (conc.resumen.ajusteMesEnCurso ?? 0)) < 50 ? SST_TOKENS.ok : SST_TOKENS.warn}
-                      sub={`mes en curso por asentarse: ${fmt(conc.resumen.ajusteMesEnCurso ?? 0)} (cierra con el inventario del día 1)`}
+                      color={(conc.resumen.mermaProceso ?? 0) - (conc.resumen.ajusteMesEnCurso ?? 0) === 0 ? SST_TOKENS.ok : SST_TOKENS.bad}
+                      sub={`mes en curso: ${fmt(conc.resumen.ajusteMesEnCurso ?? 0)} (frente al stock vivo de hoy)`}
                     />
-                    <KPI label="Saldo conciliado" valor={fmt(conc.resumen.saldoTeorico)} unidad="und" Icon={Boxes} color={SST_TOKENS.navy} sub="cierre del roll" />
-                    <KPI label="Stock físico (sistema)" valor={fmt(conc.resumen.saldoVivo)} unidad="und" Icon={Boxes} color={SST_TOKENS.ok} sub="saldoinvdetalle" />
-                    <KPI label="Diferencia" valor={fmt(conc.resumen.diferencia)} unidad="und" Icon={TrendingDown} color={Math.abs(conc.resumen.diferencia) < 5 ? SST_TOKENS.ok : SST_TOKENS.bad} sub={Math.abs(conc.resumen.diferencia) < 5 ? "✓ cuadra" : "revisar"} />
+                    <KPI label="Saldo por transacciones" valor={fmt(conc.resumen.saldoTeorico)} unidad="und" Icon={Boxes} color={SST_TOKENS.navy} sub="cierre del último mes" />
+                    <KPI label="Stock vivo (sistema)" valor={fmt(conc.resumen.saldoVivo)} unidad="und" Icon={Boxes} color={SST_TOKENS.ok} sub="saldoinvdetalle · PT + SP" />
+                    <KPI label="Lotes a revisar" valor={fmt(conc.resumen.lotesRevisar ?? 0)} Icon={TrendingDown} color={(conc.resumen.lotesRevisar ?? 0) ? SST_TOKENS.bad : SST_TOKENS.ok} sub="libro vs stock por lote, |dif| > 100" />
                   </div>
                 )}
                 <Card className="overflow-hidden">
@@ -675,9 +738,10 @@ export function PanelInventarioLIP() {
                           <th className="px-3 py-2 text-right">Saldo inicial</th>
                           <th className="px-3 py-2 text-right">Ingresos</th>
                           <th className="px-3 py-2 text-right">Cargue (601)</th>
-                          <th className="px-3 py-2 text-right">Merma proceso (551)</th>
-                          <th className="px-3 py-2 text-right">Ajuste / depuración</th>
-                          <th className="px-3 py-2 text-right">Saldo final (físico)</th>
+                          <th className="px-3 py-2 text-right">Reproceso (551)</th>
+                          <th className="px-3 py-2 text-right">Ajustes y reclasif.</th>
+                          <th className="px-3 py-2 text-right" title="Debe ser 0: toda diferencia debe quedar soportada con su corrección">Sin soporte</th>
+                          <th className="px-3 py-2 text-right">Saldo final</th>
                           <th className="px-3 py-2 text-center">Soporte</th>
                         </tr>
                       </thead>
@@ -694,12 +758,13 @@ export function PanelInventarioLIP() {
                                 <Badge variant="outline" className="text-[10px]">Sin acta</Badge>
                               )}
                             </td>
-                            <td className="px-3 py-1.5 text-right text-muted-foreground">{fmt(f.saldoInicial)}</td>
-                            <td className="px-3 py-1.5 text-right" style={{ color: SST_TOKENS.ok }} title={`Prod. ${fmt(f.recepcion ?? 0)} · Dev. ${fmt(f.devolucion ?? 0)}`}>{fmt(f.ingresos)}</td>
+                            <td className="px-3 py-1.5 text-right text-muted-foreground" title={f.baseDescripcion || ""}>{fmt(f.saldoInicial)}</td>
+                            <td className="px-3 py-1.5 text-right" style={{ color: SST_TOKENS.ok }} title={`Prod./recepción ${fmt(f.recepcion ?? 0)} · Dev. ${fmt(f.devolucion ?? 0)}${f.inicial ? ` · Inicial 561 ${fmt(f.inicial)}` : ""}`}>{fmt(f.ingresos)}</td>
                             <td className="px-3 py-1.5 text-right" style={{ color: SST_TOKENS.navy }}>{fmt(f.cargue)}</td>
                             <td className="px-3 py-1.5 text-right" style={{ color: (f.reproceso ?? 0) ? SST_TOKENS.warn : "inherit" }} title="Reproceso / avería registrada (mov 551) — merma real de proceso">{fmt(f.reproceso)}</td>
-                            <td className="px-3 py-1.5 text-right text-muted-foreground" title="Cuadre libro vs físico por lote (ajustes 702, lotes sin fecha, redondeos). ~0 tras depurar la base.">{fmt(f.mermaProceso)}</td>
-                            <td className="px-3 py-1.5 text-right font-semibold">{fmt(f.saldoFinal)}</td>
+                            <td className="px-3 py-1.5 text-right text-muted-foreground" title="Ajustes 701/702 y reclasificaciones 309 aprobados en el mes (con signo)">{fmt(f.ajuste ?? 0)}</td>
+                            <td className="px-3 py-1.5 text-right font-semibold" style={{ color: f.mermaProceso ? SST_TOKENS.bad : SST_TOKENS.ok }} title="Saldo inicial + ingresos + ajustes − cargue − reproceso − saldo final. Debe ser 0: salidas sin confirmar o diferencia que falta corregir con su soporte">{f.mermaProceso ? fmt(f.mermaProceso) : "✓"}</td>
+                            <td className="px-3 py-1.5 text-right font-semibold" title={f.cierreDescripcion || ""}>{fmt(f.saldoFinal)}</td>
                             <td className="px-3 py-1.5 text-center">
                               {f.documento_url ? (
                                 <a href={f.documento_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] hover:underline" style={{ color: SST_TOKENS.navy }}>
@@ -739,7 +804,7 @@ export function PanelInventarioLIP() {
               )}
 
               <p className="text-[11px] text-muted-foreground">
-                La <b>merma de proceso</b> (reproceso 551 + cuadre físico por lote) se documenta en el cierre y NO se cobra a LIP. El saldo final conciliado <b>coincide con el stock físico</b> del sistema. Regenerar el acta sobrescribe el PDF en la carpeta del mes.
+                La <b>merma de proceso</b> (reproceso 551) se documenta en el cierre y NO se cobra a LIP. Una cifra en <b>"Sin soporte"</b> no se absorbe en el cálculo: señala salidas sin confirmar o una diferencia que falta registrar con su corrección y documento, y se corrige donde nació. Regenerar el acta sobrescribe el PDF en la carpeta del mes.
               </p>
             </>
           )}
@@ -753,6 +818,14 @@ export function PanelInventarioLIP() {
             </p>
             <Input value={filtroProd} onChange={(e) => setFiltroProd(e.target.value)} placeholder="Buscar producto/código" className="h-9 w-64" />
           </div>
+          {kardexInfo && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+              <span><span className="text-muted-foreground">Saldo inicial =</span> <b>{kardexInfo.base ? kardexInfo.base.descripcion : "sin periodo (acumulado histórico)"}</b></span>
+              <span><span className="text-muted-foreground">Saldo =</span> inicial + entradas − salidas + ajustes − merma + reclasificaciones, transacción por transacción</span>
+              <span><span className="text-muted-foreground">Stock al cierre =</span> <b>{kardexInfo.cierre?.descripcion}</b></span>
+              <span><span className="text-muted-foreground">Sin soporte =</span> saldo − stock al cierre. Debe ser 0; si no, hay salidas sin confirmar o una diferencia que falta corregir con su soporte</span>
+            </div>
+          )}
           {loadingKardex ? (
             <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" style={{ color: SST_TOKENS.navy }} /></div>
           ) : kardex.length === 0 ? (
@@ -768,10 +841,12 @@ export function PanelInventarioLIP() {
                       <th className="px-3 py-2 text-right">Saldo inicial</th>
                       <th className="px-3 py-2 text-right">Entradas</th>
                       <th className="px-3 py-2 text-right">Salidas</th>
-                      <th className="px-3 py-2 text-right">Traslados</th>
+                      <th className="px-3 py-2 text-right" title="Reclasificaciones y traslados (309/311/312/343/344), neto: dentro del mismo producto suman 0">Reclasif. (neto)</th>
                       <th className="px-3 py-2 text-right">Ajustes</th>
                       <th className="px-3 py-2 text-right">Merma</th>
-                      <th className="px-3 py-2 text-right">Saldo actual</th>
+                      <th className="px-3 py-2 text-right">Saldo</th>
+                      <th className="px-3 py-2 text-right">Stock al cierre</th>
+                      <th className="px-3 py-2 text-right" title="Saldo por transacciones − stock al cierre. Debe ser 0: toda diferencia debe quedar soportada con su corrección">Sin soporte</th>
                       <th className="px-3 py-2"></th>
                     </tr>
                   </thead>
@@ -789,6 +864,10 @@ export function PanelInventarioLIP() {
                           <td className="px-3 py-1.5 text-right text-muted-foreground">{fmt(p.ajustes)}</td>
                           <td className="px-3 py-1.5 text-right" style={{ color: SST_TOKENS.warn }}>{fmt(p.merma)}</td>
                           <td className="px-3 py-1.5 text-right font-semibold">{fmt(p.saldo)}</td>
+                          <td className="px-3 py-1.5 text-right tabular-nums">{fmt(p.saldoCierre)}</td>
+                          <td className="px-3 py-1.5 text-right font-semibold tabular-nums" style={{ color: p.descuadre ? SST_TOKENS.bad : SST_TOKENS.ok }} title={p.descuadre ? "Diferencia sin soporte: salidas sin confirmar (picking pendiente) o corrección que falta registrar con su documento" : "Cuadra"}>
+                            {p.descuadre ? fmt(p.descuadre) : "✓"}
+                          </td>
                           <td className="px-3 py-1.5 text-right"><ZoomIn className="h-3.5 w-3.5 text-muted-foreground" /></td>
                         </tr>
                       ))}
@@ -806,6 +885,15 @@ export function PanelInventarioLIP() {
             <ClipboardList className="mr-1 inline h-3.5 w-3.5" />
             Control diario: <b>saldo inicial</b> (con que inicia el día) + <b>ingresos</b> (recepción/descargue/aprobación) − <b>salidas</b> (órdenes de cargue) = <b>saldo final</b>. {anio}{mes ? ` · mes ${mes}` : ""}
           </p>
+          {cuadreInfo?.base && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+              <span><span className="text-muted-foreground">Arranca en</span> <b>{fmt(cuadreInfo.base.saldo)}</b> <span className="text-muted-foreground">= {cuadreInfo.base.descripcion}</span></span>
+              {cuadreInfo.cierre && !Number.isNaN(cuadreInfo.cierre.saldo) && (
+                <span><span className="text-muted-foreground">Cierra en</span> <b>{fmt(cuadreInfo.cierre.saldo)}</b> <span className="text-muted-foreground">= {cuadreInfo.cierre.descripcion}</span>{cuadreInfo.saldoFinalCalculado !== undefined && cuadreInfo.saldoFinalCalculado !== cuadreInfo.cierre.saldo && (<span className="ml-1 font-semibold" style={{ color: SST_TOKENS.bad }}>· sin soporte {fmt(cuadreInfo.saldoFinalCalculado - cuadreInfo.cierre.saldo)}</span>)}</span>
+              )}
+              {cuadreInfo.cierre?.esVivo && <span className="text-muted-foreground">Cierre = {cuadreInfo.cierre.descripcion}</span>}
+            </div>
+          )}
           {loadingCD ? (
             <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" style={{ color: SST_TOKENS.navy }} /></div>
           ) : cuadreD.length === 0 ? (
@@ -890,6 +978,145 @@ export function PanelInventarioLIP() {
                 </div>
               </Card>
               <p className="text-[11px] text-muted-foreground">FIFO: el sistema sugiere despachar el lote más antiguo primero (orden por lote). Vida útil = <code>productos.vidautildias</code> (p. ej. harina ~15 días → carpar). Antigüedad estimada desde la fecha del lote (AAAAMMDD). ISO 9001 8.5.4 (preservación).</p>
+            </>
+          )}
+        </TabsContent>
+
+        {/* CONCILIACIÓN DEL DESPACHO. La orden de cargue es el documento con el que el cliente
+            autoriza: puede salir MENOS (una unidad dañada en el cargue) y debe verse, pero nunca
+            MÁS. Tolva no entra: es producción. */}
+        <TabsContent value="orden_salidas" className="space-y-3 pt-3">
+          {!selectedEmpresaId ? (
+            <Card className="p-8 text-center text-sm text-muted-foreground">Seleccione un cliente/sitio en el selector global para ver la conciliación.</Card>
+          ) : loadingOrdSal ? (
+            <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 animate-spin" style={{ color: SST_TOKENS.navy }} /></div>
+          ) : !ordSal ? (
+            <Card className="p-8 text-center text-sm text-muted-foreground">Sin datos. Si la pantalla sigue vacía, falta correr <code>scripts/sig/63_orden_vs_salidas.sql</code>.</Card>
+          ) : (
+            <>
+              <p className="text-[11px] text-muted-foreground">
+                Cruce por <b>orden de cargue + producto</b>: lo que la <b>orden autorizó</b> (<code>detalleoc</code>) vs lo que <b>salió del inventario</b> (<code>invtrans</code>, movimiento 601 aprobado). La orden es el documento con el que el cliente autoriza el cargue: <b>puede salir menos</b> y la diferencia debe explicarse (una unidad dañada en el cargue), pero <b>nunca más</b>. No entran Tolva (es producción), Descargue, Distribución ni proyección, ni el movimiento 702 (salida de material). Todo el histórico del proyecto.
+              </p>
+
+              {ordSal.resumen.criticas > 0 ? (
+                <Card className="flex items-center gap-3 border-l-4 p-3" style={{ borderLeftColor: "#C0392B" }}>
+                  <AlertTriangle className="h-5 w-5 shrink-0" style={{ color: "#C0392B" }} />
+                  <div className="text-sm">
+                    <b>{ordSal.resumen.criticas.toLocaleString("es-CO")}</b> {ordSal.resumen.criticas === 1 ? "caso" : "casos"} donde salió <b>más de lo que la orden autorizó</b> o salió un producto que <b>no estaba en la orden</b>: {ordSal.resumen.unidadesDeMas.toLocaleString("es-CO")} unidades. Eso no debe ocurrir.
+                  </div>
+                </Card>
+              ) : (
+                <Card className="flex items-center gap-3 border-l-4 p-3" style={{ borderLeftColor: "#1E8449" }}>
+                  <CheckCircle2 className="h-5 w-5 shrink-0" style={{ color: "#1E8449" }} />
+                  <div className="text-sm">Nunca se despachó por encima de la orden. {ordSal.resumen.cuadra.toLocaleString("es-CO")} de {ordSal.resumen.total.toLocaleString("es-CO")} combinaciones cuadran exactamente.</div>
+                </Card>
+              )}
+
+              {ordSal.resumen.salioMenos > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  <b>{ordSal.resumen.salioMenos}</b> {ordSal.resumen.salioMenos === 1 ? "línea salió" : "líneas salieron"} con menos de lo autorizado ({ordSal.resumen.unidadesDeMenos.toLocaleString("es-CO")} unidades). Es válido, y queda a la vista para explicarlo.
+                </p>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+                <KPI label="Cuadran" valor={ordSal.resumen.cuadra} Icon={CheckCircle2} color="#1E8449" />
+                <KPI label="Salió MÁS" valor={ordSal.resumen.salioMas} Icon={AlertTriangle} color="#C0392B" />
+                <KPI label="Fuera de la orden" valor={ordSal.resumen.fueraDeLaOrden} Icon={AlertTriangle} color="#C0392B" />
+                <KPI label="Salió menos" valor={ordSal.resumen.salioMenos} Icon={ArrowDownToLine} color="#E0A800" />
+                <KPI label="Autorizado" valor={(ordSal.resumen.totalAutorizado || 0).toLocaleString("es-CO")} Icon={ClipboardList} color="#0D3B6E" />
+                <KPI label="Despachado" valor={(ordSal.resumen.totalDespachado || 0).toLocaleString("es-CO")} Icon={ArrowDownToLine} color="#00B4CC" />
+              </div>
+
+              <div className="flex flex-wrap items-end gap-3">
+                <SigField label="Alerta">
+                  <select value={filtroAlertaOrden} onChange={(e) => setFiltroAlertaOrden(e.target.value)} className={sigControl}>
+                    <option value="DISC">Con diferencia</option>
+                    <option value="">Todas (incluye las que cuadran)</option>
+                    <option value="SALIO_MAS">Salió más</option>
+                    <option value="FUERA_DE_LA_ORDEN">Fuera de la orden</option>
+                    <option value="SALIO_MENOS">Salió menos</option>
+                    <option value="SIN_SALIDA">Sin salida aún</option>
+                    <option value="CUADRA">Solo las que cuadran</option>
+                  </select>
+                </SigField>
+                <SigField label="Orden de cargue">
+                  <Input value={filtroOrdenOC} onChange={(e) => setFiltroOrdenOC(e.target.value)} placeholder="Buscar ocargue…" className="h-9 w-48" />
+                </SigField>
+                {(filtroAlertaOrden !== "DISC" || filtroOrdenOC) && (
+                  <Button variant="outline" size="sm" onClick={() => { setFiltroAlertaOrden("DISC"); setFiltroOrdenOC("") }}>Limpiar</Button>
+                )}
+                <span className="ml-auto text-[11px] text-muted-foreground">{ordSal.resumen.total.toLocaleString("es-CO")} combinaciones (orden × producto)</span>
+              </div>
+
+              {(() => {
+                const q = filtroOrdenOC.trim().toLowerCase()
+                const criticos = new Set(["SALIO_MAS", "FUERA_DE_LA_ORDEN", "SALIO_MENOS"])
+                const vista = ordSal.filas.filter((f: any) => {
+                  if (q && !String(f.ocargue ?? "").toLowerCase().includes(q)) return false
+                  if (filtroAlertaOrden === "DISC") return criticos.has(f.estado_alerta)
+                  if (filtroAlertaOrden) return f.estado_alerta === filtroAlertaOrden
+                  return true
+                })
+                const ETIQUETA: Record<string, { texto: string; color: string }> = {
+                  SALIO_MAS: { texto: "Salió más", color: "#C0392B" },
+                  FUERA_DE_LA_ORDEN: { texto: "No estaba en la orden", color: "#C0392B" },
+                  SALIO_MENOS: { texto: "Salió menos", color: "#E0A800" },
+                  SIN_SALIDA: { texto: "Sin salida aún", color: "#0284c7" },
+                  CUADRA: { texto: "Cuadra", color: "#1E8449" },
+                }
+                if (vista.length === 0)
+                  return <Card className="p-8 text-center text-sm text-muted-foreground">Nada que mostrar con este filtro.</Card>
+                return (
+                  <Card className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 text-[11px] uppercase tracking-wide text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-semibold">Orden</th>
+                          <th className="px-3 py-2 text-left font-semibold">Producto</th>
+                          <th className="px-3 py-2 text-left font-semibold">Fecha · vehículo</th>
+                          <th className="px-3 py-2 text-right font-semibold">Autorizado</th>
+                          <th className="px-3 py-2 text-right font-semibold">Despachado</th>
+                          <th className="px-3 py-2 text-right font-semibold">Diferencia</th>
+                          <th className="px-3 py-2 text-left font-semibold">Estado</th>
+                          <th className="px-3 py-2 text-right font-semibold"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {vista.slice(0, 500).map((f: any, i: number) => {
+                          const et = ETIQUETA[f.estado_alerta] ?? { texto: f.estado_alerta, color: "#64748b" }
+                          const dif = Number(f.diferencia) || 0
+                          return (
+                            <tr key={`${f.ocargue}-${f.producto}-${i}`} className="border-t border-border/60">
+                              <td className="px-3 py-2 font-mono text-[12px]">{f.ocargue}</td>
+                              <td className="px-3 py-2">{f.producto}</td>
+                              <td className="px-3 py-2 text-[12px] text-muted-foreground">
+                                {f.fechacargue ? String(f.fechacargue).slice(0, 10) : f.fechaorden ? String(f.fechaorden).slice(0, 10) : "—"}
+                                {f.placa ? ` · ${f.placa}` : ""}
+                              </td>
+                              <td className="px-3 py-2 text-right">{(Number(f.autorizado) || 0).toLocaleString("es-CO")}</td>
+                              <td className="px-3 py-2 text-right">{(Number(f.despachado) || 0).toLocaleString("es-CO")}</td>
+                              <td className="px-3 py-2 text-right font-semibold" style={{ color: dif > 0 ? "#C0392B" : dif < 0 ? "#E0A800" : undefined }}>
+                                {dif > 0 ? "+" : ""}{dif.toLocaleString("es-CO")}
+                              </td>
+                              <td className="px-3 py-2">
+                                <span className="rounded px-2 py-0.5 text-[11px] font-semibold text-white" style={{ backgroundColor: et.color }}>{et.texto}</span>
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                <Button variant="outline" size="sm" className="h-7 gap-1 px-2 text-[11px]" onClick={() => setOrden360(f.ocargue)}>
+                                  <Truck className="h-3 w-3" /> Ciclo
+                                </Button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                    {vista.length > 500 && (
+                      <p className="px-3 py-2 text-[11px] text-muted-foreground">Se muestran las primeras 500 de {vista.length.toLocaleString("es-CO")}. Filtra por orden de cargue para ver el resto.</p>
+                    )}
+                  </Card>
+                )
+              })()}
             </>
           )}
         </TabsContent>
@@ -1018,9 +1245,16 @@ export function PanelInventarioLIP() {
                               <td className="px-2 py-1.5 text-center text-xs" style={{ color: f.empresa_distinta ? "#0369a1" : undefined, fontWeight: f.empresa_distinta ? 600 : undefined }}>{f.idempresa_salida ?? "—"}</td>
                               <td className="px-2 py-1.5">{badge(f.estado_alerta)}</td>
                               <td className="px-2 py-1.5 text-center">
-                                <Button variant="ghost" size="icon" className="h-7 w-7" title="Auditar orden (pedido detalle + invtrans)" onClick={() => abrirAuditoria(f)}>
-                                  <ZoomIn className="h-4 w-4" style={{ color: SST_TOKENS.navy }} />
-                                </Button>
+                                <span className="inline-flex items-center gap-0.5">
+                                  {/* Ciclo completo de la orden: qué pidió, qué lotes se asignaron
+                                      y qué se despachó. Es la vista que explica la diferencia. */}
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Ver el ciclo completo de esta orden (pidió · asignó · despachó)" onClick={() => setOrden360(String(f.ocargue))}>
+                                    <Truck className="h-4 w-4" style={{ color: SST_TOKENS.navy }} />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Auditar orden (pedido detalle + invtrans)" onClick={() => abrirAuditoria(f)}>
+                                    <ZoomIn className="h-4 w-4" style={{ color: SST_TOKENS.navy }} />
+                                  </Button>
+                                </span>
                               </td>
                             </tr>
                           ))}
@@ -1241,15 +1475,27 @@ export function PanelInventarioLIP() {
                   <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs">
                     <span className="text-muted-foreground">Empezó con</span>
                     <span className="font-semibold tabular-nums">
-                      {drill.saldoInicialPeriodo === undefined ? "— (sin cierre físico del mes anterior)" : fmt(drill.saldoInicialPeriodo)}
+                      {drill.saldoInicialPeriodo === undefined ? "— (sin periodo elegido)" : fmt(drill.saldoInicialPeriodo)}
                     </span>
-                    <span className="text-muted-foreground">→ va quedando con</span>
+                    <span className="text-muted-foreground">→ queda con</span>
                     <span className="font-semibold tabular-nums" style={{ color: SST_TOKENS.navy }}>
-                      {drill.saldoFinalPeriodo === undefined ? "— (sin cierre físico de este mes)" : fmt(drill.saldoFinalPeriodo)}
+                      {drill.saldoFinalPeriodo === undefined ? "—" : fmt(drill.saldoFinalPeriodo)}
                     </span>
+                    {drill.saldoCierre !== undefined && (
+                      <>
+                        <span className="text-muted-foreground">· stock al cierre</span>
+                        <span className="font-semibold tabular-nums">{fmt(drill.saldoCierre)}</span>
+                        {drill.descuadre ? (
+                          <span className="font-semibold" style={{ color: SST_TOKENS.bad }}>· sin soporte {fmt(drill.descuadre)}</span>
+                        ) : drill.descuadre === 0 ? (
+                          <span className="font-semibold" style={{ color: SST_TOKENS.ok }}>· cuadra</span>
+                        ) : null}
+                      </>
+                    )}
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Saldo corrido único del producto, de comienzo a fin — el lote y la ubicación de cada movimiento se ven en sus propias columnas (y en el soporte PDF), pero ya no cortan el hilo del saldo.
+                    {drill.baseDescripcion ? <>Base: <b>{drill.baseDescripcion}</b> · cierre: <b>{drill.cierreDescripcion}</b>. </> : null}
+                    Saldo corrido único del producto, transacción por transacción — el lote y la ubicación de cada movimiento se ven en sus propias columnas (y en el soporte PDF), pero no cortan el hilo del saldo.
                   </p>
                   <div className="max-h-[78vh] overflow-auto rounded-md border">
                     <table className="w-full min-w-[1000px] text-sm">
@@ -1505,6 +1751,50 @@ export function PanelInventarioLIP() {
               ))}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Ciclo completo de la orden, abierto desde una línea de la conciliación. */}
+      <Orden360Dialog ordendecargue={orden360} open={orden360 !== null} onOpenChange={(v) => !v && setOrden360(null)} />
+
+      {/* CUADRE MANUAL: exige la clave personal (proceso inv_cuadre_manual, SQL 224).
+          Gerencia 2026-10-04: "esta acción sí debería estar con clave, la mía, solo esa acción". */}
+      <Dialog open={!!pendienteCuadre} onOpenChange={(o) => { if (!o && !savingCuadre) { setPendienteCuadre(null); setClaveCuadre(""); setErrorClaveCuadre("") } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base">Autorizar cuadre manual</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <div className="rounded-md border border-atencion-bd bg-atencion-bg p-3 text-xs text-atencion-fg">
+              <p className="font-semibold">Vas a cambiar a mano {pendienteCuadre?.length ?? 0} línea(s) de pedido.</p>
+              <p className="mt-1">No modifica el inventario físico, pero sí el lado del pedido: con esto una diferencia de la conciliación puede desaparecer. Queda registrado quién lo autorizó.</p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="clave-cuadre">Tu clave personal</Label>
+                <AyudaClaveAutorizacion />
+              </div>
+              <Input
+                id="clave-cuadre"
+                type="password"
+                value={claveCuadre}
+                onChange={(e) => { setClaveCuadre(e.target.value); setErrorClaveCuadre("") }}
+                placeholder="Clave de autorización"
+                disabled={savingCuadre}
+                autoComplete="off"
+                className={errorClaveCuadre ? "border-red-500" : ""}
+              />
+              {errorClaveCuadre && <p className="text-xs text-critico-fg">{errorClaveCuadre}</p>}
+              <p className="text-xs text-muted-foreground">Solo autoriza la Gerencia General de LIPgo.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setPendienteCuadre(null); setClaveCuadre(""); setErrorClaveCuadre("") }} disabled={savingCuadre}>Cancelar</Button>
+            <Button onClick={confirmarCuadreConClave} disabled={!claveCuadre.trim() || savingCuadre}>
+              {savingCuadre ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Autorizar y guardar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

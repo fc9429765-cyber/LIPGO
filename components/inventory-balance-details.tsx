@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { useAuth } from "@/components/auth-provider"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -10,7 +9,8 @@ import { Button } from "@/components/ui/button"
 // interno con `overflow-x-auto` que rompe `position: sticky` del thead.
 // Ver comentario en el JSX abajo.
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Download, Search, Check, ChevronsUpDown } from "lucide-react"
+import { Boxes, Download, Search, Check, ChevronsUpDown } from "lucide-react"
+import { Cifra, EstadoVacio, Eyebrow } from "@/components/ui/lipgo"
 import { useToast } from "@/hooks/use-toast"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -162,21 +162,43 @@ export function InventoryBalanceDetails() {
     }
   }
 
+  const stockFinalTotal = balances.reduce((s, b) => s + (Number(b.stock_actual) || 0), 0)
+  const skusDistintos = new Set(balances.map((b) => b.idproducto)).size
+  const lotesVencidos = balances.filter((b) => (b.edad_dias ?? 0) > 180).length
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold text-foreground">Saldos de Inventario</h2>
-        <Button onClick={handleExportToExcel} disabled={exporting} className="gap-2">
+    <div className="space-y-4">
+      {/* Cabecera */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-acento-tinte text-acento">
+            <Boxes className="h-5 w-5" />
+          </span>
+          <div>
+            <Eyebrow>Almacenamiento</Eyebrow>
+            <h1 className="text-lg font-semibold leading-tight">Saldos de Inventario</h1>
+          </div>
+        </div>
+        <Button onClick={handleExportToExcel} disabled={exporting} variant="outline" className="gap-2">
           <Download className="h-4 w-4" />
           {exporting ? "Exportando..." : "Exportar a Excel"}
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Filtros</CardTitle>
-        </CardHeader>
-        <CardContent>
+      {/* Franja de cifras reales */}
+      {!loading && balances.length > 0 && (
+        <div className="lg-card grid grid-cols-2 gap-4 px-4 py-4 sm:grid-cols-3 sm:px-5">
+          <Cifra label="Líneas" valor={balances.length.toLocaleString("es-CO")} unidad="producto · lote · ubicación" tamano="compacta" />
+          <Cifra label="SKU distintos" valor={skusDistintos.toLocaleString("es-CO")} unidad="productos" tamano="compacta" />
+          <Cifra label="Stock final" valor={stockFinalTotal.toLocaleString("es-CO")} unidad={lotesVencidos > 0 ? `${lotesVencidos} lotes > 180 días` : "sin lotes viejos"} tono={lotesVencidos > 0 ? "atencion" : "ok"} tamano="compacta" className="col-span-2 sm:col-span-1" />
+        </div>
+      )}
+
+      <div className="lg-card">
+        <div className="border-b border-border px-4 py-3 sm:px-5">
+          <Eyebrow>Filtros</Eyebrow>
+        </div>
+        <div className="px-4 py-4 sm:px-5">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="space-y-2">
               <Label htmlFor="productFilter">Nombre del Producto</Label>
@@ -305,14 +327,14 @@ export function InventoryBalanceDetails() {
               </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Detalle de Inventario</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <div className="lg-card">
+        <div className="border-b border-border px-4 py-3 sm:px-5">
+          <Eyebrow>Detalle de inventario</Eyebrow>
+        </div>
+        <div className="px-4 py-4 sm:px-5">
           {/* CAUSA RAIZ del bug de sticky: el componente <Table> de shadcn
               envuelve internamente la <table> en un
               <div data-slot="table-container" class="relative w-full overflow-x-auto">.
@@ -325,8 +347,15 @@ export function InventoryBalanceDetails() {
               <TableHeader>, <TableHead>, <TableRow>, <TableBody>,
               <TableCell> porque son simples etiquetas semanticas con
               estilos shadcn (no introducen wrappers extra). */}
+          {!loading && balances.length === 0 ? (
+            <EstadoVacio
+              icono={<Boxes className="h-5 w-5" />}
+              titulo="Sin registros con este filtro"
+              texto="Ajusta o limpia los filtros para ver el saldo de inventario."
+            />
+          ) : (
           <div className="max-h-[600px] overflow-auto border rounded-lg relative">
-            <table className="w-full caption-bottom text-sm border-separate border-spacing-0">
+            <table className="lg-num w-full caption-bottom text-sm border-separate border-spacing-0">
               <TableHeader>
                 <TableRow>
                   <TableHead className="sticky top-0 z-20 bg-muted border-b whitespace-nowrap">ID Producto</TableHead>
@@ -349,14 +378,8 @@ export function InventoryBalanceDetails() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                      Cargando...
-                    </TableCell>
-                  </TableRow>
-                ) : balances.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                      No se encontraron registros
+                    <TableCell colSpan={11} className="animate-pulse text-center py-8 text-muted-foreground">
+                      Cargando…
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -364,11 +387,11 @@ export function InventoryBalanceDetails() {
                     <TableRow key={index}>
                       <TableCell>{balance.idproducto}</TableCell>
                       <TableCell>{balance.codproducto}</TableCell>
-                      <TableCell>{balance.nombreproducto}</TableCell>
+                      <TableCell className="font-medium">{balance.nombreproducto}</TableCell>
                       <TableCell>{balance.categoria}</TableCell>
                       <TableCell>{balance.subcategoria}</TableCell>
                       <TableCell>{balance.lote}</TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell className={cn("text-right", (balance.edad_dias ?? 0) > 180 && "font-semibold text-atencion-fg")}>
                         {balance.edad_dias == null ? (
                           <span className="text-muted-foreground">—</span>
                         ) : (
@@ -378,15 +401,16 @@ export function InventoryBalanceDetails() {
                       <TableCell>{balance.location}</TableCell>
                       <TableCell className="text-right font-medium">{balance.stock_disp.toLocaleString()}</TableCell>
                       <TableCell className="text-right font-medium">{balance.stock_res.toLocaleString()}</TableCell>
-                      <TableCell className="text-right font-medium">{balance.stock_actual.toLocaleString()}</TableCell>
+                      <TableCell className="text-right font-semibold">{balance.stock_actual.toLocaleString()}</TableCell>
                     </TableRow>
                   ))
                 )}
               </TableBody>
             </table>
           </div>
-        </CardContent>
-      </Card>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

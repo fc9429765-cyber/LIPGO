@@ -20,8 +20,9 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentUsuarioForInsert } from "@/lib/company-filter"
 import { getColombiaDateTime } from "@/lib/inventory-actions"
-import { autorizar } from "@/lib/autorizaciones-core"
+import { autorizar, usuarioTienePermiso } from "@/lib/autorizaciones-core"
 import { procesoInventarioEjecutar, procesoInventarioAprobar } from "@/lib/autorizaciones"
+import { getCurrentUser } from "@/lib/auth-actions"
 import {
   FIELDSETS,
   CODIGOS_REQUIEREN_APROBACION,
@@ -656,6 +657,74 @@ export async function getStockCuarentena(idempresa: number): Promise<{ success: 
     return { success: true, data, ubicacion: cuarentena }
   } catch (e: any) {
     return { success: false, data: [], ubicacion: null, message: e?.message || "Error al leer la cuarentena." }
+  }
+}
+
+/**
+ * ¿Qué códigos con aprobación (601/702/555) puede aprobar el usuario en sesión en
+ * este proyecto, con su clave personal? Sirve para que el formulario le ofrezca
+ * "Ejecutar ahora" en vez de solo "Enviar a Gerencia" (p. ej. el jefe de bodega
+ * de Avimol, que hace parte del trabajo de calidad, aprueba el 555 él mismo).
+ */
+export async function getCodigosQuePuedoAprobar(selectedEmpresaId: number): Promise<string[]> {
+  try {
+    const user = await getCurrentUser()
+    if (!user || !selectedEmpresaId) return []
+    const sb: any = await getSupabaseAdmin()
+    const out: string[] = []
+    for (const codigo of Array.from(CODIGOS_REQUIEREN_APROBACION)) {
+      const p = await usuarioTienePermiso(sb, user.id, procesoInventarioAprobar(codigo), Number(selectedEmpresaId))
+      if (p.permitido) out.push(codigo)
+    }
+    return out
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Solicita Y aprueba en un solo paso, con la clave del usuario en sesión, un
+ * ajuste 601/702/555. Mismo rastro que el flujo normal (queda en
+ * inv_ajustes_pendientes como aprobado, con quién lo pidió y quién lo aprobó),
+ * solo que sin esperar a otra persona. La clave se valida ANTES de crear nada.
+ */
+export async function ejecutarAjusteConMiClave(payload: EjecutarPayload, clave: string): Promise<{
+  success: boolean
+  message: string
+  invtransIds?: number[]
+}> {
+  try {
+    if (!CODIGOS_REQUIEREN_APROBACION.has(payload.codigo)) {
+      return { success: false, message: `El código ${payload.codigo} no pasa por aprobación -- usa "Ejecutar" directamente.` }
+    }
+    const empresaId = Number(payload.selectedEmpresaId)
+    if (!empresaId) return { success: false, message: "Selecciona un proyecto en el selector global." }
+    const auth = await autorizar({ proceso: procesoInventarioAprobar(payload.codigo), idempresa: empresaId, clave, referencia: `ejecutar ${payload.codigo} con mi clave` })
+    if (!auth.ok) return { success: false, message: auth.error || "Clave inválida." }
+
+    const solicitud = await solicitarAjustePendiente(payload)
+    if (!solicitud.success || !solicitud.id) return { success: false, message: solicitud.message }
+
+    const sb: any = await getSupabaseAdmin()
+    const resultado = await ejecutarTransaccionPorCodigo({ ...payload, __aprobado: true })
+    if (!resultado.success) {
+      // No dejar una solicitud colgada por un intento fallido (stock cambió, etc.).
+      await sb.from("inv_ajustes_pendientes").delete().eq("id", solicitud.id)
+      return { success: false, message: resultado.message }
+    }
+    await sb
+      .from("inv_ajustes_pendientes")
+      .update({
+        estado: "aprobado",
+        aprobado_por: auth.autorizadoPor,
+        aprobado_en: new Date().toISOString(),
+        invtrans_ids: resultado.invtransIds ?? null,
+        log_id: resultado.logId ?? null,
+      })
+      .eq("id", solicitud.id)
+    return { success: true, message: `Ejecutado y autorizado por ${auth.autorizadoPor}. ${resultado.message}`, invtransIds: resultado.invtransIds }
+  } catch (e: any) {
+    return { success: false, message: e?.message || "Error al ejecutar el ajuste." }
   }
 }
 

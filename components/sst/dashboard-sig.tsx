@@ -464,7 +464,7 @@ export function DashboardSIG({ selectedEmpresaId: propEmpresaId }: Props) {
                   {pctAvance}%
                 </span>
               </div>
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Avance real de la norma</p>
+              <p className="lg-eyebrow">Avance real de la norma</p>
               <Progress value={pctAvance} className="mt-1 h-2" />
               <p className="mt-1.5 text-xs text-muted-foreground">
                 {s.aprobados} verificados · {soloCargados} documentados (sin verificar) · {s.pendientes} sin evidencia · {s.total} aplican

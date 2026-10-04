@@ -620,4 +620,40 @@ export const APRENDIZAJE_CONFIGURACION: ContenidoAprendizaje[] = [
       "Prefiere Desactivar en lugar de Eliminar cuando un muelle se dane o se saque de operacion temporalmente: conservas su historial y evitas renumerar los demas muelles.",
     ],
   },
+  // Guías agregadas 2026-09-30 (reorg de navegación: el buscador global usa este texto).
+  {
+    modulo: "Autorizaciones por clave",
+    resumen: "Permisos por proceso y por puesto, autorizados con la clave personal de cada usuario. Exclusivo de LIPgo.",
+    proposito: "Gestión de Usuarios dice qué pantallas ve cada uno; aquí se define quién puede autorizar qué proceso (aprobar un 702, liberar una cuarentena, anular un pedido…) mediante perfiles por puesto con alcance por proyecto. La clave con la que se autoriza es personal: cada usuario la crea desde su menú y la recupera por correo.",
+    puedes: [
+      "Crear y editar perfiles (Gerencia de proyecto, Calidad, Cartera, Coordinador LIP…) y qué procesos autoriza cada uno.",
+      "Asignar perfiles y excepciones a usuarios, con alcance por proyecto.",
+      "Ver el estado de la clave de cada usuario y su correo de recuperación, y probar el envío de correo.",
+      "Revisar la bitácora: quién autorizó qué, cuándo y con qué resultado.",
+      "Fijar la fecha límite de las claves compartidas de transición."
+    ],
+    noPuedes: [
+      "Ver ni cambiar la clave de otra persona: es personal y va cifrada.",
+      "Dar procesos financieros a usuarios sin módulos financieros: lo financiero es de LIP.",
+      "Usarlo desde un ID: es exclusivo de LIPgo."
+    ],
+    funcionalidades: [
+      {
+        nombre: "Usuarios",
+        descripcion: "Por usuario: perfiles asignados, excepciones por proceso, estado de la clave y correo de recuperación. Filtra por el proyecto del selector global."
+      },
+      {
+        nombre: "Perfiles",
+        descripcion: "Matriz perfil por proceso: qué puede autorizar cada puesto."
+      },
+      {
+        nombre: "Bitácora",
+        descripcion: "Cada intento de autorización con usuario, proceso, proyecto, resultado y referencia."
+      },
+      {
+        nombre: "Correo de recuperación",
+        descripcion: "Las cuentas @lipgo.app no reciben correo; aquí se registra el correo real de cada persona para recuperar su clave."
+      }
+    ]
+  },
 ]

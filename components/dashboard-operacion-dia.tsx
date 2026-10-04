@@ -1133,7 +1133,7 @@ function CumplimientoToneladasCard({
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                <span className="text-lg font-extrabold tabular-nums leading-none text-slate-900">
+                <span className="text-lg font-bold tabular-nums leading-none text-slate-900">
                   {fmtPct(pctEjecutadoMetaRaw)}
                 </span>
                 <span className="text-[9px] font-medium text-slate-500 mt-0.5">
@@ -1177,7 +1177,7 @@ function CumplimientoToneladasCard({
                 </span>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-lg font-extrabold text-slate-900 tabular-nums leading-none">
+                <span className="text-lg font-bold text-slate-900 tabular-nums leading-none">
                   {meta.toFixed(1)}
                 </span>
                 <span className="text-[9px] font-medium text-slate-500">t</span>
@@ -1203,7 +1203,7 @@ function CumplimientoToneladasCard({
                 </span>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-lg font-extrabold text-slate-900 tabular-nums leading-none">
+                <span className="text-lg font-bold text-slate-900 tabular-nums leading-none">
                   {programado.toFixed(1)}
                 </span>
                 <span className="text-[9px] font-medium text-slate-500">t</span>
@@ -1243,7 +1243,7 @@ function CumplimientoToneladasCard({
                 </span>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-lg font-extrabold text-slate-900 tabular-nums leading-none">
+                <span className="text-lg font-bold text-slate-900 tabular-nums leading-none">
                   {ejecutado.toFixed(1)}
                 </span>
                 <span className="text-[9px] font-medium text-slate-500">t</span>
@@ -1397,7 +1397,7 @@ function ToneladasKpiCard({ stats }: { stats: DashboardOperacionesStats | null }
 
         {/* Hero compacto */}
         <div className="flex items-baseline gap-1">
-          <span className="text-xl font-extrabold tabular-nums leading-none text-slate-900">
+          <span className="text-xl font-bold tabular-nums leading-none text-slate-900">
             {totalDia.toFixed(1)}
           </span>
           <span className="text-[10px] text-slate-500 font-medium">
@@ -1440,7 +1440,7 @@ function ToneladasKpiCard({ stats }: { stats: DashboardOperacionesStats | null }
             <span className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">
               Programadas
             </span>
-            <span className="text-[11px] font-extrabold tabular-nums text-slate-700">
+            <span className="text-[11px] font-bold tabular-nums text-slate-700">
               {programadas.toFixed(1)}
               <span className="text-[9px] font-medium text-slate-500 ml-0.5">
                 t
@@ -1520,7 +1520,7 @@ function OrdenesKpiCard({ stats }: { stats: DashboardOperacionesStats | null }) 
 
         {/* Hero compacto */}
         <div className="flex items-baseline gap-1">
-          <span className="text-xl font-extrabold tabular-nums leading-none text-slate-900">
+          <span className="text-xl font-bold tabular-nums leading-none text-slate-900">
             {totalDia}
           </span>
           <span className="text-[10px] text-slate-500 font-medium">
@@ -1554,7 +1554,7 @@ function OrdenesKpiCard({ stats }: { stats: DashboardOperacionesStats | null }) 
                 title={s.label}
               >
                 <span
-                  className={`text-[12px] font-extrabold tabular-nums leading-none ${s.pillText}`}
+                  className={`text-[12px] font-bold tabular-nums leading-none ${s.pillText}`}
                 >
                   {s.value}
                 </span>
@@ -1620,7 +1620,7 @@ function PersonalKpiCard({ stats }: { stats: DashboardOperacionesStats | null })
 
         {/* Hero compacto */}
         <div className="flex items-baseline gap-1">
-          <span className="text-xl font-extrabold tabular-nums leading-none text-slate-900">
+          <span className="text-xl font-bold tabular-nums leading-none text-slate-900">
             {total}
           </span>
           <span className="text-[10px] text-slate-500 font-medium">
@@ -1697,7 +1697,7 @@ function VehiculosEnPatioPanel({
         </div>
 
         <div className="flex items-baseline gap-1.5">
-          <span className="text-2xl font-extrabold tabular-nums leading-none text-slate-900">
+          <span className="lg-num text-2xl font-bold leading-none text-slate-900">
             {total}
           </span>
           <span className="text-xs text-slate-500 font-medium">en cola de atención</span>
@@ -1780,7 +1780,7 @@ function ClientesEnProcesoPanel({
         </div>
 
         <div className="flex items-baseline gap-1.5">
-          <span className="text-2xl font-extrabold tabular-nums leading-none text-slate-900">
+          <span className="lg-num text-2xl font-bold leading-none text-slate-900">
             {total}
           </span>
           <span className="text-xs text-slate-500 font-medium">
@@ -1868,7 +1868,7 @@ function ProgramacionHoraPanel({
         </div>
 
         <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-extrabold tabular-nums leading-none text-slate-900">
+          <span className="lg-num text-2xl font-bold leading-none text-slate-900">
             {totalProgramadoTon.toFixed(1)}
           </span>
           <span className="text-xs text-slate-500 font-medium">t programadas</span>

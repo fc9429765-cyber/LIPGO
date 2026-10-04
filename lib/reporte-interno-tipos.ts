@@ -33,6 +33,14 @@ export interface DestinatarioInterno {
   activo: boolean
   /** Vacío = recibe todos los eventos activos. */
   soloEventos: EventoInterno[]
+  /**
+   * Empresas de las que recibe. Vacío = TODAS las del evento.
+   *
+   * Es lo contrario de lo que significa en la configuración del evento, donde
+   * vacío es ninguna: allá protege, aquí es el caso normal (gerencia recibe
+   * todo).
+   */
+  empresas: number[]
 }
 
 /**

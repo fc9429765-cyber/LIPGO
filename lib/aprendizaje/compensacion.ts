@@ -344,4 +344,56 @@ export const APRENDIZAJE_COMPENSACION: ContenidoAprendizaje[] = [
       "El conteo de dias habiles excluye domingos y festivos automaticamente: revisa el numero que muestra el dialogo antes de crear la solicitud.",
     ],
   },
+  // Guías agregadas 2026-09-30 (reorg de navegación: el buscador global usa este texto).
+  {
+    modulo: "Acumulados LIPgo",
+    resumen: "Genera el reporte de acumulados de nómina con el formato de Siigo, desde la propia data de LIPgo.",
+    proposito: "Desde septiembre de 2026 los acumulados salen de LIPgo, no de Siigo: este módulo construye el reporte con la data ya reconciliada, en las mismas columnas del export de Siigo, para que sea la única fuente hacia adelante.",
+    puedes: [
+      "Elegir periodo y planta y generar el reporte.",
+      "Revisar por persona y concepto y exportar."
+    ],
+    noPuedes: [
+      "Comparar contra Siigo: eso se hacía antes; ahora LIPgo es la fuente.",
+      "Editar valores: salen de la nómina ya liquidada."
+    ],
+    funcionalidades: [
+      {
+        nombre: "Generación",
+        descripcion: "Construye los acumulados por persona y concepto para el periodo elegido con los parámetros legales vigentes."
+      },
+      {
+        nombre: "Exportación",
+        descripcion: "Mismas columnas del export de Siigo, listo para entregar."
+      }
+    ]
+  },
+  {
+    modulo: "Asistencia Administrativa",
+    resumen: "Registrar o corregir asistencia y novedades de cualquier fecha, para operativos y administrativos.",
+    proposito: "Tapa huecos de captura: si alguien no quedó registrado o hay que corregir una fecha pasada, aquí se registra o corrige la asistencia y la novedad para cualquier día, incluidos meses ya cerrados. También lleva la asistencia diaria del personal administrativo, que no marca turnos en portería. Alimenta directo la nómina, por eso tiene permiso propio.",
+    puedes: [
+      "Registrar asistencia, horario y novedad para una persona y una fecha cualquiera.",
+      "Corregir registros existentes.",
+      "Llevar la asistencia del personal administrativo."
+    ],
+    noPuedes: [
+      "Programar turnos: eso es Programación de turnos.",
+      "Verlo sin permiso propio: puede tocar meses cerrados de nómina."
+    ],
+    funcionalidades: [
+      {
+        nombre: "Registro por fecha",
+        descripcion: "Persona, fecha, horario y novedad; se guarda en el mismo registro de asistencia que usa la nómina."
+      },
+      {
+        nombre: "Corrección",
+        descripcion: "Busca el registro existente y lo corrige; el cambio queda en la Bitácora de Auditoría."
+      },
+      {
+        nombre: "Administrativos",
+        descripcion: "Para el personal administrativo, 'Trabajado normal' se registra directo sin flujo de turnos."
+      }
+    ]
+  },
 ]

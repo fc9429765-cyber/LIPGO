@@ -1,56 +1,68 @@
 "use client"
 
+// Franja de Pedidos en el portal del área (Pedidos y solicitudes). Misma fuente y
+// mismas definiciones que la franja de Gestionar pedidos (getResumenCola): la
+// información es una sola. Cada cifra abre Gestionar en su vista.
+// Reemplaza la tira anterior (vencidos / vence hoy / por vencer / pendientes /
+// entregados), que usaba otra definición y no coincidía con la Cola.
+
 import { useEffect, useState } from "react"
 import { useAuth } from "@/components/auth-provider"
-import { KpiCard } from "@/components/orders/dashboard-pedidos/kpi-card"
-import { getPedidosKpis, type PedidosKpis } from "@/lib/pedidos-kpis-actions"
-import { AlertTriangle, CalendarClock, Clock, PackageOpen, PackageCheck } from "lucide-react"
+import { Cifra, Esqueleto } from "@/components/ui/lipgo"
+import { getResumenCola, type ResumenCola } from "@/lib/pedidos-cola-actions"
+import { NUM, abrirGestionar, fechaCorta } from "@/components/orders/gestionar/formato"
 
-const COP = (n: number) => "$" + (Number(n) || 0).toLocaleString("es-CO")
+type Datos = { hoy: string; manana: string; resumen: ResumenCola }
 
-function Skeleton() {
-  return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="h-[74px] animate-pulse rounded-xl border border-border/60 bg-muted/40" />
-      ))}
-    </div>
-  )
-}
-
-// Tira de KPIs de gestión del cliente para Pedidos: cumplimiento de entregas
-// (vencidos, por vencer), no solo conteos básicos. Misma definición del Dashboard.
 export function PedidosKpiStrip() {
   const { selectedEmpresaId } = useAuth()
-  const [k, setK] = useState<PedidosKpis | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [d, setD] = useState<Datos | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancel = false
-    setLoading(true)
-    getPedidosKpis(selectedEmpresaId)
-      .then((r) => { if (!cancel) setK(r) })
-      .catch(() => {})
-      .finally(() => { if (!cancel) setLoading(false) })
-    return () => { cancel = true }
+    setD(null)
+    setError(null)
+    if (!selectedEmpresaId) return
+    getResumenCola(selectedEmpresaId)
+      .then((r) => {
+        if (cancel) return
+        if (r.success) setD(r.data)
+        else setError(r.message)
+      })
+      .catch((e) => !cancel && setError(String(e?.message ?? e)))
+    return () => {
+      cancel = true
+    }
   }, [selectedEmpresaId])
 
-  if (loading && !k) return <Skeleton />
-  if (!k) return null
+  if (!selectedEmpresaId) return null
+  if (error) return <p className="text-xs text-atencion-fg">No se pudo leer la cola de pedidos: {error}</p>
+  if (!d) {
+    return (
+      <section className="lg-card grid grid-cols-2 gap-5 p-4 sm:grid-cols-3 lg:grid-cols-6" aria-busy>
+        {Array.from({ length: 6 }).map((_, i) => <Esqueleto key={i} lineas={2} />)}
+      </section>
+    )
+  }
+
+  const r = d.resumen
+  const items: { k: string; label: string; valor: number; tono: "ok" | "atencion" | "critico" | "info" | "neutro"; sub: string; abrir: () => void }[] = [
+    { k: "atrasados", label: "Atrasados", valor: r.atrasados, tono: r.atrasados > 0 ? "critico" : "ok", sub: r.atrasados > 0 ? `${NUM.format(r.atrasadosRecientes)} recientes · ${NUM.format(r.atrasadosViejos)} de más de 15 d` : "ninguno", abrir: () => abrirGestionar({ tab: "cola", filtro: "atrasados" }) },
+    { k: "hoy", label: "Para hoy", valor: r.hoy, tono: r.hoy > 0 ? "info" : "neutro", sub: r.hoy > 0 ? `${NUM.format(r.kgHoy)} kg` : "sin pedidos para hoy", abrir: () => abrirGestionar({ tab: "cola", filtro: "hoy" }) },
+    { k: "manana", label: "Para mañana", valor: r.manana, tono: "neutro", sub: r.manana > 0 ? `${NUM.format(r.kgManana)} kg · ${fechaCorta(d.manana)}` : `${fechaCorta(d.manana)} sin pedidos`, abrir: () => abrirGestionar({ tab: "manana" }) },
+    { k: "cargue", label: "En cargue / parcial", valor: r.enCargue + r.parciales, tono: r.parciales > 0 ? "atencion" : "neutro", sub: `${NUM.format(r.parciales)} parciales · ${NUM.format(r.enCargue)} en cargue`, abrir: () => abrirGestionar({ tab: "cola", filtro: "en_cargue" }) },
+    { k: "aprobar", label: "Por aprobar", valor: r.porAprobar, tono: "neutro", sub: `${NUM.format(r.porAprobarConCartera)} con cartera lista`, abrir: () => abrirGestionar({ tab: "cola", filtro: "por_aprobar" }) },
+    { k: "depurar", label: "Candidatos a depurar", valor: r.candidatosSinRastro + r.candidatosParciales, tono: r.candidatosSinRastro + r.candidatosParciales > 0 ? "atencion" : "ok", sub: `${NUM.format(r.candidatosSinRastro)} sin rastro · ${NUM.format(r.candidatosParciales)} parciales`, abrir: () => abrirGestionar({ tab: "depurar" }) },
+  ]
 
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-      <KpiCard
-        label="Pedidos vencidos"
-        value={String(k.vencidos)}
-        subtext={k.valorVencido > 0 ? `${COP(k.valorVencido)} sin entregar` : "entrega prometida ya pasó"}
-        icon={AlertTriangle}
-        variant="danger"
-      />
-      <KpiCard label="Vence hoy" value={String(k.venceHoy)} subtext="entregar hoy" icon={CalendarClock} variant="warning" />
-      <KpiCard label="Por vencer (7 días)" value={String(k.porVencer7)} subtext="promesa próxima" icon={Clock} variant="warning" />
-      <KpiCard label="Pendientes de entrega" value={String(k.pendientes)} subtext={`de ${k.total} pedidos`} icon={PackageOpen} variant="primary" />
-      <KpiCard label="Entregados" value={String(k.entregados)} subtext="con orden de cargue" icon={PackageCheck} variant="success" />
-    </div>
+    <section className="lg-card grid grid-cols-2 gap-y-4 p-4 sm:grid-cols-3 sm:gap-x-5 lg:grid-cols-6 lg:gap-y-0" aria-label="Cola logística del cliente">
+      {items.map((c, i) => (
+        <button key={c.k} type="button" onClick={c.abrir} title={`Abrir en Gestionar pedidos`} className={`rounded-lg text-left transition hover:ring-2 hover:ring-acento-tinte hover:ring-offset-2 ${i < 5 ? "lg:border-r lg:border-border lg:pr-4" : ""} ${i > 0 ? "lg:pl-4" : ""}`}>
+          <Cifra label={c.label} valor={NUM.format(c.valor)} tono={c.tono} sub={c.sub} tamano="compacta" />
+        </button>
+      ))}
+    </section>
   )
 }

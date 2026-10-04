@@ -22,6 +22,10 @@ export const KPI_DEFS: Record<string, KpiDef> = {
   desp_ordenes: { nombre: "Órdenes", fmt: "num" },
   desp_toneladas: { nombre: "Toneladas", fmt: "ton" },
   vehiculos_atendidos: { nombre: "Vehículos atendidos", fmt: "num" },
+  // Vehículos registrados en portería (citasvehiculos) que nadie cerró ni eliminó (estatus
+  // nulo): foto de hoy, sin período. Gerencia 2026-10-03: "45 sin procesar y no sucede
+  // nada; esto debe ser una alerta". Meta 0 → cualquier pendiente pinta en rojo y avisa.
+  veh_sin_procesar: { nombre: "Vehículos sin procesar", fmt: "num", meta: 0, higherBetter: false },
   lip_tiempo_cargue: { nombre: "Tiempo de cargue", fmt: "min", higherBetter: false },
   lip_evidencia: { nombre: "Evidencia de cargue", fmt: "pct", meta: 98, higherBetter: true },
   lip_facturacion: { nombre: "Facturación gestionada", fmt: "pct", meta: 98, higherBetter: true },
@@ -47,6 +51,13 @@ export const KPI_DEFS: Record<string, KpiDef> = {
   nc_cerradas: { nombre: "NC cerradas a tiempo", fmt: "pct", meta: 95, higherBetter: true },
   legal_cumplimiento: { nombre: "Cumplimiento legal", fmt: "pct", meta: 100, higherBetter: true },
   sig_implementacion: { nombre: "Implementación del SIG", fmt: "pct", meta: 100, higherBetter: true },
+  // Pedidos del cliente (BSC IND-PED-01..05, SQL 216). Fuente única de cálculo:
+  // lib/pedidos-indicadores.ts (la misma de Gestionar pedidos y del Dashboard).
+  ped_a_tiempo: { nombre: "Pedidos a tiempo", fmt: "pct", meta: 95, higherBetter: true },
+  ped_atrasados: { nombre: "Pedidos atrasados hoy", fmt: "num", meta: 0, higherBetter: false },
+  ped_completos: { nombre: "Entregas completas", fmt: "pct", meta: 98, higherBetter: true },
+  ped_pendientes: { nombre: "Pendientes del período", fmt: "num", higherBetter: false },
+  ped_mismo_dia: { nombre: "Pedidos del mismo día", fmt: "pct", higherBetter: false },
 }
 
 // Qué indicadores muestra cada grupo del menú (por su `key`). Curados a los MÁS
@@ -56,9 +67,10 @@ export const KPI_DEFS: Record<string, KpiDef> = {
 export const AREA_KPIS: Record<string, string[]> = {
   // Gerencia / vista integral: los resultados estratégicos de LIP.
   integral: ["sla_global", "sat_cliente", "desp_cumplimiento", "desp_meta_ton", "sgsst_0312"],
-  pedidos: ["desp_ordenes", "desp_toneladas", "desp_cumplimiento"],
+  // Pedidos del cliente: cumplimiento de la promesa, atraso de hoy, completitud y anticipación.
+  pedidos: ["ped_a_tiempo", "ped_atrasados", "ped_completos", "ped_mismo_dia"],
   // Operaciones (Cargue/Descargue): servicio, cumplimiento, calidad, volumen.
-  despachos: ["desp_cumplimiento", "sla_tiempos", "lip_evidencia", "desp_meta_ton", "sat_conductor"],
+  despachos: ["veh_sin_procesar", "desp_cumplimiento", "sla_tiempos", "lip_evidencia", "desp_meta_ton", "sat_conductor"],
   // Almacenamiento e Inventarios: exactitud world-class.
   inventarios: ["inv_eri", "inv_exactitud", "inv_rechazos"],
   produccion: ["desp_meta_ton", "desp_toneladas"],
@@ -83,17 +95,20 @@ export const SUBMODULO_KPIS: Record<string, string[]> = {
   "Generar Órdenes de Cargue": ["desp_ordenes", "desp_cumplimiento"],
   "Generar Órdenes de Descargue": ["desp_ordenes"],
   "Generar Orden de Distribución": ["desp_ordenes", "lip_facturacion"],
-  "Gestión de Ordenes": ["desp_cumplimiento", "sla_tiempos"],
+  "Gestión de Ordenes": ["veh_sin_procesar", "desp_cumplimiento", "sla_tiempos"],
+  "Dashboard Despachos/Recepción": ["veh_sin_procesar", "desp_cumplimiento", "sla_tiempos", "desp_meta_ton", "vehiculos_atendidos"],
   "Recepción de Traslado": ["inv_exactitud"],
-  "Registrar Vehículos": ["vehiculos_atendidos"],
-  "Ver Vehículos": ["vehiculos_atendidos"],
+  "Registrar Vehículos": ["veh_sin_procesar", "vehiculos_atendidos"],
+  "Ver Vehículos": ["veh_sin_procesar", "vehiculos_atendidos"],
   "Registro sanitario": ["vehiculos_atendidos"],
   "Ver historial de Inspección": ["vehiculos_atendidos"],
   Báscula: ["desp_toneladas"],
   "Historial Báscula": ["desp_toneladas"],
   // --- Pedidos ---
-  "Entrada de pedidos": ["desp_ordenes"],
-  "Gestionar pedidos": ["sla_global", "desp_ordenes"],
+  "Entrada de pedidos": ["ped_mismo_dia", "ped_a_tiempo"],
+  "Gestionar pedidos": ["ped_atrasados", "ped_a_tiempo", "ped_completos", "ped_pendientes"],
+  "Dashboard Pedidos": ["ped_a_tiempo", "ped_atrasados", "ped_completos", "ped_pendientes", "ped_mismo_dia"],
+  "Programación del cliente": ["ped_a_tiempo", "ped_atrasados"],
   "Gestión integral de pedidos": ["sla_global"],
   // --- Almacenamiento ---
   "Transacciones de Inventario": ["inv_exactitud"],
@@ -119,6 +134,9 @@ export const SUBMODULO_KPIS: Record<string, string[]> = {
   // "Tiempo de cargue" del día) — no repetir la tira genérica, para dejar
   // más espacio vertical al tablero de muelles.
   "Centro de Coordinación": [],
+  // Productividad de Auxiliares trae sus propios indicadores (por tipo de
+  // operación y por auxiliar); los del área saturaban la pantalla sin relación.
+  "Productividad de Auxiliares": [],
   "Ver Picking/Packing": ["lip_evidencia"],
   "Registro de QR estibas": ["inv_exactitud"],
   "Lectura de QR estibas": ["inv_exactitud"],
@@ -182,15 +200,24 @@ const KPI_ICON: Record<string, string> = {
   legal_cumplimiento: "shield", sgsst_0312: "shield", sst_ipevr_cumpl: "shield",
   desp_meta_ton: "package", desp_toneladas: "package", desp_ordenes: "package",
   inv_exactitud: "package", inv_eri: "package", inv_rechazos: "lock",
-  vehiculos_atendidos: "truck", lip_tiempo_cargue: "clock", lip_evidencia: "file",
+  vehiculos_atendidos: "truck", veh_sin_procesar: "car", lip_tiempo_cargue: "clock", lip_evidencia: "file",
   lip_facturacion: "receipt", gh_recobro: "receipt",
   gh_activos: "activity", gh_cobertura: "activity", sat_cliente: "activity", sat_conductor: "activity",
   gh_ausentismo: "alert", sst_at_count: "alert", sst_at_dias: "alert", sst_frecuencia: "alert",
   gh_formacion: "file",
+  ped_a_tiempo: "shield", ped_atrasados: "alert", ped_completos: "package", ped_pendientes: "clock", ped_mismo_dia: "clock",
 }
 
 export function kpiIcon(key: string): string {
   return KPI_ICON[key] || "activity"
+}
+
+/** Pantalla donde se actúa sobre un indicador: la primera que lo declara en SUBMODULO_KPIS,
+ *  o el portal del primer grupo que lo lista en AREA_KPIS. Para los enlaces de las alertas. */
+export function pantallaDeIndicador(key: string): { modulo: string | null; grupo: string | null } {
+  for (const [modulo, keys] of Object.entries(SUBMODULO_KPIS)) if (keys.includes(key)) return { modulo, grupo: null }
+  for (const [grupo, keys] of Object.entries(AREA_KPIS)) if (keys.includes(key)) return { modulo: null, grupo }
+  return { modulo: null, grupo: null }
 }
 
 // Indicadores a mostrar para un módulo/submódulo: el set del submódulo si existe,

@@ -731,7 +731,7 @@ export function GestionMontacargas() {
 function Dato({ l, v }: { l: string; v: string }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{l}</div>
+      <div className="lg-eyebrow">{l}</div>
       <div className="text-sm">{v}</div>
     </div>
   )

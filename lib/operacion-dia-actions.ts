@@ -20,12 +20,18 @@
 // ---------------------------------------------------------------------------
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
-import { getRevisionNominaProyecto } from "@/lib/revision-nomina-actions"
 import { getHorarioTolva } from "@/lib/horario-tolva-actions"
+import { getDespachoKpis, getVehiculosNoProcesados } from "@/lib/pedidos-kpis-actions"
+import { getControlToneladas } from "@/lib/control-toneladas-actions"
+import { codigosOrdenPorUnidad } from "@/lib/ordenes-por-unidad"
+import { getProgramacionResumenDia } from "@/lib/programacion-cliente-actions"
+import { sumarDias } from "@/lib/programacion-cliente-calculo"
+import { TON_MES_CARGUE_DESCARGUE, DIAS_OPERACION_MES } from "@/lib/meta-productividad-utils"
 import type {
   CoberturaTurno,
   ItemBandeja,
   OperacionDiaData,
+  OperacionHoy,
   RequisicionResumen,
 } from "@/lib/operacion-dia-tipos"
 
@@ -293,6 +299,8 @@ export async function getOperacionDia(
     // --- BANDEJA DEL DÍA ---------------------------------------------------
     const bandeja: ItemBandeja[] = []
     let novedadesAbiertas = 0
+    let turnosPorAprobar = 0
+    let ausentismosSinCompletar = 0
 
     // (a) Solicitudes de turnos y horas extra pendientes de aprobar.
     try {
@@ -302,6 +310,7 @@ export async function getOperacionDia(
         .eq("idempresa", empresaId)
         .eq("estado", "pendiente")
       const n = (data ?? []).length
+      turnosPorAprobar = n
       if (n > 0) {
         novedadesAbiertas += n
         bandeja.push({
@@ -339,6 +348,7 @@ export async function getOperacionDia(
         .eq("idempresa", empresaId)
         .eq("estado_registro", "BORRADOR")
       const n = (data ?? []).length
+      ausentismosSinCompletar = n
       if (n > 0) {
         novedadesAbiertas += n
         bandeja.push({
@@ -425,27 +435,138 @@ export async function getOperacionDia(
       console.error("[v0] getOperacionDia vacantes:", e?.message ?? e)
     }
 
-    // --- PAGO DE LA QUINCENA ----------------------------------------------
-    // Se reusa getRevisionNominaProyecto: es la MISMA cifra que revisa nómina,
-    // con el neteo de destajo y la exclusión del día de cierre ya aplicados.
-    // Recalcular por fuera daría un número distinto al que se paga.
-    let pago = { total: 0, personas: 0, disponible: false, mensaje: null as string | null }
+    // --- VEHÍCULOS Y TONELADAS DE HOY ---------------------------------------
+    // (Sustituye al pago de la quincena, 2026-09-30: el dinero de nómina no va
+    // en el panel operativo; vive en Compensación.) Mismas fuentes que ya usan
+    // Gestión de Órdenes, Vehículos por cerrar y Control de Toneladas.
+    const operacionHoy: OperacionHoy = {
+      ordenesHoy: 0,
+      finalizadas: 0,
+      sinCerrar: 0,
+      enPatio: 0,
+      toneladas: 0,
+      metaTonDia: Math.round(((TON_MES_CARGUE_DESCARGUE[empresaId] || 0) / DIAS_OPERACION_MES) * 10) / 10,
+      tiempoPromMin: null,
+      auxiliares: [],
+      porUnidad: { ordenes: 0, unidades: 0 },
+      programacion: { usa: false, tiene: false, programados: 0, llegaron: 0, cumplidos: 0, porcentaje: null, aTiempo: null, enviadaEn: null, enviadaPorUsuario: null },
+      vehiculosRegistrados: 0,
+      porTipoVehiculo: [],
+      porDespacho: [],
+      sinCerrarDetalle: { placas: [], masAntiguoMin: null },
+      disponible: false,
+      mensaje: null,
+    }
+    // --- PROGRAMACIÓN DEL CLIENTE (SQL 211): hoy, para el chip de la tarjeta;
+    // mañana, para el cierre del día. Nunca lanza (si falta la tabla, usa=false).
+    const [progHoy, progManana] = await Promise.all([getProgramacionResumenDia(empresaId, fecha), getProgramacionResumenDia(empresaId, sumarDias(fecha, 1))])
+    operacionHoy.programacion = progHoy
     try {
-      const r = await getRevisionNominaProyecto(empresaId, anio, mes, numero)
-      if (r.success && r.data) {
-        pago = {
-          total: Number(r.data.resumen?.totalLipgo) || 0,
-          personas: Number(r.data.resumen?.nConDatos) || 0,
-          disponible: true,
-          mensaje: null,
+      const [kpis, patio, ton, hoyRaw, citasHoy, abiertas] = await Promise.all([
+        getDespachoKpis(empresaId),
+        getVehiculosNoProcesados(empresaId),
+        getControlToneladas(empresaId, fecha, fecha),
+        sb.from("cabeceraoc").select("ordendecargue, pesovascula, pesoorden").eq("idempresa", empresaId).eq("fechacargue", fecha).not("fincargue", "is", null).limit(500),
+        // Vehículos registrados hoy en portería: por tipo y por tipo de despacho.
+        sb.from("citasvehiculos").select("id, tipovehiculo, tipodespacho").eq("idempresa", empresaId).gte("fechallegada", fecha).lte("fechallegada", `${fecha}T23:59:59`).order("id", { ascending: true }).limit(1000),
+        // Iniciados sin finalizar (de cualquier fecha), el más antiguo primero.
+        sb.from("cabeceraoc").select("placa, fechacargue, iniciocargue").eq("idempresa", empresaId).not("iniciocargue", "is", null).is("fincargue", null).order("fechacargue", { ascending: true }).order("iniciocargue", { ascending: true }).limit(50),
+      ])
+      // Vehículos de hoy por tipo (Mula, Sencillo…) y por despacho (cargue propio, tercero, cliente recoge).
+      const cuentaPor = (filas: any[], campo: string) => {
+        const m = new Map<string, number>()
+        for (const r of filas) {
+          const k = String(r?.[campo] ?? "").trim() || "Sin dato"
+          m.set(k, (m.get(k) ?? 0) + 1)
         }
-      } else {
-        pago.mensaje = r.message ?? "No se pudo calcular."
+        return [...m.entries()].map(([tipo, n]) => ({ tipo, n })).sort((a, b) => b.n - a.n || a.tipo.localeCompare(b.tipo))
       }
+      const citas: any[] = citasHoy?.data ?? []
+      operacionHoy.vehiculosRegistrados = citas.length
+      operacionHoy.porTipoVehiculo = cuentaPor(citas, "tipovehiculo")
+      operacionHoy.porDespacho = cuentaPor(citas, "tipodespacho")
+      const abiertasFilas: any[] = abiertas?.data ?? []
+      let masAntiguo: number | null = null
+      for (const o of abiertasFilas) {
+        const ts = Date.parse(`${String(o.fechacargue ?? "").slice(0, 10)}T${String(o.iniciocargue ?? "00:00:00").slice(0, 8)}-05:00`)
+        if (!Number.isFinite(ts)) continue
+        const min = Math.max(0, Math.round((Date.now() - ts) / 60000))
+        if (masAntiguo == null || min > masAntiguo) masAntiguo = min
+      }
+      operacionHoy.sinCerrarDetalle = { placas: abiertasFilas.map((o) => String(o.placa ?? "")).filter(Boolean).slice(0, 6), masAntiguoMin: masAntiguo }
+      // Huevos / Empaque MP de hoy: por unidad, aparte de las toneladas.
+      const hoyOrds: any[] = hoyRaw?.data ?? []
+      const setUnidad = await codigosOrdenPorUnidad(sb, hoyOrds.map((o) => o.ordendecargue))
+      for (const o of hoyOrds) {
+        if (!setUnidad.has(String(o.ordendecargue ?? "").trim())) continue
+        operacionHoy.porUnidad.ordenes++
+        operacionHoy.porUnidad.unidades += Number(o.pesovascula) || Number(o.pesoorden) || 0
+      }
+      operacionHoy.ordenesHoy = kpis.ordenesHoy
+      operacionHoy.finalizadas = kpis.finalizadasHoy
+      operacionHoy.sinCerrar = kpis.sinCerrar
+      operacionHoy.tiempoPromMin = kpis.operacionesMedidas > 0 ? kpis.tiempoPromOperacion : null
+      // Solo los que LLEGARON HOY y siguen sin procesar: el conteo total de
+      // "no procesados" arrastra citas viejas (38 en Avimol el 30-sep) y no es
+      // el patio de hoy.
+      operacionHoy.enPatio = patio.vehiculos.filter((v) => String(v.fechallegada ?? "").startsWith(fecha)).length
+      if (ton.success && ton.data) {
+        operacionHoy.toneladas = Math.round(ton.data.totalToneladas * 10) / 10
+        operacionHoy.auxiliares = ton.data.trabajadores
+          .map((t) => ({ persona: t.persona, ton: Math.round(t.tonAcumulada * 10) / 10 }))
+          .filter((t) => t.ton > 0)
+          .sort((a, b) => b.ton - a.ton)
+      } else if (ton.message) {
+        operacionHoy.mensaje = ton.message
+      }
+      operacionHoy.disponible = true
     } catch (e: any) {
-      // pagonomina es una VISTA que recalcula: puede tardar o expirar.
-      pago.mensaje = "El cálculo tardó más de lo normal. Ábrelo en Revisión de Nómina."
-      console.error("[v0] getOperacionDia pago:", e?.message ?? e)
+      operacionHoy.mensaje = e?.message || "No se pudo leer la operación de hoy."
+      console.error("[v0] getOperacionDia operacionHoy:", e?.message ?? e)
+    }
+
+    // --- BANDEJA: lo de vehículos también es "requiere atención" (2026-10-02) --
+    // Antes solo aparecía en las cifras y en el cierre; el coordinador debe
+    // verlo en la bandeja con placas y tiempo, para actuar desde ahí.
+    if (operacionHoy.disponible && operacionHoy.sinCerrar > 0) {
+      const det = operacionHoy.sinCerrarDetalle
+      const partes: string[] = []
+      if (det.masAntiguoMin != null) {
+        const m = det.masAntiguoMin
+        partes.push(`el más antiguo lleva ${m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min` : `${m} min`} en proceso`)
+      }
+      if (det.placas.length) partes.push(det.placas.join(", ") + (operacionHoy.sinCerrar > det.placas.length ? "…" : ""))
+      bandeja.push({
+        id: "vehiculos-sin-cerrar",
+        nivel: operacionHoy.sinCerrar >= 5 || (det.masAntiguoMin ?? 0) >= 180 ? "alto" : "medio",
+        titulo: `${operacionHoy.sinCerrar} vehículo${operacionHoy.sinCerrar === 1 ? "" : "s"} iniciado${operacionHoy.sinCerrar === 1 ? "" : "s"} sin finalizar`,
+        detalle: partes.join(" · ") || "Marca el fin de cargue en Centro de Coordinación",
+        moduloDestino: "Centro de Coordinación",
+        textoBoton: "Cerrar vehículos",
+      })
+    }
+    if (operacionHoy.disponible && operacionHoy.enPatio > 0) {
+      bandeja.push({
+        id: "vehiculos-en-patio",
+        nivel: operacionHoy.enPatio > 3 ? "medio" : "bajo",
+        titulo: `${operacionHoy.enPatio} vehículo${operacionHoy.enPatio === 1 ? "" : "s"} en patio sin procesar`,
+        detalle: "Llegaron hoy y siguen sin orden asignada",
+        moduloDestino: "Registrar Vehículos",
+        textoBoton: "Ver patio",
+      })
+    }
+
+    // --- CIERRE DEL DÍA: ¿ya se escribió la bitácora de hoy? ----------------
+    let bitacoraHoy = false
+    try {
+      const { count } = await sb
+        .from("bitacora")
+        .select("id", { count: "exact", head: true })
+        .eq("idempresa", empresaId)
+        .eq("fecha", fecha)
+      bitacoraHoy = (count || 0) > 0
+    } catch (e: any) {
+      console.error("[v0] getOperacionDia bitacora:", e?.message ?? e)
     }
 
     return {
@@ -466,7 +587,22 @@ export async function getOperacionDia(
           return orden[a.nivel] - orden[b.nivel]
         }),
         requisiciones,
-        pago,
+        operacionHoy,
+        cierre: {
+          vehiculosSinCerrar: operacionHoy.sinCerrar,
+          sinMarcar: totalHoy.sinMarcar,
+          turnosPorAprobar,
+          ausentismosSinCompletar,
+          bitacoraHoy,
+          programacionManana: {
+            usa: progManana.usa,
+            recibida: progManana.tiene,
+            aTiempo: progManana.aTiempo,
+            enviadaEn: progManana.enviadaEn,
+            enviadaPorUsuario: progManana.enviadaPorUsuario,
+            programados: progManana.programados,
+          },
+        },
         avisos,
       },
     }

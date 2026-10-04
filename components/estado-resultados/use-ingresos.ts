@@ -18,15 +18,13 @@
  *  - Cargos fijos: `cargos_fijos_generados` tipo='ingreso' → detalle por
  *    concepto. Tolerante a que la tabla aun no exista.
  *
- * IMPORTANTE - paginacion obligatoria: Supabase/PostgREST corta toda
- * respuesta en 1000 filas. `facturacion` supera las 7.000 filas por empresa
- * en un anio; sin `.range(...)` el ingreso se truncaba en silencio (68% del
- * 2026 quedaba oculto). Mismo patron de bloques de 1000 que use-costo-nomina.
+ * SEGURIDAD (2026-10-03): las filas ya NO se leen desde el navegador; las trae
+ * lib/finanzas-lectura-actions.ts (sesión + permiso de Estado de Resultados +
+ * service role, paginado en el servidor). La agregación sigue aquí, idéntica.
  */
 
 import useSWR from "swr"
-import { supabase } from "@/lib/supabase-client"
-import { aplicarOrdenEstable } from "@/lib/orden-paginacion"
+import { leerCargosFijosGenerados, leerFacturacionRango, leerFacturacionTurnosRango } from "@/lib/finanzas-lectura-actions"
 import { getConciliacionAvimol } from "@/lib/conciliacion-avimol-actions"
 import { getMapaPlacasDistribucion } from "@/lib/facturacion-control-actions"
 import { facturadoAOwner } from "@/lib/facturacion-billed-party"
@@ -73,47 +71,27 @@ interface UseIngresosArgs {
   hastaExclusivo: string
 }
 
-// Pagina en bloques de 1000 acumulando la suma de `columnaValor` y grupos
-// por `claveDe` (para el drill-down), sin queries extra.
+// Suma `columnaValor` y agrupa por `claveDe` (para el drill-down) sobre las
+// filas que trae el servidor.
 async function sumarYAgrupar(
-  aplicarFiltros: (q: any) => any,
-  tabla: string,
-  select: string,
+  leer: () => Promise<Array<Record<string, unknown>>>,
   columnaValor: string,
   claveDe: (r: Record<string, unknown>) => string,
   toneladasDe?: (r: Record<string, unknown>) => number,
 ): Promise<{ suma: number; filas: number; detalle: DetalleIngreso[] }> {
-  const PAGE_SIZE = 1000
-  const MAX_ROWS = 200_000 // tope defensivo; cubre varios anios de 4 proyectos
+  const rows = await leer()
   let suma = 0
-  let filas = 0
-  let offset = 0
   const grupos = new Map<string, { valor: number; registros: number; toneladas: number }>()
-
-  while (offset < MAX_ROWS) {
-    // Orden único y estable para paginar (ver lib/orden-paginacion.ts).
-    const { data: page, error } = await aplicarOrdenEstable(aplicarFiltros(supabase.from(tabla).select(select)), tabla).range(
-      offset,
-      offset + PAGE_SIZE - 1,
-    )
-    if (error) throw new Error(`Error al leer ${tabla}: ${error.message}`)
-    if (!page || page.length === 0) break
-
-    for (const r of page as Array<Record<string, unknown>>) {
-      const v = Number(r[columnaValor]) || 0
-      suma += v
-      const k = claveDe(r)
-      const g = grupos.get(k) ?? { valor: 0, registros: 0, toneladas: 0 }
-      g.valor += v
-      g.registros += 1
-      if (toneladasDe) g.toneladas += toneladasDe(r)
-      grupos.set(k, g)
-    }
-    filas += page.length
-    if (page.length < PAGE_SIZE) break
-    offset += PAGE_SIZE
+  for (const r of rows) {
+    const v = Number(r[columnaValor]) || 0
+    suma += v
+    const k = claveDe(r)
+    const g = grupos.get(k) ?? { valor: 0, registros: 0, toneladas: 0 }
+    g.valor += v
+    g.registros += 1
+    if (toneladasDe) g.toneladas += toneladasDe(r)
+    grupos.set(k, g)
   }
-
   const detalle: DetalleIngreso[] = Array.from(grupos.entries())
     .map(([nombre, g]) => ({
       nombre,
@@ -122,93 +100,55 @@ async function sumarYAgrupar(
       ...(toneladasDe ? { toneladas: g.toneladas } : {}),
     }))
     .sort((a, b) => b.valor - a.valor)
-
-  return { suma, filas, detalle }
+  return { suma, filas: rows.length, detalle }
 }
 
-// Toneladas: variante de sumarYAgrupar que aplica la regla de "a quién se
-// factura" de Avimol (id2, confirmada por gerencia 2026-08-02) — Cargue/
-// Descargue/Distribución con transporte Zamudio/Terceros se factura a esa
-// transportadora, no a Avimol; con placa propia (transporte Avimol) va
-// cubierto por el fijo de 600 ton/mes (Cargos Fijos), valor=0 aquí para no
-// duplicar. Mismo criterio que getControlFacturacion (Cuadro de Control,
-// la fuente canónica) — ver lib/facturacion-billed-party.ts. Para los demás
-// proyectos (idempresa !== 2) no cambia nada.
+// Toneladas: aplica la regla de "a quién se factura" de Avimol (id2, confirmada
+// por gerencia 2026-08-02) — Cargue/Descargue/Distribución con transporte
+// Zamudio/Terceros se factura a esa transportadora, no a Avimol; con placa
+// propia (transporte Avimol) va cubierto por el fijo de 600 ton/mes (Cargos
+// Fijos), valor=0 aquí para no duplicar. Mismo criterio que getControlFacturacion
+// (Cuadro de Control, la fuente canónica) — ver lib/facturacion-billed-party.ts.
+// Para los demás proyectos (idempresa !== 2) no cambia nada.
 async function sumarYAgruparToneladas(
   ids: number[],
   desde: string,
   hastaExclusivo: string,
 ): Promise<{ suma: number; filas: number; detalle: DetalleIngreso[] }> {
-  const PAGE_SIZE = 1000
-  const MAX_ROWS = 200_000
-  let suma = 0
-  let filas = 0
-  let offset = 0
-  const grupos = new Map<string, { valor: number; registros: number; toneladas: number }>()
-
   // `facturadoAOwner` (vía `esPlacaDistribucion`) lee un caché en memoria que
   // este código -- corriendo en el navegador -- no puede calentar directo
   // (esa función usa el cliente admin de Supabase). Se trae el mapa real por
   // un Server Action serializable y se hidrata el caché antes de usarlo, o
   // esPlacaDistribucion caería siempre al DEFAULT hardcodeado del código.
-  hidratarCachePlacas(await getMapaPlacasDistribucion())
+  const [mapa, rows] = await Promise.all([getMapaPlacasDistribucion(), leerFacturacionRango(ids, desde, hastaExclusivo)])
+  hidratarCachePlacas(mapa)
 
-  while (offset < MAX_ROWS) {
-    const { data: page, error } = await supabase
-      .from("facturacion")
-      .select("valor_a_facturar, tipooperacion, owner, toneladas, transporte, idempresa, placa, subcategoria")
-      .in("idempresa", ids)
-      .gte("fechacargue", desde)
-      .lt("fechacargue", hastaExclusivo)
-      .range(offset, offset + PAGE_SIZE - 1)
-    if (error) throw new Error(`Error al leer facturacion: ${error.message}`)
-    if (!page || page.length === 0) break
-
-    for (const r of page as Array<Record<string, unknown>>) {
-      const fa = facturadoAOwner(
-        Number(r.idempresa),
-        String(r.owner ?? "SIN OWNER").trim(),
-        String(r.tipooperacion ?? ""),
-        (r.transporte as string | null) ?? null,
-        (r.subcategoria as string | null) ?? null,
-        (r.placa as string | null) ?? null,
-      )
-      const v = fa.cubiertoPorFijo ? 0 : Number(r.valor_a_facturar) || 0
-      suma += v
-      const k = `${String(r.tipooperacion ?? "(sin operación)").trim()} · ${fa.owner}`
-      const g = grupos.get(k) ?? { valor: 0, registros: 0, toneladas: 0 }
-      g.valor += v
-      g.registros += 1
-      g.toneladas += Number(r.toneladas) || 0
-      grupos.set(k, g)
-    }
-    filas += page.length
-    if (page.length < PAGE_SIZE) break
-    offset += PAGE_SIZE
+  let suma = 0
+  const grupos = new Map<string, { valor: number; registros: number; toneladas: number }>()
+  for (const r of rows as Array<Record<string, unknown>>) {
+    const fa = facturadoAOwner(
+      Number(r.idempresa),
+      String(r.owner ?? "SIN OWNER").trim(),
+      String(r.tipooperacion ?? ""),
+      (r.transporte as string | null) ?? null,
+      (r.subcategoria as string | null) ?? null,
+      (r.placa as string | null) ?? null,
+    )
+    const v = fa.cubiertoPorFijo ? 0 : Number(r.valor_a_facturar) || 0
+    suma += v
+    const k = `${String(r.tipooperacion ?? "(sin operación)").trim()} · ${fa.owner}`
+    const g = grupos.get(k) ?? { valor: 0, registros: 0, toneladas: 0 }
+    g.valor += v
+    g.registros += 1
+    g.toneladas += Number(r.toneladas) || 0
+    grupos.set(k, g)
   }
 
   const detalle: DetalleIngreso[] = Array.from(grupos.entries())
     .map(([nombre, g]) => ({ nombre, valor: g.valor, registros: g.registros, toneladas: g.toneladas }))
     .sort((a, b) => b.valor - a.valor)
 
-  return { suma, filas, detalle }
-}
-
-// Igual, pero TOLERANTE a que la tabla aun no exista (cargos fijos: depende
-// de migraciones nuevas). Sin esto, el P&L entero se caeria hasta correrlas.
-async function sumarYAgruparTolerante(
-  aplicarFiltros: (q: any) => any,
-  tabla: string,
-  select: string,
-  columnaValor: string,
-  claveDe: (r: Record<string, unknown>) => string,
-): Promise<{ suma: number; filas: number; detalle: DetalleIngreso[] }> {
-  try {
-    return await sumarYAgrupar(aplicarFiltros, tabla, select, columnaValor, claveDe)
-  } catch (e) {
-    console.warn(`[estado-resultados] ${tabla} no disponible todavia (¿faltan migraciones?):`, e)
-    return { suma: 0, filas: 0, detalle: [] }
-  }
+  return { suma, filas: rows.length, detalle }
 }
 
 async function fetchIngresos(
@@ -232,9 +172,7 @@ async function fetchIngresos(
   const turnosPromise =
     idsVista.length > 0
       ? sumarYAgrupar(
-          (q) => q.in("idempresa", idsVista).gte("fecha", desde).lte("fecha", hasta),
-          "facturacionturnos",
-          "facturacion_total, puesto",
+          () => leerFacturacionTurnosRango(idsVista, desde, hasta),
           "facturacion_total",
           (r) => String(r.puesto ?? "(sin puesto)").trim(),
         )
@@ -250,11 +188,10 @@ async function fetchIngresos(
   const servAdPromise = idIndupanServAd ? calcularServiciosAdicionalesIndupan(desde, hasta) : Promise.resolve(null)
 
   // Cargos fijos reconocidos ($2M id1/id3, 600 ton fijas id2, alquiler de
-  // montacargas facturado). `periodo` = primer dia del mes.
-  const fijosPromise = sumarYAgruparTolerante(
-    (q) => q.in("idempresa", ids).eq("tipo", "ingreso").gte("periodo", desde).lte("periodo", hasta),
-    "cargos_fijos_generados",
-    "valor, concepto",
+  // montacargas facturado). `periodo` = primer dia del mes. La acción es
+  // tolerante a que la tabla aun no exista (devuelve vacío).
+  const fijosPromise = sumarYAgrupar(
+    () => leerCargosFijosGenerados(ids, "ingreso", desde, hasta),
     "valor",
     (r) => String(r.concepto ?? "(sin concepto)").trim(),
   )

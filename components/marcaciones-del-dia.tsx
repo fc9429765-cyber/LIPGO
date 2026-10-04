@@ -27,8 +27,8 @@ function Tarjeta({
   color?: string
 }) {
   return (
-    <div className="flex-1 rounded-xl border border-border bg-card p-3">
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{titulo}</p>
+    <div className="flex-1 lg-card p-3">
+      <p className="lg-eyebrow">{titulo}</p>
       <p className="mt-1 text-3xl font-semibold tabular-nums" style={color ? { color } : undefined}>
         {valor}
       </p>
@@ -167,7 +167,7 @@ export function MarcacionesDelDia() {
       </div>
 
       {/* El detalle */}
-      <section className="rounded-xl border border-border bg-card">
+      <section className="lg-card">
         <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
           <h3 className="text-sm font-semibold">Marcaciones de hoy</h3>
           {enVivo && (
@@ -191,7 +191,7 @@ export function MarcacionesDelDia() {
       </section>
 
       {/* Lo que el sistema hace solo con estas diferencias */}
-      <section className="rounded-xl border border-border bg-card p-4">
+      <section className="lg-card p-4">
         <h3 className="text-sm font-semibold">Qué pasa con estas diferencias</h3>
         <ul className="mt-2 space-y-1.5 text-xs">
           {r.tarde > 0 && (

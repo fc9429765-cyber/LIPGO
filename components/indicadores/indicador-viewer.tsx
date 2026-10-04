@@ -190,7 +190,7 @@ export function IndicadorViewer({ datos, onClose }: { datos: IndicadorDatos; onC
               Ficha PDF
             </button>
           </div>
-          <h2 className="mt-1.5 text-[26px] font-extrabold leading-tight tracking-tight text-white" style={{ textWrap: "balance" } as any}>
+          <h2 className="mt-1.5 text-[26px] font-bold leading-tight tracking-tight text-white" style={{ textWrap: "balance" } as any}>
             {ficha.nombre}
           </h2>
 
@@ -219,7 +219,7 @@ export function IndicadorViewer({ datos, onClose }: { datos: IndicadorDatos; onC
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-[34px] font-extrabold leading-none tabular-nums tracking-tight" style={{ color: accent }}>
+                <span className="text-[34px] font-bold leading-none tabular-nums tracking-tight" style={{ color: accent }}>
                   {actual ?? "—"}
                 </span>
                 <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-sky-300/60">{ficha.unidad || ""}</span>

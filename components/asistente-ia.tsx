@@ -370,7 +370,7 @@ function EmptyState({ onSuggest }: { onSuggest: (text: string) => void }) {
             type="button"
             onClick={() => onSuggest(s)}
             className={cn(
-              "rounded-xl border border-border bg-card px-4 py-3 text-left text-sm text-foreground/90",
+              "lg-card px-4 py-3 text-left text-sm text-foreground/90",
               "transition-colors hover:bg-muted hover:border-border/80",
             )}
           >

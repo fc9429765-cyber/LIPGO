@@ -45,8 +45,8 @@ function Tarjeta({
   color?: string
 }) {
   return (
-    <div className="flex-1 rounded-xl border border-border bg-card p-4">
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{titulo}</p>
+    <div className="flex-1 lg-card p-4">
+      <p className="lg-eyebrow">{titulo}</p>
       <p className="mt-1 text-3xl font-semibold tabular-nums" style={color ? { color } : undefined}>
         {valor}
       </p>
@@ -84,7 +84,7 @@ export function IndicadoresAusentismo() {
   return (
     <div className="space-y-4">
       {/* Rango */}
-      <div className="flex flex-wrap items-end gap-2 rounded-xl border border-border bg-card p-3">
+      <div className="flex flex-wrap items-end gap-2 lg-card p-3">
         <div>
           <Label className="text-xs">Desde</Label>
           <Input
@@ -177,7 +177,7 @@ export function IndicadoresAusentismo() {
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* Causas */}
-            <section className="rounded-xl border border-border bg-card">
+            <section className="lg-card">
               <div className="border-b border-border px-4 py-3">
                 <h3 className="text-sm font-semibold">Días perdidos por causa</h3>
               </div>
@@ -212,7 +212,7 @@ export function IndicadoresAusentismo() {
             </section>
 
             {/* Reincidencia */}
-            <section className="rounded-xl border border-border bg-card">
+            <section className="lg-card">
               <div className="border-b border-border px-4 py-3">
                 <h3 className="text-sm font-semibold">Reincidencia por colaborador</h3>
                 <p className="text-[11px] text-muted-foreground">
@@ -227,7 +227,7 @@ export function IndicadoresAusentismo() {
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse text-sm">
                     <thead>
-                      <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
+                      <tr className="border-b border-border lg-eyebrow">
                         <th className="px-4 py-2 text-left font-medium">Colaborador</th>
                         <th className="px-2 py-2 text-right font-medium">Eventos</th>
                         <th className="px-2 py-2 text-right font-medium">Días</th>

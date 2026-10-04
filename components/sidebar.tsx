@@ -21,8 +21,11 @@ import {
 } from "lucide-react"
 import Image from "next/image"
 import type { GroupKey, Module, Subgroup } from "@/lib/dashboard-data"
+import { getUserModulesCached } from "@/lib/user-modules-client-cache"
 import { groups } from "@/lib/dashboard-data"
+import { colorDeEntrada, hubDe, plegarEnHubs, type EntradaMenu } from "@/lib/navegacion"
 import { useState, useEffect, useMemo, type CSSProperties } from "react"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 
 interface SidebarProps {
   selectedGroup: GroupKey | null
@@ -86,8 +89,7 @@ function HeroActor({ groupKey }: { groupKey: GroupKey | null }) {
           <circle cx="15.6" cy="14.6" r="1.5" className="hero-accent" fill="currentColor" />
         </g>
       )
-    case "mrp": // MRP / Planeación → engranaje
-    case "produccion": // Producción → engranaje girando
+    case "produccion": // Producción (incluye Materiales · MRP) → engranaje girando
       return (
         <g className="lipgo-gear">
           <g className="hero-lightstroke" strokeWidth="2.3" strokeLinecap="round">
@@ -171,6 +173,11 @@ export function Sidebar({
   const [expandedSubgroups, setExpandedSubgroups] = useState<Set<string>>(new Set())
   // Texto del buscador de modulos del menu lateral.
   const [moduleSearch, setModuleSearch] = useState("")
+  // Cajón móvil (Fase 3): se cierra solo al navegar.
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  useEffect(() => {
+    setDrawerOpen(false)
+  }, [selectedGroup, selectedModule])
 
   // Permisos del usuario para filtrar el menu. Se cargan una sola vez al
   // montar el sidebar y se mantienen en memoria. Hasta que se reciba la
@@ -191,13 +198,7 @@ export function Sidebar({
         // respuesta cacheada y un permiso recién otorgado NO aparece en el
         // menú hasta un refresco fuerte. Mismo criterio que ya usan
         // useAsistenciaAlerts / useOperacionesDiaAlerts contra este endpoint.
-        const res = await fetch("/api/user-modules", { method: "GET", cache: "no-store" })
-        if (!res.ok) {
-          console.error("[v0] Sidebar: failed to fetch user-modules:", res.status)
-          if (!cancelled) setPermissionsLoaded(true)
-          return
-        }
-        const data = (await res.json()) as UserModulesResponse
+        const data = await getUserModulesCached()
         if (cancelled) return
         setProtectedModules(new Set(data.protectedModules))
         setAllowedModules(new Set(data.allowedModules))
@@ -330,10 +331,9 @@ export function Sidebar({
   const allMenuItems = [
     { key: null, label: "Inicio", icon: Home },
     { key: "integral" as GroupKey, label: "Torre de Control", icon: LayoutDashboard },
-    { key: "pedidos" as GroupKey, label: "Pedidos", icon: FileText },
+    { key: "pedidos" as GroupKey, label: "Pedidos y solicitudes", icon: FileText },
     { key: "despachos" as GroupKey, label: "Recepción y Despacho", icon: Truck },
     { key: "inventarios" as GroupKey, label: "Almacenamiento", icon: Package },
-    { key: "mrp" as GroupKey, label: "MRP · Materiales", icon: Layers },
     { key: "produccion" as GroupKey, label: "Producción", icon: Package },
     { key: "lip" as GroupKey, label: "Operación LIP", icon: Users },
     { key: "financiera" as GroupKey, label: "Gestión Financiera", icon: Wallet },
@@ -360,7 +360,6 @@ export function Sidebar({
     pedidos: "#8ea6f0",
     despachos: "#5fc8e6",
     inventarios: "#3fd7cf",
-    mrp: "#e0b45c",
     produccion: "#e79a5c",
     lip: "#b199ee",
     financiera: "#5fd398",
@@ -391,10 +390,13 @@ export function Sidebar({
     for (const g of visibleGroups) {
       const groupLabel = (groupLabelByKey.get(g.key) as string) ?? g.title
       const pushModule = (m: Module, subgroupTitle?: string) => {
+        // Si el módulo es una pestaña de un hub, el subtítulo muestra el hub
+        // (así el usuario ve en qué pantalla queda).
+        const hub = hubDe(g.key, m.name)
         result.push({
           groupKey: g.key,
           groupLabel,
-          subgroupTitle,
+          subgroupTitle: hub ? hub.title : subgroupTitle,
           name: m.name,
           label: m.label ?? m.name,
           icon: m.icon,
@@ -427,149 +429,64 @@ export function Sidebar({
     setModuleSearch("")
   }
 
-  return (
-    <>
-      {/* Rediseño "Torre de Control" (2026-07-03): re-skin OSCURO premium del
-          sidebar redefiniendo las variables de tema SOLO dentro de .lipgo-sb
-          (no cambia el resto de la app), + hero animado de logística. No toca
-          permisos ni rutas. */}
-      <style>{`
-        .lipgo-sb{
-          --card:#0b2138; --card-foreground:#ffffff; --foreground:#ffffff;
-          --background:#0e2b46; --muted-foreground:#d6e6f5;
-          --accent:#1c4a72; --accent-foreground:#ffffff;
-          --border:#1b3350; --input:#1b3350; --primary:#00c2dc; --ring:#00c2dc;
-          background-image:linear-gradient(180deg,#0b2138,#071a30);
-        }
-        /* Letras del menú en BLANCO con alto contraste (peticion de diseño). */
-        .lipgo-sb nav button span{ color:#ffffff; }
-        .lipgo-sb nav button{ color:#eaf4ff; }
-        .lipgo-sb .bg-primary{ box-shadow:0 0 12px rgba(0,194,220,.65); }
-        .lipgo-hero-bg{ background:
-          radial-gradient(120% 90% at 82% 0%, color-mix(in srgb, var(--hero,#00c2dc) 34%, transparent), transparent 58%),
-          radial-gradient(95% 85% at 0% 100%, rgba(28,86,150,.42), transparent 55%);
-          transition: background .5s ease; }
-        .lipgo-tag{ font:600 10px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.14em; text-transform:uppercase; color:#7fe6f4; display:flex; align-items:center; gap:6px; }
-        .lipgo-live{ width:6px; height:6px; border-radius:50%; background:#37f5a0; box-shadow:0 0 8px #37f5a0; }
-        .lipgo-logo-mark{ width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,#0a3f6e,#00c2dc); display:flex; align-items:center; justify-content:center; font:800 15px/1 sans-serif; color:#fff; box-shadow:0 0 14px rgba(0,194,220,.5); }
-        .lipgo-word{ font:800 19px/1 sans-serif; letter-spacing:-.02em; color:#fff; }
-        .lipgo-tile{ display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:8px; background:#123650; border:1px solid #22456a; flex:none; }
-        .lipgo-route{ stroke: color-mix(in srgb, var(--hero,#82c8eb) 58%, transparent); stroke-width:1.6; fill:none; stroke-linecap:round; stroke-dasharray:5 6; transition: stroke .5s ease; }
-        .lipgo-route.b{ stroke: color-mix(in srgb, var(--hero,#82c8eb) 26%, transparent); }
-        .lipgo-node{ fill:#cfeff8; } .lipgo-node.hub{ fill: var(--hero,#00c2dc); transition: fill .5s ease; }
-        /* Actor temático del héroe (adaptativo por módulo). El color viene de --hero. */
-        .hero-light{ fill:#dff2fb; } .hero-accent{ fill: var(--hero,#00c2dc); }
-        .hero-lightstroke{ stroke:#dff2fb; } .hero-accent-stroke{ stroke: var(--hero,#00c2dc); }
-        .lipgo-sect{ font:700 9.5px/1 sans-serif; letter-spacing:.16em; text-transform:uppercase; color:#5f7c96; padding:13px 14px 5px; }
-        @media (prefers-reduced-motion: no-preference){
-          .lipgo-route{ animation: lipgo-flow 1.1s linear infinite; }
-          .lipgo-actor{ animation: lipgo-run 6s ease-in-out infinite, lipgo-fadein .5s ease-out; }
-          .lipgo-gear{ transform-box: fill-box; transform-origin: center; animation: lipgo-spin 3.4s linear infinite; }
-          .lipgo-hub-ring{ animation: lipgo-ring 2.8s ease-out infinite; }
-          .lipgo-live{ animation: lipgo-blink 1.8s ease-in-out infinite; }
-        }
-        @keyframes lipgo-flow{ to{ stroke-dashoffset:-22; } }
-        @keyframes lipgo-run{ 0%{transform:translateX(4px)} 50%{transform:translateX(150px)} 100%{transform:translateX(4px)} }
-        @keyframes lipgo-spin{ to{ transform: rotate(360deg); } }
-        @keyframes lipgo-fadein{ from{ opacity:0 } to{ opacity:1 } }
-        @keyframes lipgo-ring{ 0%{ r:3; opacity:.85 } 100%{ r:15; opacity:0 } }
-        @keyframes lipgo-blink{ 0%,100%{opacity:1} 50%{opacity:.35} }
-      `}</style>
-
-      {/* Desktop Sidebar */}
-      <aside
-        className={`lipgo-sb hidden md:flex flex-col h-screen border-r border-border z-20 transition-all duration-300 ${collapsed ? "w-16 lg:w-20" : "w-56 lg:w-64"}`}
-      >
-        {/* Hero de marca — Torre de Control (red de operación animada) */}
-        <div
-          className={`relative flex-shrink-0 overflow-hidden border-b border-border ${collapsed ? "h-16 lg:h-20" : "h-32"}`}
-          style={{ "--hero": heroAccent } as CSSProperties}
+  // Botón de una entrada del menú: módulo suelto o HUB (pantalla con pestañas,
+  // lib/navegacion.ts). El hub abre su primera pestaña visible y queda activo
+  // cuando el módulo seleccionado es cualquiera de sus pestañas. Las pestañas
+  // NO se anidan en la barra (se ven dentro de la pantalla y en el buscador).
+  const renderEntrada = (entrada: EntradaMenu, groupKey: GroupKey) => {
+    const clases = (activo: boolean) => `
+      flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs
+      transition-all duration-200
+      ${activo ? "text-foreground bg-accent/70 font-medium" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"}
+    `
+    if (entrada.tipo === "hub") {
+      const HubIcon = entrada.hub.icon
+      const isHubActive = selectedGroup === groupKey && hubDe(selectedGroup, selectedModule)?.key === entrada.hub.key
+      const primera = entrada.tabs[0]?.name
+      return (
+        <button
+          key={`hub:${entrada.hub.key}`}
+          onClick={() => {
+            if (!primera) return
+            onSelectGroup(groupKey)
+            onSelectModule(primera)
+          }}
+          className={clases(isHubActive)}
+          title={entrada.tabs.map((t) => t.label ?? t.name).join(" · ")}
         >
-          {!collapsed && (
-            <>
-              <div className="lipgo-hero-bg absolute inset-0" aria-hidden="true" />
-              <svg className="absolute inset-0 h-full w-full" viewBox="0 0 264 128" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-                <path className="lipgo-route b" d="M-10 40 C 60 40, 90 96, 170 96 S 260 60, 280 62" />
-                <path className="lipgo-route" d="M-10 92 C 70 92, 95 44, 165 44 S 250 74, 280 30" />
-                <circle className="lipgo-node hub" cx="165" cy="44" r="3.4" />
-                <circle className="lipgo-hub-ring hero-accent-stroke" cx="165" cy="44" r="3" fill="none" strokeWidth="1.3" />
-                <circle className="lipgo-node" cx="34" cy="86" r="2.6" />
-                <circle className="lipgo-node" cx="238" cy="52" r="2.6" />
-                <g transform="translate(0,72)">
-                  {/* Actor adaptativo: cambia de glifo y color según el módulo activo.
-                      key fuerza el remount para reproducir el fundido de entrada. */}
-                  <g className="lipgo-actor" key={selectedGroup ?? "home"}>
-                    <HeroActor groupKey={selectedGroup} />
-                  </g>
-                </g>
-              </svg>
-            </>
-          )}
-          <button
-            onClick={onToggleCollapse}
-            className="absolute right-2 top-2 z-10 rounded-lg p-1.5 transition-colors hover:bg-white/10"
-            aria-label={collapsed ? "Expandir menú" : "Contraer menú"}
-          >
-            {collapsed ? (
-              <Menu className="h-4 w-4 text-white/70" />
-            ) : (
-              <X className="h-4 w-4 text-white/70" />
-            )}
-          </button>
-          {collapsed ? (
-            <div className="flex h-full items-center justify-center">
-              <div className="lipgo-logo-mark">L</div>
-            </div>
-          ) : (
-            <button
-              onClick={() => {
-                onSelectGroup(null)
-                onSelectModule(null)
-              }}
-              className="absolute bottom-3 left-4 z-10 flex flex-col items-start gap-1.5 text-left"
-            >
-              <span className="flex items-center gap-2.5">
-                <span className="lipgo-logo-mark">L</span>
-                <span className="lipgo-word">LIPgo</span>
-              </span>
-              <span className="lipgo-tag">
-                <span className="lipgo-live" />
-                Torre de Control · en vivo
-              </span>
-            </button>
-          )}
-        </div>
+          <HubIcon className="h-3.5 w-3.5 flex-shrink-0" style={{ color: colorDeEntrada(groupKey, { hubKey: entrada.hub.key }) }} />
+          <span className="text-left whitespace-nowrap overflow-hidden text-ellipsis">{entrada.hub.title}</span>
+          <span className="ml-auto flex-shrink-0 rounded-full bg-white/10 px-1.5 text-[9.5px] tabular-nums text-muted-foreground/80">
+            {entrada.tabs.length}
+          </span>
+        </button>
+      )
+    }
+    const module = entrada.modulo
+    const ModuleIcon = module.icon
+    const isModuleActive = selectedModule === module.name && selectedGroup === groupKey
+    return (
+      <button
+        key={module.name}
+        onClick={() => {
+          onSelectGroup(groupKey)
+          onSelectModule(module.name)
+        }}
+        className={clases(isModuleActive)}
+      >
+        <ModuleIcon className="h-3.5 w-3.5 flex-shrink-0" style={{ color: colorDeEntrada(groupKey, { modulo: module.name }) }} />
+        <span className="text-left whitespace-nowrap overflow-hidden text-ellipsis">{module.label ?? module.name}</span>
+      </button>
+    )
+  }
 
-        {/* Buscador de modulos (solo visible cuando el sidebar esta expandido) */}
-        {!collapsed && (
-          <div className="px-2 lg:px-4 pt-2 lg:pt-4 flex-shrink-0">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <input
-                type="text"
-                value={moduleSearch}
-                onChange={(e) => setModuleSearch(e.target.value)}
-                placeholder="Buscar módulo..."
-                aria-label="Buscar módulo"
-                className="w-full rounded-lg border border-border bg-background py-2 pl-8 pr-8 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-              {moduleSearch && (
-                <button
-                  onClick={() => setModuleSearch("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                  aria-label="Limpiar búsqueda"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Module/Subgroup list - shown when expanded */}
-        <nav className="flex-1 space-y-0.5 lg:space-y-1 p-2 lg:p-4 overflow-y-auto overflow-x-hidden">
+  // Árbol del menú (áreas → subgrupos → pantallas). Lo usan la barra lateral de
+  // escritorio (colapsable) y el cajón móvil (siempre expandido). Un solo
+  // render para que nunca diverjan.
+  const renderArbol = (colapsado: boolean) => (
+    <>
           {/* Resultados del buscador: lista plana de modulos coincidentes */}
-          {!collapsed && normalizedSearch.length > 0 ? (
+          {!colapsado && normalizedSearch.length > 0 ? (
             searchResults.length > 0 ? (
               searchResults.map((m) => {
                 const ModuleIcon = m.icon
@@ -628,9 +545,9 @@ export function Sidebar({
                         ? "text-foreground bg-accent"
                         : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
                     }
-                    ${collapsed ? "justify-center" : ""}
+                    ${colapsado ? "justify-center" : ""}
                   `}
-                  title={collapsed ? item.label : undefined}
+                  title={colapsado ? item.label : undefined}
                 >
                   {isGroupActive && (
                     <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full" />
@@ -638,7 +555,7 @@ export function Sidebar({
                   <span className="lipgo-tile" style={{ color: "#9fb6cc" }}>
                     <Icon className="h-[15px] w-[15px]" />
                   </span>
-                  {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
+                  {!colapsado && <span className="whitespace-nowrap">{item.label}</span>}
                 </button>
               )
             }
@@ -648,7 +565,7 @@ export function Sidebar({
               <div key={item.label} className="space-y-1">
                 <button
                   onClick={() => {
-                    if (!collapsed) {
+                    if (!colapsado) {
                       onSelectGroup(item.key!)
                       onSelectModule(null)
                       toggleGroup(item.key!)
@@ -662,9 +579,9 @@ export function Sidebar({
                         ? "text-foreground bg-accent"
                         : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
                     }
-                    ${collapsed ? "justify-center" : "justify-between"}
+                    ${colapsado ? "justify-center" : "justify-between"}
                   `}
-                  title={collapsed ? item.label : undefined}
+                  title={colapsado ? item.label : undefined}
                 >
                   <div className="flex items-center gap-3">
                     {isGroupActive && (
@@ -673,9 +590,9 @@ export function Sidebar({
                     <span className="lipgo-tile" style={{ color: GROUP_TINT[item.key!] ?? "#9fb6cc" }}>
                       <Icon className="h-[15px] w-[15px]" />
                     </span>
-                    {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
+                    {!colapsado && <span className="whitespace-nowrap">{item.label}</span>}
                   </div>
-                  {!collapsed && (
+                  {!colapsado && (
                     <ChevronDown
                       className={`h-4 w-4 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
                     />
@@ -687,10 +604,10 @@ export function Sidebar({
                   className={`
                     ml-4 space-y-1 border-l border-border pl-2
                     overflow-hidden transition-all duration-300 ease-in-out
-                    ${!collapsed && isExpanded ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0"}
+                    ${!colapsado && isExpanded ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0"}
                   `}
                 >
-                  {!collapsed && group && (
+                  {!colapsado && group && (
                     <>
                       {group.subgroups
                         ? // Render subgroups
@@ -722,67 +639,13 @@ export function Sidebar({
                                   ${isSubgroupExpanded ? "max-h-96 opacity-100" : "max-h-0 opacity-0"}
                                 `}
                                 >
-                                  {subgroup.modules.map((module) => {
-                                    const ModuleIcon = module.icon
-                                    const isModuleActive = selectedModule === module.name && selectedGroup === item.key
-
-                                    return (
-                                      <button
-                                        key={module.name}
-                                        onClick={() => {
-                                          onSelectGroup(item.key!)
-                                          onSelectModule(module.name)
-                                        }}
-                                        className={`
-                                        flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs
-                                        transition-all duration-200
-                                        ${
-                                          isModuleActive
-                                            ? "text-foreground bg-accent/70 font-medium"
-                                            : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                                        }
-                                      `}
-                                      >
-                                        <ModuleIcon className="h-3.5 w-3.5 flex-shrink-0" />
-                                        <span className="text-left whitespace-nowrap overflow-hidden text-ellipsis">
-                                          {module.label ?? module.name}
-                                        </span>
-                                      </button>
-                                    )
-                                  })}
+                                  {plegarEnHubs(item.key!, subgroup.modules).map((e) => renderEntrada(e, item.key!))}
                                 </div>
                               </div>
                             )
                           })
                         : // Render direct modules (for groups without subgroups)
-                          group.modules?.map((module) => {
-                            const ModuleIcon = module.icon
-                            const isModuleActive = selectedModule === module.name && selectedGroup === item.key
-
-                            return (
-                              <button
-                                key={module.name}
-                                onClick={() => {
-                                  onSelectGroup(item.key!)
-                                  onSelectModule(module.name)
-                                }}
-                                className={`
-                                flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs
-                                transition-all duration-200
-                                ${
-                                  isModuleActive
-                                    ? "text-foreground bg-accent/70 font-medium"
-                                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                                }
-                              `}
-                              >
-                                <ModuleIcon className="h-3.5 w-3.5 flex-shrink-0" />
-                                <span className="text-left whitespace-nowrap overflow-hidden text-ellipsis">
-                                  {module.label ?? module.name}
-                                </span>
-                              </button>
-                            )
-                          })}
+                          plegarEnHubs(item.key!, group.modules ?? []).map((e) => renderEntrada(e, item.key!))}
                     </>
                   )}
                 </div>
@@ -790,13 +653,191 @@ export function Sidebar({
             )
             })
           )}
+    </>
+  )
+
+  return (
+    <>
+      {/* Rediseño "Torre de Control" (2026-07-03): re-skin OSCURO premium del
+          sidebar redefiniendo las variables de tema SOLO dentro de .lipgo-sb
+          (no cambia el resto de la app), + hero animado de logística. No toca
+          permisos ni rutas. */}
+      <style>{`
+        /* Marca LIP (2026-10-02): el fondo oscuro es el verde azulado profundo
+           del rombo del logo (#052e2b → #0b3b3a), no azul marino; el acento es
+           el turquesa del logo (#00d4ce). */
+        .lipgo-sb{
+          --card:#06302e; --card-foreground:#ffffff; --foreground:#ffffff;
+          --background:#0b3b3a; --muted-foreground:#cfe9e6;
+          --accent:#115454; --accent-foreground:#ffffff;
+          --border:#164a49; --input:#164a49; --primary:#00d4ce; --ring:#00d4ce;
+          background-image:linear-gradient(180deg,#07302e,#041f1e);
+        }
+        /* Letras del menú en BLANCO con alto contraste (peticion de diseño). */
+        .lipgo-sb nav button span{ color:#ffffff; }
+        .lipgo-sb nav button{ color:#eafaf9; }
+        .lipgo-sb .bg-primary{ box-shadow:0 0 12px rgba(0,212,206,.6); }
+        .lipgo-hero-bg{ background:
+          radial-gradient(120% 90% at 82% 0%, color-mix(in srgb, var(--hero,#00d4ce) 34%, transparent), transparent 58%),
+          radial-gradient(95% 85% at 0% 100%, rgba(14,124,120,.45), transparent 55%);
+          transition: background .5s ease; }
+        .lipgo-tag{ font:600 10px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.14em; text-transform:uppercase; color:#8ff0ec; display:flex; align-items:center; gap:6px; }
+        .lipgo-live{ width:6px; height:6px; border-radius:50%; background:#37f5a0; box-shadow:0 0 8px #37f5a0; }
+        /* El rombo REAL del logo (public/lipgo-icon.png), con un halo turquesa suave. */
+        .lipgo-logo-img{ width:32px; height:32px; flex:none; filter:drop-shadow(0 0 10px rgba(0,212,206,.45)); }
+        .lipgo-word{ font:800 19px/1 var(--font-plex),sans-serif; letter-spacing:-.02em; color:#fff; }
+        .lipgo-word em{ font-style:normal; color:#21e3dd; }
+        .lipgo-tile{ display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:8px; background:#0d4341; border:1px solid #176461; flex:none; }
+        .lipgo-route{ stroke: color-mix(in srgb, var(--hero,#82c8eb) 58%, transparent); stroke-width:1.6; fill:none; stroke-linecap:round; stroke-dasharray:5 6; transition: stroke .5s ease; }
+        .lipgo-route.b{ stroke: color-mix(in srgb, var(--hero,#82c8eb) 26%, transparent); }
+        .lipgo-node{ fill:#cfeff8; } .lipgo-node.hub{ fill: var(--hero,#00c2dc); transition: fill .5s ease; }
+        /* Actor temático del héroe (adaptativo por módulo). El color viene de --hero. */
+        .hero-light{ fill:#dff2fb; } .hero-accent{ fill: var(--hero,#00c2dc); }
+        .hero-lightstroke{ stroke:#dff2fb; } .hero-accent-stroke{ stroke: var(--hero,#00c2dc); }
+        .lipgo-sect{ font:700 9.5px/1 sans-serif; letter-spacing:.16em; text-transform:uppercase; color:#8fc9c5; padding:13px 14px 5px; }
+        @media (prefers-reduced-motion: no-preference){
+          .lipgo-route{ animation: lipgo-flow 1.1s linear infinite; }
+          .lipgo-actor{ animation: lipgo-run 6s ease-in-out infinite, lipgo-fadein .5s ease-out; }
+          .lipgo-gear{ transform-box: fill-box; transform-origin: center; animation: lipgo-spin 3.4s linear infinite; }
+          .lipgo-hub-ring{ animation: lipgo-ring 2.8s ease-out infinite; }
+          .lipgo-live{ animation: lipgo-blink 1.8s ease-in-out infinite; }
+        }
+        @keyframes lipgo-flow{ to{ stroke-dashoffset:-22; } }
+        @keyframes lipgo-run{ 0%{transform:translateX(4px)} 50%{transform:translateX(150px)} 100%{transform:translateX(4px)} }
+        @keyframes lipgo-spin{ to{ transform: rotate(360deg); } }
+        @keyframes lipgo-fadein{ from{ opacity:0 } to{ opacity:1 } }
+        @keyframes lipgo-ring{ 0%{ r:3; opacity:.85 } 100%{ r:15; opacity:0 } }
+        @keyframes lipgo-blink{ 0%,100%{opacity:1} 50%{opacity:.35} }
+      `}</style>
+
+      {/* Desktop Sidebar */}
+      <aside
+        className={`lipgo-sb hidden md:flex flex-col h-screen border-r border-border z-20 transition-all duration-300 ${collapsed ? "w-16 lg:w-20" : "w-56 lg:w-64"}`}
+      >
+        {/* Cabecera de marca (pulido 2026-10-02): sobria y fija. El rombo real
+            del logo, LIP·GO y el lema de LIP. Sin animaciones ni adornos. */}
+        <div
+          className={`relative flex-shrink-0 border-b border-border ${collapsed ? "h-16 lg:h-20" : "h-[104px]"}`}
+          style={{ "--hero": heroAccent } as CSSProperties}
+        >
+          <button
+            onClick={onToggleCollapse}
+            className="absolute right-2 top-2 z-10 rounded-lg p-1.5 transition-colors hover:bg-white/10"
+            aria-label={collapsed ? "Expandir menú" : "Contraer menú"}
+          >
+            {collapsed ? (
+              <Menu className="h-4 w-4 text-white/70" />
+            ) : (
+              <X className="h-4 w-4 text-white/70" />
+            )}
+          </button>
+          {collapsed ? (
+            <div className="flex h-full items-center justify-center">
+              <Image src="/lipgo-icon.png" alt="LIPgo" width={32} height={32} className="lipgo-logo-img" priority />
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                onSelectGroup(null)
+                onSelectModule(null)
+              }}
+              className="absolute bottom-3.5 left-4 z-10 flex flex-col items-start gap-1.5 text-left"
+              aria-label="Ir al Inicio"
+            >
+              <span className="flex items-center gap-2.5">
+                <Image src="/lipgo-icon.png" alt="" width={34} height={34} className="lipgo-logo-img" priority />
+                <span className="lipgo-word">LIP<em>GO</em></span>
+              </span>
+              <span className="lipgo-tag">Progressive Integral Logistics</span>
+            </button>
+          )}
+        </div>
+
+        {/* Buscador de modulos (solo visible cuando el sidebar esta expandido) */}
+        {!collapsed && (
+          <div className="px-2 lg:px-4 pt-2 lg:pt-4 flex-shrink-0">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                value={moduleSearch}
+                onChange={(e) => setModuleSearch(e.target.value)}
+                placeholder="Buscar módulo..."
+                aria-label="Buscar módulo"
+                className="w-full rounded-lg border border-border bg-background py-2 pl-8 pr-8 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              {moduleSearch && (
+                <button
+                  onClick={() => setModuleSearch("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  aria-label="Limpiar búsqueda"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Module/Subgroup list - shown when expanded */}
+        <nav className="flex-1 space-y-0.5 lg:space-y-1 p-2 lg:p-4 overflow-y-auto overflow-x-hidden">
+          {renderArbol(collapsed)}
         </nav>
       </aside>
+
+      {/* Cajón móvil (Fase 3, 2026-09-30): el menú COMPLETO en celular, con el
+          buscador global arriba. Antes la barra inferior solo llegaba a 5 áreas
+          y las pantallas eran inalcanzables desde el teléfono. */}
+      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <SheetContent side="left" className="lipgo-sb z-[70] w-[86vw] max-w-sm gap-0 p-0 md:hidden [&>button]:text-white/70">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Menú</SheetTitle>
+          </SheetHeader>
+          <div className="flex h-full flex-col">
+            <div className="flex items-center border-b border-border px-3 py-3 pr-12">
+              <button
+                type="button"
+                onClick={() => {
+                  setDrawerOpen(false)
+                  onSelectGroup(null)
+                  onSelectModule(null)
+                }}
+                className="flex items-center gap-2 text-left"
+              >
+                <Image src="/lipgo-icon.png" alt="" width={32} height={32} className="lipgo-logo-img" priority />
+                <span className="lipgo-word">LIP<em>GO</em></span>
+              </button>
+            </div>
+            <div className="px-3 pt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setDrawerOpen(false)
+                  setTimeout(() => window.dispatchEvent(new CustomEvent("lipgo:open-palette")), 150)
+                }}
+                className="flex w-full items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm text-muted-foreground"
+              >
+                <Search className="h-4 w-4" /> Buscar o ir a…
+              </button>
+            </div>
+            <nav className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden p-3">{renderArbol(false)}</nav>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Mobile Bottom Navigation */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 safe-area-pb">
         <nav className="flex items-center justify-around px-1 py-1.5">
-          {menuItems.slice(0, 5).map((item) => {
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            className="flex min-w-0 flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 text-muted-foreground transition-colors"
+            aria-label="Abrir menú"
+          >
+            <Menu className="h-4 w-4 flex-shrink-0 sm:h-5 sm:w-5" />
+            <span className="max-w-[60px] truncate text-[9px] font-medium sm:text-[10px]">Menú</span>
+          </button>
+          {menuItems.slice(0, 4).map((item) => {
             const Icon = item.icon
             const isActive = selectedGroup === item.key
 

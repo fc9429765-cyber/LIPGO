@@ -57,6 +57,12 @@ export interface UserPermissions {
   tolva: boolean
   ver_tolva: boolean
   proyecciones: boolean
+  // "Programación del cliente" (Pedidos y solicitudes): el cliente registra la
+  // programación de vehículos de mañana y ve su cumplimiento. SQL 211.
+  programacion_cliente: boolean
+  // "Consignar programación del cliente" (Operación LIP › Operación del día): el
+  // coordinador LIP consigna la programación que envía el cliente. SQL 212.
+  programacion_cliente_lip: boolean
   ver_ingresos_produccion: boolean
   aprobacion_produccion: boolean
   liquidacion_tolva: boolean
@@ -162,6 +168,10 @@ export interface UserPermissions {
   // operativa del coordinador: toneladas por dia y acumuladas por
   // trabajador, para gestionar personal (no es un modulo de pago).
   control_toneladas: boolean
+  // Permiso del módulo "Productividad de Auxiliares" (Operación Lip): informe
+  // de gerencia de quién carga de verdad (cabeceraoc.auxiliares_real) por ID,
+  // día y mes. Solo lectura. Ver scripts/207_add_productividad_auxiliares_permission.sql.
+  productividad_auxiliares: boolean
   // Permiso del modulo "Centro de Coordinación" (Operación Lip). Une en una
   // sola pantalla la gestión que hoy está dispersa en Picking, Packing y el
   // control de muelles/SLA: el coordinador ve los muelles en vivo, asigna
@@ -254,6 +264,9 @@ export interface UserPermissions {
   // Satisfacción y PQRSF: permiso propio para que el COORDINADOR (Gestión LIP)
   // lo gestione sin abrir todo el SIG. Vive en SIG y en Gestión LIP.
   satisfaccion_pqrsf: boolean
+  // Consulta de facturas en Siigo. Permiso propio: da acceso a toda la
+  // facturacion de la empresa, no solo a lo que genera LIPgo.
+  siigo_facturas: boolean
   // Calificación del Conductor (kiosko en caliente al fin de cargue): objetivo
   // del coordinador; alimenta la satisfacción del conductor en el BSC.
   calificacion_conductor: boolean
@@ -306,6 +319,8 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   Tolva: "tolva",
   "Ver Tolva": "ver_tolva",
   Proyecciones: "proyecciones",
+  "Programación del cliente": "programacion_cliente",
+  "Consignar programación del cliente": "programacion_cliente_lip",
   "Ver ingresos de producción": "ver_ingresos_produccion",
   "Aprobación de ingreso de producción": "aprobacion_produccion",
   "Liquidación Tolva del día": "liquidacion_tolva",
@@ -413,6 +428,7 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   "Programación de turnos": "programacionturnos",
   "Notificaciones al Personal": "notificaciones",
   "Control de Toneladas": "control_toneladas",
+  "Productividad de Auxiliares": "productividad_auxiliares",
   "Centro de Coordinación": "centro_coordinacion",
   Visor: "visor",
   Bodegas: "config_bodegas",
@@ -470,6 +486,7 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   "Mapa de Procesos": "sig_matriz",
   "Mapa de Interacción del Proceso": "sig_matriz",
   "Satisfacción y PQRSF": "satisfaccion_pqrsf",
+  "Consulta Facturas SIIGO": "siigo_facturas",
   "Calificación del Conductor": "calificacion_conductor",
   // Inventario operativo (LIPgo = soporte del SIG): gobernados por el permiso
   // operativo `auditoria_inventario`, no por sig_matriz. Viven en Almacenamiento

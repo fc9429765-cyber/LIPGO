@@ -2,116 +2,160 @@
 
 // OPERACIÓN DEL DÍA — panel ejecutivo del coordinador.
 //
-// Reúne en una pantalla lo que hoy está repartido: personal activo, turnos,
-// cobertura, novedades pendientes, solicitudes de personal y el pago de la
-// quincena. Todo filtrado por la empresa del selector global.
+// Reúne en una pantalla lo que hoy está repartido: vehículos y toneladas del
+// día, programación del cliente, personal y cobertura, bandeja de pendientes,
+// solicitudes de personal y cierre del día. Todo filtrado por la empresa del
+// selector global y TODO real: cada cifra sale de la misma fuente que ya usa
+// su módulo (no se recalcula nada por una vía propia). Los botones llevan al
+// módulo donde se resuelve.
 //
-// Cada cifra sale de la misma fuente que ya usa su módulo: no se recalcula
-// nada por una vía propia. Los botones llevan al módulo donde se resuelve.
+// Visual (2026-10-02, sistema visual LIPgo): cuatro cifras mandan arriba;
+// debajo, la bandeja con acciones, vehículos por tipo, personal, programación
+// de mañana y cierre. Primitivas en components/ui/lipgo.tsx.
 
 import { useCallback, useEffect, useState } from "react"
 import { useAuth } from "@/components/auth-provider"
 import { Button } from "@/components/ui/button"
+import { Chip, Cifra, Esqueleto, EstadoVacio, Eyebrow, FilaAccion, Progreso, Seccion, type Tono } from "@/components/ui/lipgo"
 import {
   AlertTriangle,
   ArrowRight,
-  CalendarDays,
+  CalendarClock,
+  CheckCircle2,
+  ClipboardCheck,
   Loader2,
+  Printer,
   RefreshCw,
+  Scale,
+  Truck,
   UserPlus,
-  Users,
 } from "lucide-react"
 import { getOperacionDia } from "@/lib/operacion-dia-actions"
+import { createBitacora } from "@/lib/bitacora-actions"
 import type { CoberturaTurno, ItemBandeja, OperacionDiaData } from "@/lib/operacion-dia-tipos"
 
-const COP = new Intl.NumberFormat("es-CO", {
-  style: "currency",
-  currency: "COP",
-  maximumFractionDigits: 0,
-})
 const NUM = new Intl.NumberFormat("es-CO")
+const T1 = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 1 })
 
 /** Abre otro módulo. El destino conserva su propio PermissionGuard. */
 function irAModulo(nombre: string) {
   window.dispatchEvent(new CustomEvent("lipgo:navigate-module", { detail: nombre }))
 }
 
-const COLOR_NIVEL: Record<ItemBandeja["nivel"], string> = {
-  alto: "#dc2626",
-  medio: "#f59e0b",
-  bajo: "#16a34a",
-}
+const TONO_NIVEL: Record<ItemBandeja["nivel"], Tono> = { alto: "critico", medio: "atencion", bajo: "info" }
 
-/** El anillo de cobertura de la cabecera. */
-function Anillo({ pct }: { pct: number }) {
-  const r = 34
-  const circ = 2 * Math.PI * r
-  const lleno = Math.max(0, Math.min(100, pct))
+const fechaLarga = (iso: string) => {
+  const s = new Date(`${iso}T12:00:00-05:00`).toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Bogota" })
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+const horaCorta = (ts: string) => new Date(ts).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", timeZone: "America/Bogota" })
+const duracion = (min: number) => (min >= 60 ? `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")} min` : `${min} min`)
+
+/** Renglón de la lista de cierre. `children` = acción en línea (p. ej. anotar la bitácora). */
+function ItemCierre({
+  ok,
+  texto,
+  pendiente,
+  modulo,
+  boton,
+  children,
+}: {
+  ok: boolean
+  texto: string
+  pendiente: string
+  modulo?: string
+  boton?: string
+  children?: React.ReactNode
+}) {
   return (
-    <div className="relative h-24 w-24 shrink-0">
-      <svg viewBox="0 0 80 80" className="h-full w-full -rotate-90">
-        <circle cx="40" cy="40" r={r} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="7" />
-        <circle
-          cx="40" cy="40" r={r} fill="none"
-          stroke="#5eead4" strokeWidth="7" strokeLinecap="round"
-          strokeDasharray={`${(circ * lleno) / 100} ${circ}`}
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-lg font-semibold text-white tabular-nums">{lleno}%</span>
-        <span className="text-[9px] uppercase tracking-wide text-white/70">cobertura</span>
+    <li className="px-4 py-2.5 sm:px-5">
+      <div className="flex items-center gap-3">
+        {ok ? (
+          <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-acento text-white">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+          </span>
+        ) : (
+          <span className="h-[22px] w-[22px] shrink-0 rounded-full border-2 border-input" />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className={`text-sm ${ok ? "text-muted-foreground" : "font-medium"}`}>{texto}</p>
+          {!ok && <p className="text-[11px] text-atencion-fg">{pendiente}</p>}
+        </div>
+        {!ok && modulo && boton && (
+          <Button variant="outline" size="sm" className="h-8 shrink-0 text-xs" onClick={() => irAModulo(modulo)}>
+            {boton}
+          </Button>
+        )}
       </div>
-    </div>
+      {!ok && children && <div className="mt-2 pl-[34px]">{children}</div>}
+    </li>
   )
 }
 
 function TarjetaTurno({ t }: { t: CoberturaTurno }) {
   const pct = t.programados > 0 ? Math.round((t.presentes / t.programados) * 100) : 0
   return (
-    <div className="flex-1 border-r border-border px-4 py-3 last:border-r-0">
+    <div className="flex min-w-[150px] flex-1 flex-col gap-1.5 rounded-xl bg-muted/50 px-3.5 py-3">
       <div className="flex items-center gap-2">
-        <span className="rounded bg-foreground/85 px-1.5 py-0.5 font-mono text-[10px] text-background">
-          {t.etiqueta}
-        </span>
-        {t.horario && <span className="font-mono text-[11px] text-muted-foreground">{t.horario}</span>}
+        <span className="rounded-md bg-foreground px-1.5 py-0.5 text-[10px] font-semibold text-background">{t.etiqueta}</span>
+        {t.horario && <span className="lg-num text-[11px] text-muted-foreground">{t.horario}</span>}
       </div>
-      <p className="mt-1.5 text-2xl font-semibold tabular-nums">
+      <p className="lg-num text-2xl font-bold leading-none">
         {t.presentes === 0 && t.programados === 0 ? (
           <span className="text-muted-foreground">—</span>
         ) : (
-          <span style={{ color: pct >= 95 ? undefined : "#f59e0b" }}>{t.presentes}</span>
+          <span className={pct >= 95 ? "" : "text-atencion-fg"}>{t.presentes}</span>
         )}
-        <span className="text-base font-normal text-muted-foreground"> / {t.programados}</span>
+        <span className="text-sm font-normal text-muted-foreground"> / {t.programados}</span>
       </p>
-      <div className="mt-1.5 h-1 w-full overflow-hidden rounded bg-muted">
-        <div
-          className="h-full rounded"
-          style={{ width: `${pct}%`, background: pct >= 95 ? "#14b8a6" : "#f59e0b" }}
-        />
-      </div>
-      <p className="mt-1 text-[11px] text-muted-foreground">
-        {t.programados === 0
-          ? "sin turnos programados"
-          : t.sinMarcar > 0
-            ? `${t.sinMarcar} sin marcar`
-            : `${pct}% de asistencia confirmada`}
+      <Progreso pct={pct} tono={pct >= 95 ? undefined : "atencion"} />
+      <p className="lg-num text-[11px] text-muted-foreground">
+        {t.programados === 0 ? "sin turnos programados" : t.sinMarcar > 0 ? `${t.sinMarcar} sin marcar` : `${pct} % confirmado`}
       </p>
     </div>
   )
 }
 
+/** Barra horizontal por tipo de vehículo (escala al mayor). */
+function BarrasTipo({ filas, total }: { filas: { tipo: string; n: number }[]; total: number }) {
+  const max = Math.max(1, ...filas.map((f) => f.n))
+  return (
+    <div className="flex flex-col gap-2.5">
+      {filas.slice(0, 6).map((f, i) => (
+        <div key={f.tipo} className="grid grid-cols-[96px_minmax(0,1fr)_40px] items-center gap-2.5">
+          <span className="truncate text-[13px] font-medium" title={f.tipo}>{f.tipo}</span>
+          <div className="h-3.5 overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full" style={{ width: `${(f.n / max) * 100}%`, background: i === 0 ? "#0F766E" : i === 1 ? "#0D9488" : "#5EEAD4" }} />
+          </div>
+          <span className="lg-num text-right text-[13px] font-semibold">{f.n}</span>
+        </div>
+      ))}
+      {filas.length === 0 && <p className="text-xs text-muted-foreground">Aún no hay vehículos registrados hoy en portería.</p>}
+      {total > 0 && filas.length > 6 && <p className="text-[11px] text-muted-foreground">y {filas.length - 6} tipo{filas.length - 6 === 1 ? "" : "s"} más</p>}
+    </div>
+  )
+}
+
 export function OperacionDelDia() {
-  const { selectedEmpresaId } = useAuth()
+  const { selectedEmpresaId, selectedEmpresaNombre } = useAuth()
   const [data, setData] = useState<OperacionDiaData | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Anotación rápida de la bitácora desde el cierre del día (misma acción que
+  // usa el módulo Bitácora; no se recalcula nada aquí).
+  const [nota, setNota] = useState("")
+  const [guardandoNota, setGuardandoNota] = useState(false)
+  const [errorNota, setErrorNota] = useState<string | null>(null)
+  const [actualizadoEn, setActualizadoEn] = useState<string | null>(null)
 
   const cargar = useCallback(async () => {
     setCargando(true)
     setError(null)
     const r = await getOperacionDia(selectedEmpresaId ?? null)
-    if (r.success && r.data) setData(r.data)
-    else {
+    if (r.success && r.data) {
+      setData(r.data)
+      setActualizadoEn(new Date().toISOString())
+    } else {
       setData(null)
       setError(r.message ?? "No se pudo cargar el panel.")
     }
@@ -122,46 +166,101 @@ export function OperacionDelDia() {
     cargar()
   }, [cargar])
 
-  if (cargando) {
+  async function guardarNota() {
+    if (!selectedEmpresaId || !nota.trim()) return
+    setGuardandoNota(true)
+    setErrorNota(null)
+    const r = await createBitacora(selectedEmpresaId, { bitacora: nota.trim() })
+    setGuardandoNota(false)
+    if (!r.success) {
+      setErrorNota(r.error ?? "No se pudo guardar la anotación.")
+      return
+    }
+    setNota("")
+    cargar()
+  }
+
+  if (cargando && !data) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="flex flex-col gap-4 p-3 sm:p-4" aria-busy>
+        <div className="lg-card grid grid-cols-2 gap-6 p-5 sm:grid-cols-4">
+          <Esqueleto lineas={3} />
+          <Esqueleto lineas={3} />
+          <Esqueleto lineas={3} />
+          <Esqueleto lineas={3} />
+        </div>
+        <div className="grid gap-4 lg:grid-cols-[7fr_5fr]">
+          <div className="lg-card p-5"><Esqueleto lineas={6} /></div>
+          <div className="lg-card p-5"><Esqueleto lineas={5} /></div>
+        </div>
       </div>
     )
   }
 
   if (error || !data) {
     return (
-      <div className="p-6">
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+      <div className="p-4">
+        <div className="rounded-xl border border-atencion-bd bg-atencion-bg p-4 text-sm text-atencion-fg">
           <p className="flex items-center gap-2 font-medium">
             <AlertTriangle className="h-4 w-4" />
             {error}
           </p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={cargar}>Reintentar</Button>
         </div>
       </div>
     )
   }
 
   const d = data
+  const oh = d.operacionHoy
+  const prog = oh.programacion
+  const pctMeta = oh.metaTonDia > 0 ? Math.round((oh.toneladas / oh.metaTonDia) * 100) : null
+  const faltanTon = oh.metaTonDia > 0 ? Math.max(0, oh.metaTonDia - oh.toneladas) : 0
+  const pctPersonal = d.hoy.total.programados > 0 ? Math.round((d.hoy.total.presentes / d.hoy.total.programados) * 100) : null
+
+  // Cierre del día: puntos listos / total (la programación de mañana solo si la empresa la usa).
+  const puntosCierre: boolean[] = [
+    d.cierre.vehiculosSinCerrar === 0,
+    d.cierre.sinMarcar === 0,
+    d.cierre.turnosPorAprobar === 0,
+    ...(d.cierre.programacionManana.usa ? [d.cierre.programacionManana.recibida] : []),
+    d.cierre.bitacoraHoy,
+  ]
+  const listos = puntosCierre.filter(Boolean).length
+  const faltanCierre: string[] = []
+  if (d.cierre.vehiculosSinCerrar > 0) faltanCierre.push(`${d.cierre.vehiculosSinCerrar} sin cerrar`)
+  if (d.cierre.sinMarcar > 0) faltanCierre.push(`${d.cierre.sinMarcar} sin marcar`)
+  if (d.cierre.turnosPorAprobar > 0) faltanCierre.push("turnos")
+  if (d.cierre.programacionManana.usa && !d.cierre.programacionManana.recibida) faltanCierre.push("programación")
+  if (!d.cierre.bitacoraHoy) faltanCierre.push("bitácora")
+
+  const despachoTexto = oh.porDespacho.map((p) => `${p.tipo.toLowerCase()} ${p.n}`).join(" · ")
+  const promAux = oh.auxiliares.length > 0 ? oh.auxiliares.reduce((s, a) => s + a.ton, 0) / oh.auxiliares.length : 0
 
   return (
-    <div className="space-y-4 p-4">
-      {/* Encabezado */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="flex flex-col gap-4 p-3 sm:p-4">
+      {/* Cabecera */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Operación</p>
-          <h1 className="text-xl font-semibold">Operación del día</h1>
+          <Eyebrow>{fechaLarga(d.fecha)} · {selectedEmpresaNombre || `ID ${selectedEmpresaId}`}</Eyebrow>
+          <h1 className="text-xl font-bold leading-tight sm:text-2xl">Operación del día</h1>
         </div>
-        <Button variant="outline" size="sm" onClick={cargar} className="gap-1.5">
-          <RefreshCw className="h-3.5 w-3.5" />
-          Actualizar
-        </Button>
+        <div className="flex items-center gap-2">
+          {actualizadoEn && <span className="lg-num hidden text-xs text-muted-foreground sm:inline">Actualizado {horaCorta(actualizadoEn)}</span>}
+          <Button variant="outline" size="sm" onClick={cargar} disabled={cargando} className="gap-1.5">
+            <RefreshCw className={`h-3.5 w-3.5 ${cargando ? "animate-spin" : ""}`} />
+            Actualizar
+          </Button>
+          <Button variant="outline" size="sm" className="hidden gap-1.5 sm:inline-flex" onClick={() => irAModulo("Bitácora")}>
+            <Printer className="h-3.5 w-3.5" />
+            Cierre en PDF
+          </Button>
+        </div>
       </div>
 
       {/* Avisos de datos que no se pudieron leer: nunca mostrar 0 como si fuera real. */}
       {d.avisos.length > 0 && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+        <div className="rounded-xl border border-atencion-bd bg-atencion-bg p-3 text-xs text-atencion-fg">
           {d.avisos.map((a) => (
             <p key={a} className="flex items-center gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
@@ -171,161 +270,344 @@ export function OperacionDelDia() {
         </div>
       )}
 
-      {/* CABECERA — la quincena en curso */}
-      <section
-        className="rounded-xl p-5 text-white"
-        style={{ background: "linear-gradient(120deg, #0f3b3b, #0a5757 60%, #0d6b6b)" }}
-      >
-        <div className="flex flex-wrap items-center gap-5">
-          <Anillo pct={d.cobertura.pct} />
-
-          <div className="min-w-[220px] flex-1">
-            <p className="text-[10px] uppercase tracking-wide text-white/60">Quincena en curso</p>
-            <h2 className="text-2xl font-semibold">{d.quincena.etiqueta}</h2>
-            <p className="mt-1 text-sm text-white/80">
-              {d.cobertura.cubiertos === 0 && d.cobertura.programados === 0
-                ? "Todavía no hay turnos programados en esta quincena."
-                : `${NUM.format(d.cobertura.cubiertos)} de ${NUM.format(d.cobertura.programados)} turnos cubiertos`}
-            </p>
-            <p className="mt-0.5 text-xs text-white/55">
-              {d.cobertura.diasConDatos} {d.cobertura.diasConDatos === 1 ? "día" : "días"} con
-              programación · corte {d.quincena.hasta.slice(8)} de {d.quincena.etiqueta.split(" de ")[1]}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-6">
-            <div className="border-l border-white/20 pl-5">
-              <p className="text-[10px] uppercase tracking-wide text-white/60">Personal activo</p>
-              <p className="text-2xl font-semibold tabular-nums">{NUM.format(d.personalActivo)}</p>
-              <p className="text-[11px] text-white/55">operativos</p>
-            </div>
-            <div className="border-l border-white/20 pl-5">
-              <p className="text-[10px] uppercase tracking-wide text-white/60">Turnos programados</p>
-              <p className="text-2xl font-semibold tabular-nums">
-                {NUM.format(d.turnosProgramadosQuincena)}
-              </p>
-              <p className="text-[11px] text-white/55">en la quincena</p>
-            </div>
-            <div className="border-l border-white/20 pl-5">
-              <p className="text-[10px] uppercase tracking-wide text-white/60">Novedades abiertas</p>
-              <p
-                className="text-2xl font-semibold tabular-nums"
-                style={{ color: d.novedadesAbiertas > 0 ? "#fbbf24" : undefined }}
-              >
-                {NUM.format(d.novedadesAbiertas)}
-              </p>
-              <p className="text-[11px] text-white/55">
-                {d.novedadesAbiertas > 0 ? "esperan gestión" : "todo al día"}
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* COBERTURA DE HOY */}
-      <section className="rounded-xl border border-border bg-card">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-          <div>
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              Operación en vivo
-            </p>
-            <h2 className="text-sm font-semibold">Cobertura de hoy</h2>
-            <p className="text-[11px] text-muted-foreground">
-              Programado por ti · marcado en la tablet de portería
-            </p>
-          </div>
-          <span className="font-mono text-[11px] text-muted-foreground">{d.fecha}</span>
-        </div>
-
-        {d.hoy.turnos.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-            No hay turnos programados para hoy.
-          </p>
-        ) : (
-          <div className="flex flex-wrap">
-            {d.hoy.turnos.map((t) => (
-              <TarjetaTurno key={t.etiqueta} t={t} />
-            ))}
-            <div className="flex-1 bg-muted/30 px-4 py-3">
-              <span className="rounded bg-foreground/85 px-1.5 py-0.5 font-mono text-[10px] text-background">
-                Total
-              </span>
-              <p className="mt-1.5 text-2xl font-semibold tabular-nums">
-                {d.hoy.total.presentes}
-                <span className="text-base font-normal text-muted-foreground">
-                  {" "}/ {d.hoy.total.programados}
-                </span>
-              </p>
-              <p className="mt-1 text-[11px] text-muted-foreground">personas en operación</p>
-            </div>
-          </div>
-        )}
-      </section>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* BANDEJA DEL DÍA */}
-        <section className="rounded-xl border border-border bg-card">
-          <div className="border-b border-border px-4 py-3">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              Bandeja del día
-            </p>
-            <h2 className="text-sm font-semibold">Requiere tu atención</h2>
-          </div>
-          {d.bandeja.length === 0 ? (
-            <p className="px-4 py-10 text-center text-sm text-muted-foreground">
-              Nada pendiente. La operación está al día.
-            </p>
+      {/* FRANJA DEL DÍA — las cuatro cifras que mandan */}
+      <section className="lg-card grid grid-cols-1 gap-y-5 p-5 sm:grid-cols-2 sm:gap-x-6 lg:grid-cols-4 lg:gap-y-0">
+        <div className="lg:border-r lg:border-border lg:pr-6">
+          {oh.disponible ? (
+            <Cifra
+              label="Vehículos hoy"
+              valor={NUM.format(oh.vehiculosRegistrados || oh.ordenesHoy)}
+              unidad={oh.vehiculosRegistrados ? "en portería" : "órdenes"}
+              chips={
+                <>
+                  <Chip tono="neutro">{NUM.format(oh.ordenesHoy)} órdenes</Chip>
+                  <Chip tono={oh.sinCerrar > 0 ? "atencion" : "ok"}>{NUM.format(oh.sinCerrar)} sin cerrar</Chip>
+                  <Chip tono={oh.enPatio > 3 ? "atencion" : "info"}>{NUM.format(oh.enPatio)} en patio</Chip>
+                </>
+              }
+            />
           ) : (
-            <ul className="divide-y divide-border">
-              {d.bandeja.map((it) => (
-                <li key={it.id} className="flex items-start gap-3 px-4 py-3">
-                  <span
-                    className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-                    style={{ background: COLOR_NIVEL[it.nivel] }}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">{it.titulo}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{it.detalle}</p>
-                  </div>
-                  {it.moduloDestino && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="shrink-0"
-                      onClick={() => irAModulo(it.moduloDestino!)}
-                    >
-                      {it.textoBoton ?? "Abrir"}
-                    </Button>
-                  )}
-                </li>
-              ))}
-            </ul>
+            <Cifra label="Vehículos hoy" valor="—" sub={oh.mensaje ?? "No se pudo leer la operación de hoy"} tono="atencion" />
           )}
-        </section>
+        </div>
+        <div className="lg:border-r lg:border-border lg:px-6">
+          <Cifra
+            label="Toneladas cerradas"
+            valor={T1.format(oh.toneladas)}
+            unidad={oh.metaTonDia > 0 ? `t de ${T1.format(oh.metaTonDia)} meta` : "t"}
+            progreso={pctMeta ?? undefined}
+            tono={pctMeta != null && pctMeta < 60 ? "atencion" : "neutro"}
+            sub={
+              pctMeta != null
+                ? `${pctMeta} % de la meta del día${faltanTon > 0 ? ` · faltan ${T1.format(faltanTon)} t` : " · meta cumplida"}`
+                : `${oh.finalizadas} finalizados de ${oh.ordenesHoy}`
+            }
+          />
+        </div>
+        <div className="lg:border-r lg:border-border lg:px-6">
+          {prog.usa ? (
+            <Cifra
+              label="Programación del cliente"
+              valor={prog.tiene ? (prog.porcentaje != null ? `${NUM.format(prog.porcentaje)} %` : "—") : "Sin"}
+              unidad={prog.tiene ? `${prog.cumplidos} de ${prog.programados} llegaron` : "programación hoy"}
+              tono={!prog.tiene ? "atencion" : prog.porcentaje != null && prog.porcentaje >= 90 ? "ok" : prog.porcentaje != null && prog.porcentaje >= 70 ? "atencion" : prog.porcentaje == null ? "neutro" : "critico"}
+              chips={
+                prog.tiene ? (
+                  <>
+                    <Chip tono={prog.aTiempo ? "ok" : "atencion"}>{prog.aTiempo ? "Enviada a tiempo" : "Enviada tarde"}{prog.enviadaEn ? ` · ${horaCorta(prog.enviadaEn)}` : ""}</Chip>
+                    {prog.llegaron - prog.cumplidos > 0 && <Chip tono="neutro">+{prog.llegaron - prog.cumplidos} fuera de programación</Chip>}
+                  </>
+                ) : (
+                  <Chip tono="neutro">{NUM.format(prog.llegaron)} llegaron sin programar</Chip>
+                )
+              }
+            />
+          ) : (
+            <Cifra
+              label="Personal en operación"
+              valor={d.hoy.total.programados > 0 ? NUM.format(d.hoy.total.presentes) : "—"}
+              unidad={d.hoy.total.programados > 0 ? `de ${NUM.format(d.hoy.total.programados)} programados` : "sin turnos programados"}
+              progreso={pctPersonal ?? undefined}
+              tono={pctPersonal != null && pctPersonal < 95 ? "atencion" : "neutro"}
+              sub={d.hoy.total.sinMarcar > 0 ? `${d.hoy.total.sinMarcar} sin marcar · ${NUM.format(d.personalActivo)} activos en planta` : `${NUM.format(d.personalActivo)} activos en planta`}
+            />
+          )}
+        </div>
+        <div className="lg:pl-6">
+          <Cifra
+            label="Cierre del día"
+            valor={
+              <>
+                {listos}
+                <span className="text-muted-foreground/70">/{puntosCierre.length}</span>
+              </>
+            }
+            unidad="puntos listos"
+            tono={listos === puntosCierre.length ? "ok" : "neutro"}
+            sub={faltanCierre.length > 0 ? `Faltan: ${faltanCierre.join(" · ")}` : "Listo para cerrar"}
+          />
+          <div className="mt-2 flex gap-1" aria-hidden>
+            {puntosCierre.map((ok, i) => (
+              <span key={i} className={`h-2 flex-1 rounded-full ${ok ? "bg-acento" : "bg-muted"}`} />
+            ))}
+          </div>
+        </div>
+      </section>
 
-        <div className="space-y-4">
-          {/* SOLICITAR PERSONAL */}
-          <section className="rounded-xl border border-border bg-card">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Personal</p>
-                <h2 className="text-sm font-semibold">Solicitar personal</h2>
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[7fr_5fr]">
+        {/* ===== Columna izquierda ===== */}
+        <div className="flex flex-col gap-4">
+          <Seccion
+            eyebrow="Bandeja"
+            titulo="Requiere tu atención"
+            accion={<Chip tono={d.bandeja.some((b) => b.nivel === "alto") ? "critico" : d.bandeja.length ? "atencion" : "ok"}>{d.bandeja.length ? `${d.bandeja.length} pendiente${d.bandeja.length === 1 ? "" : "s"}` : "Todo al día"}</Chip>}
+            sinPadding
+          >
+            {d.bandeja.length === 0 ? (
+              <EstadoVacio icono={<CheckCircle2 className="h-5 w-5" />} titulo="Nada pendiente" texto="La operación está al día. Lo siguiente es el cierre del día." />
+            ) : (
+              <ul className="divide-y divide-border">
+                {d.bandeja.map((it) => (
+                  <FilaAccion
+                    key={it.id}
+                    tono={TONO_NIVEL[it.nivel]}
+                    titulo={it.titulo}
+                    detalle={it.detalle}
+                    boton={it.moduloDestino ? (it.textoBoton ?? "Abrir") : undefined}
+                    onClick={it.moduloDestino ? () => irAModulo(it.moduloDestino!) : undefined}
+                  />
+                ))}
+              </ul>
+            )}
+          </Seccion>
+
+          <Seccion
+            eyebrow="Operación en vivo"
+            titulo="Vehículos por tipo y toneladas"
+            accion={
+              <button type="button" onClick={() => irAModulo("Control de Toneladas")} className="inline-flex items-center gap-1 text-[13px] font-semibold text-acento hover:underline">
+                Control de toneladas <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            }
+          >
+            {!oh.disponible ? (
+              <p className="text-sm text-atencion-fg">{oh.mensaje ?? "No se pudo leer la operación de hoy."}</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="flex flex-col gap-3">
+                  <BarrasTipo filas={oh.porTipoVehiculo} total={oh.vehiculosRegistrados} />
+                  {despachoTexto && <p className="text-xs text-muted-foreground first-letter:uppercase">{despachoTexto}</p>}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-0.5 rounded-xl bg-muted/50 px-3.5 py-3">
+                    <Eyebrow>Finalizados</Eyebrow>
+                    <span className="lg-num text-2xl font-bold leading-tight">{NUM.format(oh.finalizadas)}</span>
+                    <span className="lg-num text-xs text-muted-foreground">de {NUM.format(oh.ordenesHoy)} órdenes</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 rounded-xl bg-muted/50 px-3.5 py-3">
+                    <Eyebrow>Tiempo promedio</Eyebrow>
+                    <span className="lg-num text-2xl font-bold leading-tight">{oh.tiempoPromMin != null ? <>{oh.tiempoPromMin} <span className="text-sm font-medium text-muted-foreground">min</span></> : "—"}</span>
+                    <span className="text-xs text-muted-foreground">histórico por operación</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 rounded-xl bg-muted/50 px-3.5 py-3">
+                    <Eyebrow>Auxiliares con tonelaje</Eyebrow>
+                    <span className="lg-num text-2xl font-bold leading-tight">{NUM.format(oh.auxiliares.length)}</span>
+                    <span className="lg-num text-xs text-muted-foreground">{oh.auxiliares.length > 0 ? `promedio ${T1.format(promAux)} t cada uno` : "sin órdenes cerradas aún"}</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 rounded-xl bg-muted/50 px-3.5 py-3">
+                    <Eyebrow>Por unidad</Eyebrow>
+                    <span className="lg-num text-2xl font-bold leading-tight">{NUM.format(oh.porUnidad.ordenes)}</span>
+                    <span className="lg-num text-xs text-muted-foreground">{oh.porUnidad.ordenes > 0 ? `${NUM.format(oh.porUnidad.unidades)} unidades · no suman toneladas` : "huevos / empaque · aparte"}</span>
+                  </div>
+                </div>
               </div>
+            )}
+            {oh.disponible && oh.auxiliares.length > 0 && (
+              <div className="mt-4 grid grid-cols-1 gap-4 border-t border-border pt-4 text-xs sm:grid-cols-2">
+                <div>
+                  <Eyebrow className="mb-1.5">Más toneladas</Eyebrow>
+                  {oh.auxiliares.slice(0, 3).map((a) => (
+                    <p key={a.persona} className="flex justify-between gap-2 py-0.5">
+                      <span className="truncate">{a.persona}</span>
+                      <span className="lg-num shrink-0 font-semibold">{T1.format(a.ton)} t</span>
+                    </p>
+                  ))}
+                </div>
+                {oh.auxiliares.length > 3 && (
+                  <div>
+                    <Eyebrow className="mb-1.5">Menos toneladas</Eyebrow>
+                    {oh.auxiliares.slice(-3).reverse().map((a) => (
+                      <p key={a.persona} className="flex justify-between gap-2 py-0.5">
+                        <span className="truncate">{a.persona}</span>
+                        <span className="lg-num shrink-0 font-semibold text-atencion-fg">{T1.format(a.ton)} t</span>
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </Seccion>
+
+          <Seccion
+            eyebrow="Personal"
+            titulo="Cobertura de hoy por turno"
+            accion={
+              <span className="text-xs text-muted-foreground">
+                Quincena {d.quincena.etiqueta}: <span className="lg-num font-semibold text-foreground">{NUM.format(d.cobertura.cubiertos)}</span> de {NUM.format(d.cobertura.programados)} turnos cubiertos
+              </span>
+            }
+          >
+            {d.hoy.turnos.length === 0 ? (
+              <EstadoVacio titulo="No hay turnos programados para hoy" texto="Prográmalos en Personal del día › Programación de turnos." accion={<Button size="sm" variant="outline" onClick={() => irAModulo("Programación de turnos")}>Programar turnos</Button>} />
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                {d.hoy.turnos.map((t) => (
+                  <TarjetaTurno key={t.etiqueta} t={t} />
+                ))}
+                <div className="flex min-w-[150px] flex-1 flex-col gap-1.5 rounded-xl border border-border px-3.5 py-3">
+                  <span className="self-start rounded-md bg-acento px-1.5 py-0.5 text-[10px] font-semibold text-white">Total</span>
+                  <p className="lg-num text-2xl font-bold leading-none">
+                    {d.hoy.total.presentes}
+                    <span className="text-sm font-normal text-muted-foreground"> / {d.hoy.total.programados}</span>
+                  </p>
+                  <Progreso pct={pctPersonal ?? 0} tono={pctPersonal != null && pctPersonal < 95 ? "atencion" : undefined} />
+                  <p className="lg-num text-[11px] text-muted-foreground">
+                    {d.novedadesAbiertas > 0 ? `${d.novedadesAbiertas} novedad${d.novedadesAbiertas === 1 ? "" : "es"} abierta${d.novedadesAbiertas === 1 ? "" : "s"}` : "sin novedades abiertas"}
+                  </p>
+                </div>
+              </div>
+            )}
+          </Seccion>
+        </div>
+
+        {/* ===== Columna derecha ===== */}
+        <div className="flex flex-col gap-4">
+          {d.cierre.programacionManana.usa && (
+            <Seccion
+              eyebrow="Para mañana"
+              titulo="Programación del cliente"
+              accion={
+                d.cierre.programacionManana.recibida ? (
+                  <Chip tono={d.cierre.programacionManana.aTiempo === false ? "atencion" : "ok"}>
+                    {d.cierre.programacionManana.programados} vehículo{d.cierre.programacionManana.programados === 1 ? "" : "s"} · {d.cierre.programacionManana.aTiempo === false ? "tarde" : "a tiempo"}
+                  </Chip>
+                ) : (
+                  <Chip tono="atencion">Sin consignar · límite 5:00 p. m.</Chip>
+                )
+              }
+            >
+              <div className="flex flex-col gap-3">
+                {d.cierre.programacionManana.recibida ? (
+                  <p className="text-sm text-foreground/80">
+                    Consignada{d.cierre.programacionManana.enviadaEn ? ` a las ${horaCorta(d.cierre.programacionManana.enviadaEn)}` : ""}
+                    {d.cierre.programacionManana.enviadaPorUsuario ? ` por ${d.cierre.programacionManana.enviadaPorUsuario}` : ""}. Con ella se planea el personal de mañana y se medirá el cumplimiento.
+                  </p>
+                ) : (
+                  <p className="text-sm text-foreground/80">El cliente aún no envía la programación de mañana. Cuando llegue por WhatsApp o Excel, consígnala aquí; con ella se planea el personal y se mide el cumplimiento.</p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" className="gap-1.5" onClick={() => irAModulo("Consignar programación del cliente")}>
+                    <CalendarClock className="h-3.5 w-3.5" />
+                    {d.cierre.programacionManana.recibida ? "Ver o corregir" : "Consignar programación"}
+                  </Button>
+                </div>
+                {prog.tiene && (
+                  <div className="border-t border-dashed border-border pt-3">
+                    <Eyebrow className="mb-1.5">Hoy se cumplió</Eyebrow>
+                    <p className="lg-num text-sm">
+                      <span className="font-semibold">{prog.cumplidos} de {prog.programados}</span> programados llegaron
+                      {prog.porcentaje != null ? ` · ${NUM.format(prog.porcentaje)} %` : ""}
+                      {prog.llegaron - prog.cumplidos > 0 ? ` · ${prog.llegaron - prog.cumplidos} fuera de programación` : ""}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </Seccion>
+          )}
+
+          <Seccion
+            eyebrow="Antes de irte"
+            titulo="Cierre del día"
+            accion={<Chip tono={listos === puntosCierre.length ? "ok" : "neutro"}>{listos === puntosCierre.length ? "Listo para cerrar" : `${listos} de ${puntosCierre.length}`}</Chip>}
+            sinPadding
+          >
+            <ul className="divide-y divide-border py-1">
+              <ItemCierre
+                ok={d.cierre.vehiculosSinCerrar === 0}
+                texto="Vehículos cerrados"
+                pendiente={`${d.cierre.vehiculosSinCerrar} iniciado${d.cierre.vehiculosSinCerrar === 1 ? "" : "s"} sin finalizar${oh.sinCerrarDetalle.masAntiguoMin != null ? ` · el más antiguo lleva ${duracion(oh.sinCerrarDetalle.masAntiguoMin)}` : ""}`}
+                modulo="Centro de Coordinación"
+                boton="Cerrar"
+              />
+              <ItemCierre
+                ok={d.cierre.sinMarcar === 0}
+                texto="Asistencia completa"
+                pendiente={`${d.cierre.sinMarcar} persona${d.cierre.sinMarcar === 1 ? "" : "s"} sin marcar`}
+                modulo="Tabla Asistencia"
+                boton="Revisar"
+              />
+              <ItemCierre
+                ok={d.cierre.turnosPorAprobar === 0}
+                texto="Turnos y horas extra aprobados"
+                pendiente={`${d.cierre.turnosPorAprobar} solicitud${d.cierre.turnosPorAprobar === 1 ? "" : "es"} por aprobar`}
+                modulo="Aprobar Turnos"
+                boton="Aprobar"
+              />
+              {d.cierre.programacionManana.usa && (
+                <ItemCierre
+                  ok={d.cierre.programacionManana.recibida}
+                  texto={`Programación del cliente para mañana consignada${d.cierre.programacionManana.recibida ? ` (${d.cierre.programacionManana.programados} vehículo${d.cierre.programacionManana.programados === 1 ? "" : "s"}${d.cierre.programacionManana.aTiempo === false ? ", tarde" : ""})` : ""}`}
+                  pendiente="Aún no llega la programación de mañana: pídesela al cliente y consígnala"
+                  modulo="Consignar programación del cliente"
+                  boton="Consignar"
+                />
+              )}
+              <ItemCierre ok={d.cierre.bitacoraHoy} texto="Bitácora del día escrita" pendiente="Aún no hay anotación de hoy">
+                <div className="flex gap-2">
+                  <textarea
+                    value={nota}
+                    onChange={(e) => setNota(e.target.value)}
+                    rows={2}
+                    placeholder="Anota aquí las novedades del turno: incidentes, vehículos pendientes, personal…"
+                    className="min-h-[52px] flex-1 rounded-[10px] border border-input bg-background px-2.5 py-1.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <Button size="sm" className="h-auto self-stretch" disabled={!nota.trim() || guardandoNota} onClick={guardarNota}>
+                    {guardandoNota ? <Loader2 className="h-4 w-4 animate-spin" /> : "Guardar"}
+                  </Button>
+                </div>
+                {errorNota && <p className="mt-1 text-[11px] text-critico-fg">{errorNota}</p>}
+                <p className="mt-1 text-[10.5px] text-muted-foreground">Queda registrada en Bitácora con la fecha de hoy.</p>
+              </ItemCierre>
+            </ul>
+            <div className="border-t border-border px-4 py-2.5 sm:px-5">
+              <Button size="sm" variant="outline" className="w-full gap-1.5" onClick={() => irAModulo("Bitácora")}>
+                <Printer className="h-3.5 w-3.5" />
+                Generar cierre del día (PDF)
+              </Button>
+              <p className="mt-1.5 flex items-center gap-1 text-[10.5px] text-muted-foreground">
+                <ClipboardCheck className="h-3 w-3" /> El PDF sale de la pestaña Cierre del día en Bitácora.
+              </p>
+            </div>
+          </Seccion>
+
+          <Seccion
+            eyebrow="Personal"
+            titulo="Solicitar personal"
+            accion={
               <Button size="sm" className="gap-1.5" onClick={() => irAModulo("Solicitud de Personal")}>
                 <UserPlus className="h-3.5 w-3.5" />
-                Nueva requisición
+                Nueva solicitud
               </Button>
-            </div>
-
+            }
+            sinPadding
+          >
             {d.requisiciones.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                No hay solicitudes de personal registradas.
-              </p>
+              <EstadoVacio titulo="Sin solicitudes de personal en curso" texto="Cargo, puesto y turno salen del catálogo; la aprobación es doble (RRHH y Operaciones)." />
             ) : (
               <ul className="divide-y divide-border">
                 {d.requisiciones.map((r) => (
-                  <li key={r.id} className="flex items-center gap-3 px-4 py-2.5">
-                    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">
+                  <li key={r.id} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
+                    <span className="lg-num shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-semibold">
                       {r.aprobadas}/{r.totalPasos}
                     </span>
                     <div className="min-w-0 flex-1">
@@ -335,82 +617,34 @@ export function OperacionDelDia() {
                         {r.proyecto ? ` · ${r.proyecto}` : ""} · {r.avance}
                       </p>
                     </div>
-                    <span
-                      className="shrink-0 rounded px-1.5 py-0.5 text-[10px]"
-                      style={{
-                        background:
-                          r.estado === "aprobado" ? "#dcfce7" : r.estado === "rechazado" ? "#fee2e2" : "#fef3c7",
-                        color:
-                          r.estado === "aprobado" ? "#166534" : r.estado === "rechazado" ? "#991b1b" : "#92400e",
-                      }}
-                    >
-                      {r.estado}
-                    </span>
+                    <Chip tono={r.estado === "aprobado" ? "ok" : r.estado === "rechazado" ? "critico" : "atencion"}>{r.estado}</Chip>
                   </li>
                 ))}
               </ul>
             )}
-            <div className="border-t border-border px-4 py-2">
-              <button
-                type="button"
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => irAModulo("Solicitud de Personal")}
-              >
+            <div className="border-t border-border px-4 py-2 sm:px-5">
+              <button type="button" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => irAModulo("Solicitud de Personal")}>
                 Ver todas las solicitudes <ArrowRight className="h-3 w-3" />
               </button>
             </div>
-          </section>
+          </Seccion>
 
-          {/* PAGO DE LA QUINCENA */}
-          <section className="rounded-xl border border-border bg-card">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                  Pago de personal
-                </p>
-                <h2 className="text-sm font-semibold">Quincena en curso</h2>
-              </div>
-              <span className="rounded bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-                en construcción
+          {oh.disponible && (
+            <button
+              type="button"
+              onClick={() => irAModulo("Centro de Coordinación")}
+              className="lg-card flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent sm:px-5"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-acento-tinte text-acento">
+                <Truck className="h-4.5 w-4.5" />
               </span>
-            </div>
-            <div className="px-4 py-4">
-              {d.pago.disponible ? (
-                <>
-                  <p className="text-3xl font-semibold tabular-nums">{COP.format(d.pago.total)}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {NUM.format(d.pago.personas)} personas con pago ·{" "}
-                    {NUM.format(d.turnosProgramadosQuincena)} turnos
-                  </p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    Calculado sobre los turnos y novedades registrados hasta hoy. Cambia hasta el
-                    cierre.
-                  </p>
-                </>
-              ) : (
-                <div className="rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-                  <p className="flex items-center gap-1.5 font-medium">
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                    No se pudo calcular el pago
-                  </p>
-                  <p className="mt-1">{d.pago.mensaje}</p>
-                </div>
-              )}
-              <div className="mt-3 flex gap-2">
-                <Button
-                  size="sm"
-                  className="flex-1 gap-1.5"
-                  onClick={() => irAModulo("Revisión de nómina")}
-                >
-                  <CalendarDays className="h-3.5 w-3.5" />
-                  Ver detalle
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => irAModulo("Tabla Asistencia")}>
-                  <Users className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-          </section>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold">Centro de Coordinación</span>
+                <span className="block text-xs text-muted-foreground">Muelles, órdenes en curso y cierre de vehículos</span>
+              </span>
+              <Scale className="h-4 w-4 shrink-0 text-muted-foreground" />
+            </button>
+          )}
         </div>
       </div>
     </div>

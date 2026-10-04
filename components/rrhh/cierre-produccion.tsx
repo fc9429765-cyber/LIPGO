@@ -235,7 +235,7 @@ export default function CierreProduccion() {
       )}
 
       {/* ===== Envío automático ===== */}
-      <section className="rounded-xl border border-border bg-card">
+      <section className="lg-card">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
           <div>
             <h3 className="flex items-center gap-2 text-sm font-semibold">
@@ -283,7 +283,7 @@ export default function CierreProduccion() {
       </section>
 
       {/* ===== Destinatarios ===== */}
-      <section className="rounded-xl border border-border bg-card">
+      <section className="lg-card">
         <div className="border-b border-border px-4 py-3">
           <h3 className="flex items-center gap-2 text-sm font-semibold">
             <Users className="h-4 w-4" />
@@ -364,7 +364,7 @@ export default function CierreProduccion() {
       </section>
 
       {/* ===== Prueba manual ===== */}
-      <section className="rounded-xl border border-border bg-card">
+      <section className="lg-card">
         <div className="border-b border-border px-4 py-3">
           <h3 className="text-sm font-semibold">Probar con un día concreto</h3>
           <p className="text-[11px] text-muted-foreground">
@@ -429,7 +429,7 @@ export default function CierreProduccion() {
                 { e: "Paros", v: fmtMin(cifras.parosMinutos), s: `${cifras.parosTotal} franjas` },
               ].map((c) => (
                 <div key={c.e} className="rounded-lg border border-border p-2.5">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{c.e}</p>
+                  <p className="lg-eyebrow">{c.e}</p>
                   <p className="mt-0.5 text-lg font-bold">{c.v}</p>
                   <p className="text-[10px] text-muted-foreground">{c.s}</p>
                 </div>
@@ -449,14 +449,14 @@ export default function CierreProduccion() {
 
       {/* ===== Historial ===== */}
       {historial && historial.length > 0 && (
-        <section className="rounded-xl border border-border bg-card">
+        <section className="lg-card">
           <div className="border-b border-border px-4 py-3">
             <h3 className="text-sm font-semibold">Últimos envíos</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                <tr className="border-b border-border text-left lg-eyebrow">
                   <th className="px-4 py-2 font-medium">Cuándo</th>
                   <th className="px-4 py-2 font-medium">Cierre del</th>
                   <th className="px-4 py-2 font-medium">Para</th>

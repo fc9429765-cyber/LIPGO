@@ -205,7 +205,7 @@ export function KpiCard({
 
         {/* Valor principal — con count-up cuando es numerico */}
         <div className="mt-4 flex items-baseline gap-1.5">
-          <span className="text-2xl md:text-3xl font-bold tracking-tight text-foreground tabular-nums">
+          <span className="text-2xl md:text-2xl font-bold tracking-tight text-foreground tabular-nums">
             {displayValue}
           </span>
           {unit && (

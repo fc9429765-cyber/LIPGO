@@ -382,7 +382,7 @@ export function ProgramacionQuincena() {
       {/* Encabezado */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Turnos</p>
+          <p className="lg-eyebrow">Turnos</p>
           <h1 className="text-xl font-semibold">Programación del personal</h1>
         </div>
         <div className="flex items-center gap-1 rounded-lg border border-border px-1 py-0.5">
@@ -429,7 +429,7 @@ export function ProgramacionQuincena() {
       {/* HORARIOS REALES EN USO — se calculan solos de lo que el coordinador
           programó en "Programar el día", no de una tabla de configuración
           fija (que se desactualizaba en cuanto los horarios cambiaban). */}
-      <section className="rounded-xl border border-border bg-card p-4">
+      <section className="lg-card p-4">
         <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
           <div>
             <h2 className="text-sm font-semibold">Horarios reales en uso esta quincena</h2>
@@ -482,7 +482,7 @@ export function ProgramacionQuincena() {
 
         {/* ---------------- COBERTURA ---------------- */}
         <TabsContent value="cobertura" className="pt-3">
-          <section className="rounded-xl border border-border bg-card">
+          <section className="lg-card">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
               <div>
                 <h2 className="text-sm font-semibold">Demanda por puesto</h2>
@@ -683,7 +683,7 @@ export function ProgramacionQuincena() {
 
         {/* ---------------- EQUIPOS Y PATRONES ---------------- */}
         <TabsContent value="detalle" className="pt-3">
-          <section className="rounded-xl border border-border bg-card">
+          <section className="lg-card">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
               <div>
                 <h2 className="text-sm font-semibold">Detalle por persona</h2>
@@ -859,7 +859,7 @@ export function ProgramacionQuincena() {
                   <tfoot>
                     <tr>
                       <th
-                        className="sticky bottom-0 left-0 z-30 border-t border-border bg-card px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+                        className="sticky bottom-0 left-0 z-30 border-t border-border bg-card px-3 py-2 text-left lg-eyebrow"
                         onMouseEnter={() => setHovCol(null)}
                       >
                         Personas / día
@@ -916,7 +916,7 @@ export function ProgramacionQuincena() {
           <div
             role="dialog"
             aria-label={`Detalle del turno de ${celdaSel.nombre}`}
-            className="fixed z-50 w-[260px] rounded-xl border border-border bg-card p-3 shadow-2xl"
+            className="fixed z-50 w-[260px] lg-card p-3 shadow-2xl"
             style={{ left: celdaSel.x, top: celdaSel.y }}
           >
             <p className="text-sm font-semibold leading-tight">{celdaSel.nombre}</p>

@@ -87,7 +87,7 @@ export default function SeccionUtilidadNeta({
                 </p>
                 <p
                   className={cn(
-                    "mt-1 text-3xl font-bold tabular-nums sm:text-4xl",
+                    "mt-1 text-2xl font-bold tabular-nums sm:text-4xl",
                     esUtilidad ? "text-primary" : "text-destructive",
                   )}
                 >
@@ -109,7 +109,7 @@ export default function SeccionUtilidadNeta({
                   />
                 )}
                 <div>
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <p className="lg-eyebrow">
                     Margen neto
                   </p>
                   <p

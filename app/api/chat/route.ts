@@ -273,6 +273,7 @@ COLUMNAS CLAVE (cablea cada pregunta a su tabla + columna EXACTA):
     PEDIDOS (Tabla: pedidoscabecera):
     - Número de pedidos: contar:true. Fecha: "fecha" (o "fecha_programada"). Valor: sumar:"total_linea" o "total_pagar".
     - Aprobación: "aprobado" ('si'/'no'). Estado de entrega: "estado". Cliente: "cliente".
+    - Valores de "estado": NULL = nuevo sin aprobar · 'aprobado' · 'parcial' · 'entregado' · 'entrega parcial' · 'anulado' · 'no entregado' (depurado: nunca se entregó; tiene "motivo_no_entrega"). ¡OJO: 'no entregado' CONTIENE la palabra entregado; nunca uses ilike '%entregado%'. Para "pendientes/abiertos" excluye entregado, entrega parcial, anulado y no entregado e incluye los NULL.
 
     INVENTARIO / stock (Tabla: saldoinvdetalle):
     - Existencias por producto / lote / ubicación. Para "cuántos productos/registros" usa contar:true.

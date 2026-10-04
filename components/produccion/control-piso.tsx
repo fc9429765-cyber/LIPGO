@@ -334,7 +334,7 @@ export default function ControlPiso() {
     <div className="min-h-full bg-background p-4 text-foreground md:p-6">
       <div className="space-y-6">
         {/* Header */}
-        <header className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 md:flex-row md:items-center md:justify-between">
+        <header className="flex flex-col gap-3 lg-card p-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/30">
               <Activity className="h-6 w-6" />
@@ -1176,7 +1176,7 @@ function LiveTab() {
             </div>
             <div className="flex flex-col items-center sm:items-end">
               <span
-                className={`text-3xl font-bold sm:text-4xl ${
+                className={`text-2xl font-bold sm:text-4xl ${
                   inactCritico
                     ? "animate-pulse text-destructive"
                     : maquina && !maquina.parada
@@ -1305,7 +1305,7 @@ function LiveTab() {
       </section>
 
       {/* Disponibilidad de maquina */}
-      <section className="rounded-xl border border-border bg-card p-4">
+      <section className="lg-card p-4">
         <div className="mb-3 flex items-center gap-2">
           <Gauge className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold text-card-foreground">
@@ -1343,7 +1343,7 @@ function LiveTab() {
       </section>
 
       {/* Velocidad de produccion cada 2 min (historial_intervalos) */}
-      <section className="rounded-xl border border-border bg-card p-4">
+      <section className="lg-card p-4">
         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
@@ -1402,7 +1402,7 @@ function LiveTab() {
       </section>
 
       {/* Cobertura del turno cada 2 min (barra continua, sin gaps) */}
-      <section className="rounded-xl border border-border bg-card p-4">
+      <section className="lg-card p-4">
         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <Activity className="h-4 w-4 text-muted-foreground" />
@@ -1475,7 +1475,7 @@ function LiveTab() {
           <div className="mt-3 border-t border-border pt-3">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <div className="rounded-lg border border-border bg-muted/30 p-2">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                <p className="lg-eyebrow">
                   Paro total
                 </p>
                 <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
@@ -1487,7 +1487,7 @@ function LiveTab() {
               </div>
 
               <div className="rounded-lg border border-border bg-muted/30 p-2">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                <p className="lg-eyebrow">
                   Justificado
                 </p>
                 <p className="mt-0.5 text-lg font-semibold tabular-nums text-chart-4">
@@ -1505,7 +1505,7 @@ function LiveTab() {
                     : "border-border bg-muted/30"
                 }`}
               >
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                <p className="lg-eyebrow">
                   Sin justificar
                 </p>
                 <p
@@ -1521,7 +1521,7 @@ function LiveTab() {
               </div>
 
               <div className="rounded-lg border border-border bg-muted/30 p-2">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                <p className="lg-eyebrow">
                   % sin explicar
                 </p>
                 <p
@@ -1550,7 +1550,7 @@ function LiveTab() {
             {/* En que se va el tiempo que SI esta justificado. */}
             {parosResumen.porCategoria.length > 0 && (
               <div className="mt-2">
-                <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                <p className="mb-1 lg-eyebrow">
                   Justificado por categoría
                 </p>
                 <div className="flex flex-wrap gap-1.5">
@@ -1581,7 +1581,7 @@ function LiveTab() {
       {/* Rendimiento dinamico (donut) + cumplimiento hora a hora */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Donut de rendimiento actual */}
-        <section className="rounded-xl border border-border bg-card p-4 lg:col-span-1">
+        <section className="lg-card p-4 lg:col-span-1">
           <div className="mb-2 flex items-center gap-2">
             <Gauge className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold text-card-foreground">Rendimiento Actual</h2>
@@ -1644,7 +1644,7 @@ function LiveTab() {
         </section>
 
         {/* Cumplimiento hora a hora */}
-        <section className="rounded-xl border border-border bg-card p-4 lg:col-span-2">
+        <section className="lg-card p-4 lg:col-span-2">
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               <Activity className="h-4 w-4 text-muted-foreground" />
@@ -1717,7 +1717,7 @@ function LiveTab() {
       </div>
 
       {/* Resumen del dia por producto */}
-      <section className="overflow-hidden rounded-xl border border-border bg-card">
+      <section className="overflow-hidden lg-card">
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">
           <span className="relative flex h-2.5 w-2.5">
             {realtimeOk && (
@@ -1966,7 +1966,7 @@ function MonthlyTab({ nombreProducto }: { nombreProducto: (id: number) => string
       </div>
 
       {/* Tendencia diaria */}
-      <section className="rounded-xl border border-border bg-card p-4">
+      <section className="lg-card p-4">
         <h2 className="mb-3 text-sm font-semibold text-card-foreground">
           Tendencia Diaria — {MESES[month]} {year} (Bultos vs Averías)
         </h2>
@@ -2020,7 +2020,7 @@ function MonthlyTab({ nombreProducto }: { nombreProducto: (id: number) => string
       </section>
 
       {/* Top productos con averias */}
-      <section className="overflow-hidden rounded-xl border border-border bg-card">
+      <section className="overflow-hidden lg-card">
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">
           <AlertOctagon className="h-4 w-4 text-destructive" />
           <h2 className="text-sm font-semibold text-card-foreground">
@@ -2235,7 +2235,7 @@ function AnnualTab({ nombreProducto }: { nombreProducto: (id: number) => string 
       </div>
 
       {/* Tendencia mensual (line) */}
-      <section className="rounded-xl border border-border bg-card p-4">
+      <section className="lg-card p-4">
         <h2 className="mb-3 text-sm font-semibold text-card-foreground">
           Tendencia Mensual {year} (Unidades y Desperdicio %)
         </h2>
@@ -2290,7 +2290,7 @@ function AnnualTab({ nombreProducto }: { nombreProducto: (id: number) => string 
       </section>
 
       {/* Product mix (pie) */}
-      <section className="rounded-xl border border-border bg-card p-4">
+      <section className="lg-card p-4">
         <h2 className="mb-3 text-sm font-semibold text-card-foreground">Mix de Producción por Producto ({year})</h2>
         {loading ? (
           <EmptyState loading text="" />
@@ -2504,7 +2504,7 @@ function ReportTab({ nombreProducto }: { nombreProducto: (id: number) => string 
   return (
     <div className="space-y-6">
       {/* Filtros del reporte */}
-      <section className="rounded-xl border border-border bg-card p-4">
+      <section className="lg-card p-4">
         <div className="mb-4 flex items-center gap-2">
           <FileText className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold text-card-foreground">Reporte de Producción</h2>
@@ -2593,7 +2593,7 @@ function ReportTab({ nombreProducto }: { nombreProducto: (id: number) => string 
       </div>
 
       {/* Tabla de detalle */}
-      <section className="overflow-hidden rounded-xl border border-border bg-card">
+      <section className="overflow-hidden lg-card">
         <div className="border-b border-border px-4 py-3">
           <h3 className="text-sm font-semibold text-card-foreground">
             Detalle de Registros{" "}
@@ -2743,7 +2743,7 @@ function KpiCard({
             ? "ring-primary/30 bg-primary/10"
             : "ring-border bg-muted"
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
+    <div className="lg-card p-4">
       <div className="flex items-center justify-between gap-3">
         <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
         <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1 ${ring} ${accentClass}`}>

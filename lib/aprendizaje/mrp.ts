@@ -1,4 +1,4 @@
-// Guias del modulo Aprendizaje — area "mrp".
+// Guias del modulo Aprendizaje — subgrupo "Materiales · MRP" de Producción (antes área "mrp").
 // Generado por entregas; la clave `modulo` debe coincidir EXACTA con el menu.
 import type { ContenidoAprendizaje } from "@/lib/aprendizaje-content"
 

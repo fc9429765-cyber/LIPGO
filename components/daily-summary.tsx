@@ -68,7 +68,7 @@ export function DailySummary() {
             >
               <Truck className="h-[18px] w-[18px]" />
             </span>
-            <span className="text-3xl font-extrabold tabular-nums tracking-tight" style={{ color: "#1f8fb0" }}>
+            <span className="text-3xl font-bold tabular-nums tracking-tight" style={{ color: "#1f8fb0" }}>
               {loading ? "…" : stats.ordenesHoy}
             </span>
             <span className="ml-auto text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
@@ -105,7 +105,7 @@ export function DailySummary() {
               </text>
             </svg>
             <div>
-              <div className="text-2xl font-extrabold tabular-nums tracking-tight text-foreground">
+              <div className="lg-num text-2xl font-bold tracking-tight text-foreground">
                 {loading ? "…" : ton}
                 <span className="ml-0.5 text-sm font-bold text-muted-foreground">t</span>
               </div>
@@ -125,7 +125,7 @@ export function DailySummary() {
             >
               <TrendingUp className="h-[18px] w-[18px]" />
             </span>
-            <span className="text-3xl font-extrabold tabular-nums tracking-tight" style={{ color: "#2f9b64" }}>
+            <span className="text-3xl font-bold tabular-nums tracking-tight" style={{ color: "#2f9b64" }}>
               {loading ? "…" : stats.pedidosHoy}
             </span>
             <span className="ml-auto text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">

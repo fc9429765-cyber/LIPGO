@@ -199,7 +199,7 @@ export default function SolicitudDePersonal() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Solicitud de Personal</h1>
+        <h1 className="text-2xl font-bold">Solicitud de Personal</h1>
         <p className="text-gray-500">Gestiona vacantes y solicitudes de personal</p>
       </div>
 

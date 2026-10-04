@@ -406,7 +406,7 @@ export default function AttendanceRegistration() {
         <Card className="border-border/60 overflow-hidden">
           <CardContent className="p-5 sm:p-8 space-y-6">
             <div className="text-center space-y-1.5">
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-balance">
+              <h1 className="text-2xl sm:text-2xl font-bold tracking-tight text-balance">
                 Registro de Asistencia
               </h1>
               <p className="text-sm sm:text-base text-muted-foreground text-balance">
@@ -528,7 +528,7 @@ export default function AttendanceRegistration() {
                         <LogIn className="h-8 w-8" strokeWidth={2.5} />
                       </span>
                       <span className="flex flex-col items-center leading-tight">
-                        <span className="text-2xl sm:text-3xl font-extrabold tracking-wide">
+                        <span className="text-2xl sm:text-3xl font-bold tracking-wide">
                           ENTRADA
                         </span>
                         <span className="text-[11px] uppercase tracking-widest opacity-85">
@@ -565,7 +565,7 @@ export default function AttendanceRegistration() {
                         <LogOut className="h-8 w-8" strokeWidth={2.5} />
                       </span>
                       <span className="flex flex-col items-center leading-tight">
-                        <span className="text-2xl sm:text-3xl font-extrabold tracking-wide">
+                        <span className="text-2xl sm:text-3xl font-bold tracking-wide">
                           SALIDA
                         </span>
                         <span className="text-[11px] uppercase tracking-widest opacity-85">

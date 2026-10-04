@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Cifra, Esqueleto, Eyebrow } from "@/components/ui/lipgo"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -348,8 +349,9 @@ function TablaAsistenciaDiaria() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Tabla de Asistencia</h2>
-          <p className="text-muted-foreground">
+          <Eyebrow>Personal · {esHoy ? "hoy" : "día anterior (solo lectura)"}</Eyebrow>
+          <h1 className="text-xl font-bold leading-tight tracking-tight sm:text-2xl">Tabla de Asistencia</h1>
+          <p className="text-xs text-muted-foreground sm:text-sm">
             {esHoy ? "Registro de asistencia del día de hoy" : "Consulta de un día anterior (solo lectura)"}
           </p>
         </div>
@@ -380,43 +382,28 @@ function TablaAsistenciaDiaria() {
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="flex flex-col gap-4" aria-busy aria-label="Cargando asistencia">
+          <div className="lg-card grid grid-cols-3 gap-6 p-5">
+            <Esqueleto lineas={3} />
+            <Esqueleto lineas={3} />
+            <Esqueleto lineas={3} />
+          </div>
+          <div className="lg-card p-5"><Esqueleto lineas={8} /></div>
         </div>
       ) : (
         <>
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Personal</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{records.length}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Presentes</CardTitle>
-            <Clock className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{presentCount}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ausentes</CardTitle>
-            <Clock className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{absentCount}</div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Resumen del día: mismos conteos de siempre, en la franja de cifras. */}
+      <section className="lg-card grid grid-cols-3 gap-x-4 gap-y-4 p-4 sm:p-5">
+        <Cifra label="Total personal" valor={records.length} sub={<span className="inline-flex items-center gap-1"><Users className="h-3 w-3" /> activos del proyecto</span>} />
+        <Cifra
+          label="Presentes"
+          valor={presentCount}
+          tono={records.length > 0 && presentCount / records.length >= 0.95 ? "ok" : presentCount > 0 ? "atencion" : "neutro"}
+          progreso={records.length > 0 ? (presentCount / records.length) * 100 : undefined}
+          sub={records.length > 0 ? `${Math.round((presentCount / records.length) * 100)} % del personal` : "sin personal cargado"}
+        />
+        <Cifra label="Ausentes" valor={absentCount} tono={absentCount > 0 ? "critico" : "ok"} sub={<span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" /> sin marcar hoy</span>} />
+      </section>
 
       {/* Attendance Table */}
       <Card>

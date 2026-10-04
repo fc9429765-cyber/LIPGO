@@ -4,12 +4,12 @@ import React from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Clock } from "lucide-react"
+import { Truck } from "lucide-react"
 import { toast } from "sonner"
 import { registerVehicleAppointment } from "@/lib/vehicle-actions"
 import { useAuth } from "@/components/auth-provider"
+import { Eyebrow } from "@/components/ui/lipgo"
 import {
   getCategorias,
   getTransportes,
@@ -164,16 +164,20 @@ export function VehicleAppointmentsForm() {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-2 md:px-0">
-      <div className="bg-primary rounded-t-lg p-2 md:p-4 flex items-center gap-2">
-        <Clock className="h-4 w-4 md:h-5 md:w-5 text-white" />
+    <div className="mx-auto w-full max-w-4xl px-2 sm:px-4">
+      {/* Cabecera */}
+      <div className="mb-4 flex items-start gap-3">
+        <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-acento-tinte text-acento">
+          <Truck className="h-5 w-5" />
+        </span>
         <div>
-          <h1 className="text-sm md:text-lg font-bold text-white">Registrar Vehículos</h1>
-          <p className="text-[10px] md:text-xs text-white/90 mt-0.5">Complete los datos del vehículo y conductor</p>
+          <Eyebrow>Portería y vehículos</Eyebrow>
+          <h1 className="text-lg font-semibold leading-tight">Registrar Vehículos</h1>
+          <p className="text-xs text-muted-foreground">Datos del vehículo y el conductor al llegar a planta.</p>
         </div>
       </div>
 
-      <Card className="border-t-0 rounded-t-none p-3 md:p-6">
+      <div className="lg-card p-4 sm:p-6">
         <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
             <div className="space-y-2">
@@ -319,12 +323,12 @@ export function VehicleAppointmentsForm() {
           </div>
 
           {placaError && (
-            <div className="text-red-600 text-xs md:text-sm font-medium text-center mt-2">
+            <div className="mt-2 text-center text-xs font-medium text-critico-fg md:text-sm">
               {placaError}
             </div>
           )}
         </form>
-      </Card>
+      </div>
     </div>
   )
 }

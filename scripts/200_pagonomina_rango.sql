@@ -100,6 +100,22 @@ as $fn$
             -- TOTAL, mismo criterio que la de Avimol arriba.
             AND NOT (cabeceraoc.tipooperacion = 'proyeccion'::text)
             AND (cabeceraoc.fechacargue BETWEEN (p_desde - 7) AND (p_hasta + 7))
+            -- HUEVOS (2026-09-30, gerencia: "los huevos no tienen nada que ver con las
+            -- toneladas y se pagan por turno"): el descargue de Huevos (Avimol) se
+            -- cobra por unidad y a los auxiliares se les paga por TURNO, no por
+            -- destajo; lo que la orden guarda como "peso" son unidades (una del
+            -- 30-sep traía 102.000). Exclusión TOTAL de la orden en nómina.
+            -- OJO: "Empaque MP" (subcategoría MATERIA PRIMA) NO se excluye aquí: se
+            -- factura por unidad igual que Huevos, pero SÍ se paga a los auxiliares
+            -- por este descargue (gerencia, 30-sep-2026). Solo queda fuera de los
+            -- INDICADORES de toneladas (lib/ordenes-por-unidad.ts), no de la nómina.
+            AND NOT EXISTS (
+                SELECT 1
+                  FROM detalleoc du
+                  JOIN productos pu ON pu.nombre = du.producto
+                 WHERE du.numeroorden = cabeceraoc.ordendecargue
+                   AND upper(btrim(pu.subcategoria)) = 'HUEVOS'::text
+            )
         ), produccion_diaria AS (
          SELECT t.fechacargue AS fecha,
             t.nombre_auxiliar AS persona,
@@ -266,6 +282,13 @@ as $fn$
           WHERE ((cabeceraoc.fincargue IS NOT NULL) AND ((cabeceraoc.fincargue)::text <> ''::text))
             AND NOT ((cabeceraoc.idempresa = 2) AND (cabeceraoc.tipooperacion = 'Distribucion'::text))
             AND NOT (cabeceraoc.tipooperacion = 'proyeccion'::text)
+            AND NOT EXISTS (
+                SELECT 1
+                  FROM detalleoc du
+                  JOIN productos pu ON pu.nombre = du.producto
+                 WHERE du.numeroorden = cabeceraoc.ordendecargue
+                   AND upper(btrim(pu.subcategoria)) = 'HUEVOS'::text
+            )
         UNION
          SELECT DISTINCT registroasistencia.nombre AS persona
            FROM registroasistencia

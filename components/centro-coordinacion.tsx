@@ -18,6 +18,7 @@ import { setVisibleInterval } from "@/lib/polling"
 import { useAuth } from "@/components/auth-provider"
 import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
+import { Esqueleto } from "@/components/ui/lipgo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -46,7 +47,6 @@ import {
   asignarOrdenAMuelle,
   liberarMuelle,
   getHojaDelMuelle,
-  marcarPickingConfirmadoPorExcepcion,
   getParteDeTurno,
   type CentroCoordinacionData,
   type OrdenOperativa,
@@ -59,7 +59,6 @@ import {
   assignPersonnelToOrder,
   pausarOrden,
   reanudarOrden,
-  confirmPicking,
   type PersonnelEmployee,
 } from "@/lib/picking-actions"
 import { PickingPhotoUploadDialog } from "@/components/picking-photo-upload-dialog"
@@ -232,7 +231,6 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
   const [photoDialogOpen, setPhotoDialogOpen] = useState(false)
 
   const [pausingOrder, setPausingOrder] = useState<string | null>(null)
-  const [confirmandoPickingId, setConfirmandoPickingId] = useState<number | null>(null)
 
   // Parte de turno — carga bajo demanda, solo cuando se abre. Control manual
   // (no <details>/<summary>): más predecible que depender del toggle nativo.
@@ -413,59 +411,18 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
   }
 
   /**
-   * Confirmación rápida de Picking desde el propio Centro de Coordinación.
-   * Problema real (2026-08-29/30): el montacarguista muchas veces verifica
-   * físicamente pero se va sin darle "Confirmar Picking" en Picking — la
-   * orden igual se cierra (esa pantalla nunca exigió picking confirmado),
-   * dejando líneas de `invtrans` en "por descontar" para siempre (el
-   * inventario real las excluye). Se detectaron 15 órdenes ya cerradas así.
-   * Ahora el servidor SÍ bloquea el cierre sin picking confirmado (ver
-   * upload-picking-photos/route.ts) — esto le da al coordinador, que es
-   * quien de verdad cierra la orden, una forma de resolverlo ahí mismo sin
-   * depender de que el montacarguista vuelva: confirma las líneas tal cual
-   * quedaron asignadas (mismo camino que "Confirmar Picking" sin QR).
+   * "Ir a Picking": lleva al coordinador a Picking con la orden ya abierta
+   * para que verifique línea por línea (lote y cantidad) y confirme allá.
+   *
+   * Aquí existió hasta el 2026-10-02 un "Confirmar Picking" por excepción que
+   * aprobaba las líneas tal cual quedaron asignadas, sin verificar nada. Se
+   * retiró por decisión de la gerencia: en la última semana de septiembre
+   * (ID3) 192 de 209 salidas se confirmaron así y el conteo del 1 de octubre
+   * no cuadró (lotes cruzados y cantidades que no salieron como se registró).
+   * Las líneas "por descontar" solo se aprueban desde Picking.
    */
-  const confirmarPickingRapido = async (orden: OrdenOperativa) => {
-    setConfirmandoPickingId(orden.orderId)
-    try {
-      let hoja = hojasPorOrden.get(orden.orderId)
-      if (!hoja) {
-        const r = await getHojaDelMuelle(orden.orderId)
-        if (r.success && r.data) {
-          hoja = r.data
-          setHojasPorOrden((prev) => new Map(prev).set(orden.orderId, r.data!))
-        }
-      }
-      const pendientes = (hoja?.lineas ?? []).filter((l) => String(l.status || "").toLowerCase() !== "aprobado")
-      if (pendientes.length === 0) {
-        toast({ title: "Nada pendiente", description: "Ya no hay líneas de picking sin confirmar." })
-        return
-      }
-      const items = pendientes.map((l) => ({ id: l.id, cantidad: l.cantidad }))
-      const r2 = await confirmPicking(orden.orderId, orden.ordendecargue, items)
-      if (r2.success) {
-        // Traza que esto fue una EXCEPCIÓN (coordinador, no montacarguista) —
-        // no bloquea el flujo si falla, es solo para auditoría.
-        await marcarPickingConfirmadoPorExcepcion(
-          pendientes.map((l) => l.id),
-          profile?.usuario || "Coordinador",
-        )
-        toast({ title: "Picking confirmado", description: `${pendientes.length} línea(s) verificada(s) — quedó registrado como excepción del coordinador.` })
-        // Fuerza recarga de la hoja (sus líneas ya cambiaron de estado) la
-        // próxima vez que se expanda, y refresca lineasAprobadas/lineasTotal
-        // del tablero (afecta el checklist "Realizar Picking").
-        setHojasPorOrden((prev) => {
-          const next = new Map(prev)
-          next.delete(orden.orderId)
-          return next
-        })
-        await cargar()
-      } else {
-        toast({ title: "Error", description: r2.message || "No se pudo confirmar el picking", variant: "destructive" })
-      }
-    } finally {
-      setConfirmandoPickingId(null)
-    }
+  const irAPicking = (orden: OrdenOperativa) => {
+    window.dispatchEvent(new CustomEvent("lipgo:ir-a-picking", { detail: { orderId: orden.orderId } }))
   }
 
   const togglePausa = async (orden: OrdenOperativa) => {
@@ -555,8 +512,18 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
 
       <div className="space-y-3 p-3 md:space-y-4 md:p-6">
         {loading && !data ? (
-          <div className="flex items-center justify-center py-16 text-muted-foreground">
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Cargando Centro de Coordinación...
+          <div className="flex flex-col gap-4" aria-busy aria-label="Cargando Centro de Coordinación">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className={`lg-card p-4 ${i === 0 ? "col-span-2" : ""}`}>
+                  <Esqueleto lineas={3} />
+                </div>
+              ))}
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+              <div className="lg-card p-5"><Esqueleto lineas={6} /></div>
+              <div className="lg-card p-5"><Esqueleto lineas={5} /></div>
+            </div>
           </div>
         ) : !data ? (
           <p className="py-8 text-sm text-muted-foreground">No se pudo cargar la información.</p>
@@ -603,13 +570,13 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
               {/* Ancho completo tambien en celular (`col-span-2`): esta tarjeta
                   lleva barra de progreso y tres lineas de texto, y en media
                   pantalla de 360 px los numeros se partian. */}
-              <div className="col-span-2 rounded-lg border bg-card p-3 shadow-sm lg:col-span-2">
+              <div className="col-span-2 lg-card p-4 lg:col-span-2">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Cargado hoy</div>
+                  <div className="lg-eyebrow">Cargado hoy</div>
                   <Badge className={estadoColor[data.kpis.estadoTurno]}>{estadoLabel[data.kpis.estadoTurno]}</Badge>
                 </div>
                 <div className="mt-0.5 flex items-baseline gap-1">
-                  <span className="text-2xl font-extrabold tabular-nums">{t1(data.kpis.cargadoHoyTon)}</span>
+                  <span className="lg-num text-2xl font-bold">{t1(data.kpis.cargadoHoyTon)}</span>
                   <span className="text-xs text-muted-foreground">/ {t1(data.kpis.metaTonDia)} t meta del día</span>
                 </div>
                 <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
@@ -636,18 +603,18 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
                   </span>
                 </div>
               </div>
-              <div className="rounded-lg border bg-card p-3 shadow-sm">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Ritmo real</div>
+              <div className="lg-card p-4">
+                <div className="lg-eyebrow">Ritmo real</div>
                 <div className="mt-0.5 flex items-baseline gap-1">
-                  <span className="text-2xl font-extrabold tabular-nums">{t2(data.kpis.ritmoTonHora)}</span>
+                  <span className="lg-num text-2xl font-bold">{t2(data.kpis.ritmoTonHora)}</span>
                   <span className="text-xs text-muted-foreground">t/h</span>
                 </div>
                 <div className="text-[11px] text-muted-foreground">capacidad {t2(data.kpis.capacidadTonHora)} t/h</div>
               </div>
-              <div className="rounded-lg border bg-card p-3 shadow-sm">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Cumplimiento SLA</div>
+              <div className="lg-card p-4">
+                <div className="lg-eyebrow">Cumplimiento SLA</div>
                 <span
-                  className={`text-2xl font-extrabold tabular-nums ${
+                  className={`lg-num text-2xl font-bold ${
                     data.kpis.slaCumplimientoPct === null
                       ? "text-muted-foreground"
                       : data.kpis.slaCumplimientoPct >= 90
@@ -663,10 +630,10 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
                   <div className="text-[11px] font-medium text-rose-600 dark:text-rose-400">{data.kpis.ordenesEnRiesgo} vencida(s)</div>
                 )}
               </div>
-              <div className="rounded-lg border bg-card p-3 shadow-sm">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Personal en piso</div>
+              <div className="lg-card p-4">
+                <div className="lg-eyebrow">Personal en piso</div>
                 <div className="mt-0.5 flex items-baseline gap-1">
-                  <span className="text-2xl font-extrabold tabular-nums">{data.kpis.personalEnPiso}</span>
+                  <span className="lg-num text-2xl font-bold">{data.kpis.personalEnPiso}</span>
                   <span className="text-xs text-muted-foreground">aux.</span>
                 </div>
                 {/* Un solo renglon, como el resto de las tarjetas: dos lineas
@@ -701,7 +668,7 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
                 }`}
               >
                 <div
-                  className={`text-[10px] font-semibold uppercase tracking-wide ${
+                  className={`lg-eyebrow ${
                     data.kpis.esperaLotesPromedioMin === null
                       ? "text-muted-foreground"
                       : data.kpis.esperaLotesPromedioMin >= 60
@@ -715,7 +682,7 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
                 </div>
                 <div className="mt-0.5 flex items-baseline gap-1">
                   <span
-                    className={`text-2xl font-extrabold tabular-nums ${
+                    className={`lg-num text-2xl font-bold ${
                       data.kpis.esperaLotesPromedioMin === null
                         ? "text-muted-foreground"
                         : data.kpis.esperaLotesPromedioMin >= 60
@@ -764,17 +731,17 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
                 </div>
               </button>
               <div className="rounded-lg border border-[#0e3b3b] bg-[#0e3b3b] p-3 text-white">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-[#8fd3ce]">Proyección de cierre</div>
-                <div className="text-2xl font-extrabold tabular-nums text-[#21d4c8]">{data.kpis.proyeccionHoraFinCola || "—"}</div>
+                <div className="lg-eyebrow text-[#8fd3ce]">Proyección de cierre</div>
+                <div className="lg-num text-2xl font-bold text-[#21d4c8]">{data.kpis.proyeccionHoraFinCola || "—"}</div>
                 <div className="truncate whitespace-nowrap text-[11px] text-[#cfe9e6]">
                   muelles {data.kpis.muellesOcupados}/{data.kpis.muellesTotal}
                   {data.colaSinMuelle.length > 0 && ` · ${data.colaSinMuelle.length} en cola`}
                 </div>
               </div>
-              <div className="rounded-lg border bg-card p-3 shadow-sm">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Tiempo de cargue</div>
+              <div className="lg-card p-4">
+                <div className="lg-eyebrow">Tiempo de cargue</div>
                 <div className="mt-0.5 flex items-baseline gap-1">
-                  <span className="text-2xl font-extrabold tabular-nums">
+                  <span className="lg-num text-2xl font-bold">
                     {data.kpis.tiempoCargueProedioMin ?? "—"}
                   </span>
                   {data.kpis.tiempoCargueProedioMin != null && <span className="text-xs text-muted-foreground">min</span>}
@@ -790,10 +757,10 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
                     <button
                       key={f.value}
                       onClick={() => setFiltroTipo(f.value)}
-                      className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
                         filtroTipo === f.value
-                          ? "border-[#12706b] bg-[#12706b] text-white"
-                          : "border-border bg-background text-muted-foreground hover:bg-muted"
+                          ? "border-foreground bg-foreground text-background"
+                          : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground"
                       }`}
                     >
                       {f.label}
@@ -816,7 +783,7 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
                   </button>
                 </div>
 
-                <div className="rounded-xl border bg-card shadow-sm">
+                <div className="lg-card">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-3 py-2.5 md:px-4 md:py-3">
                     <h2 className="text-sm font-bold">Distribución de muelles</h2>
                     <span className="hidden text-[11px] text-muted-foreground sm:inline">— toca un muelle para operarlo</span>
@@ -860,8 +827,7 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
                         onReasignar={() => slot.orden && abrirAsignar(slot.orden)}
                         onCambioTipoPago={cargar}
                         onCambioModoCarga={cargar}
-                        onConfirmarPicking={() => slot.orden && confirmarPickingRapido(slot.orden)}
-                        confirmandoPickingId={confirmandoPickingId}
+                        onIrAPicking={() => slot.orden && irAPicking(slot.orden)}
                         pausingOrder={pausingOrder}
                         puedeConcluirSinPersonal={slot.orden ? puedeConcluirSinPersonal(slot.orden) : false}
                         metaPorHoraTrabajador={data.kpis.metaPorHoraTrabajador}
@@ -988,7 +954,7 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
               </div>
             </div>
 
-            <div className="rounded-xl border bg-card shadow-sm">
+            <div className="lg-card">
               <button
                 type="button"
                 onClick={toggleParteTurno}
@@ -1380,8 +1346,7 @@ function MuelleRow({
   onReasignar,
   onCambioTipoPago,
   onCambioModoCarga,
-  onConfirmarPicking,
-  confirmandoPickingId,
+  onIrAPicking,
   pausingOrder,
   puedeConcluirSinPersonal,
   metaPorHoraTrabajador,
@@ -1401,8 +1366,7 @@ function MuelleRow({
   onReasignar: () => void
   onCambioTipoPago: () => void
   onCambioModoCarga: () => void
-  onConfirmarPicking: () => void
-  confirmandoPickingId: number | null
+  onIrAPicking: () => void
   pausingOrder: string | null
   puedeConcluirSinPersonal: boolean
   metaPorHoraTrabajador: number
@@ -1449,7 +1413,7 @@ function MuelleRow({
         className="grid w-full grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 p-2 text-left disabled:cursor-default sm:grid-cols-[64px_minmax(0,1fr)_auto_auto] sm:gap-3 sm:p-2.5"
       >
         <div className={`flex h-12 w-12 flex-col items-center justify-center rounded-xl sm:h-16 sm:w-16 ${badgeColor} ${badgeTextColor} shadow ${o?.slaEnRiesgo ? "animate-pulse" : ""}`}>
-          <div className="text-xl font-extrabold leading-none sm:text-2xl">{slot.muelle}</div>
+          <div className="text-xl font-bold leading-none sm:text-2xl">{slot.muelle}</div>
           <div className="mt-0.5 text-[7px] font-bold uppercase leading-tight tracking-wide sm:text-[8px]">
             {estado === "libre" ? "Libre" : estado === "vencido" ? "Fuera de tiempo" : o?.pausado ? "Pausado" : "Ocupado"}
           </div>
@@ -1517,7 +1481,7 @@ function MuelleRow({
             <div className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
               {o.pausado ? "En pausa" : "Finaliza aprox."}
             </div>
-            <div className={`text-base font-extrabold tabular-nums sm:text-lg ${estado === "vencido" ? "text-rose-700 dark:text-rose-400" : "text-emerald-700 dark:text-emerald-400"}`}>
+            <div className={`text-base font-bold tabular-nums sm:text-lg ${estado === "vencido" ? "text-rose-700 dark:text-rose-400" : "text-emerald-700 dark:text-emerald-400"}`}>
               {o.pausado ? "—" : eta || "—"}
             </div>
             <div className="text-[9px] text-muted-foreground">
@@ -1568,19 +1532,18 @@ function MuelleRow({
           {pasoActual?.role === "op" && pasoActual.label === "Realizar Picking" ? (
             <div className="space-y-2 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
               <div>
-                🚜 <strong className="text-foreground">Realizar Picking</strong> lo hace normalmente el operario de montacargas
-                desde Picking (celular, con QR) — pero si ya verificó físicamente y no alcanzó a confirmarlo ahí, puedes
-                confirmarlo tú mismo aquí para no dejar la orden sin poder cerrarse.
+                🚜 <strong className="text-foreground">Realizar Picking</strong> lo hace el operario de montacargas desde
+                Picking (celular, con QR). Si lo vas a tramitar tú, se hace allá mismo: se verifica cada línea (lote y
+                cantidad) y se confirma. Desde aquí no se aprueban líneas sin verificar.
               </div>
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 border-amber-400 text-xs text-amber-800 hover:bg-amber-50 dark:text-amber-300"
-                onClick={onConfirmarPicking}
-                disabled={confirmandoPickingId === o.orderId}
+                className="h-7 border-teal-600 text-xs text-teal-800 hover:bg-teal-50 dark:text-teal-300"
+                onClick={onIrAPicking}
               >
                 <CheckSquare className="mr-1 h-3 w-3" />
-                {confirmandoPickingId === o.orderId ? "Confirmando..." : "Confirmar Picking"}
+                Ir a Picking de esta orden
               </Button>
             </div>
           ) : pasoActual?.role === "op" ? (

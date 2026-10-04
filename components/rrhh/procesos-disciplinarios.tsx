@@ -216,7 +216,7 @@ export default function ProcesosDisciplinarios() {
   return (
     <div className="space-y-4 p-4">
       <div>
-        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Disciplinarios</p>
+        <p className="lg-eyebrow">Disciplinarios</p>
         <h1 className="text-xl font-semibold">Procesos disciplinarios</h1>
       </div>
 
@@ -232,7 +232,7 @@ export default function ProcesosDisciplinarios() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* ---------------- RADICAR ---------------- */}
-        <section className="h-fit rounded-xl border border-border bg-card">
+        <section className="h-fit lg-card">
           <div className="border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold">Solicitar medida disciplinaria</h2>
             <p className="text-xs text-muted-foreground">
@@ -434,7 +434,7 @@ export default function ProcesosDisciplinarios() {
         </section>
 
         {/* ---------------- CASOS ---------------- */}
-        <section className="rounded-xl border border-border bg-card">
+        <section className="lg-card">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold">Casos radicados</h2>
             {data && (

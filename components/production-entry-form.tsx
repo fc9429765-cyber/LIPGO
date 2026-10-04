@@ -265,7 +265,7 @@ export function ProductionEntryForm() {
     <div className="space-y-4 md:space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-xl md:text-3xl font-bold tracking-tight">Ingreso de Producción</h2>
+          <h2 className="text-xl md:text-2xl font-bold tracking-tight">Ingreso de Producción</h2>
           <p className="text-xs md:text-sm text-muted-foreground">Registra entradas de productos desde producción</p>
         </div>
         {/* Indicador visual de la empresa activa proveniente del filtro dinamico de la barra superior */}

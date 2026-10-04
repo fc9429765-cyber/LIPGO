@@ -1,19 +1,41 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Sidebar } from "@/components/sidebar"
 import { MainContent } from "@/components/main-content"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { SplashScreen } from "@/components/splash-screen"
 import { LipbotDock } from "@/components/lipbot-dock"
+import { BuscadorGlobal } from "@/components/buscador-global"
+import { useNavegacionPersonal } from "@/hooks/use-navegacion-personal"
 import { groups, type GroupKey } from "@/lib/dashboard-data"
+import { HUB_POR_KEY, esHubKey, resolverAlias } from "@/lib/navegacion"
+import { escribirUrl, leerEstadoDeUrl } from "@/lib/navegacion-url"
 import { useAuth } from "@/components/auth-provider"
 import { getAtencionDelDiaCompartida } from "@/lib/atencion-del-dia-cache"
 import type { AtencionItem } from "@/components/lip-ai-assistant"
 import { useRouter } from "next/navigation"
+import { VerificarSegundoFactor, requiereSegundoFactor } from "@/components/seguridad/verificar-segundo-factor"
 
 export default function DashboardPage() {
-  const { user, loading, selectedEmpresaId, profile } = useAuth()
+  const { user, loading, selectedEmpresaId, profile, signOut } = useAuth()
+  // Segundo factor (opcional por usuario): si la cuenta lo tiene activo y esta sesión aún no
+  // lo verificó (p. ej. una sesión abierta antes de activarlo), se pide el código antes de
+  // mostrar la app. null = sin comprobar todavía.
+  const [mfaPendiente, setMfaPendiente] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (!user) {
+      setMfaPendiente(null)
+      return
+    }
+    let vivo = true
+    requiereSegundoFactor().then((r) => {
+      if (vivo) setMfaPendiente(r)
+    })
+    return () => {
+      vivo = false
+    }
+  }, [user])
   const router = useRouter()
   const [selectedGroup, setSelectedGroup] = useState<GroupKey | null>(null)
   const [selectedModule, setSelectedModule] = useState<string | null>(null)
@@ -38,7 +60,11 @@ export default function DashboardPage() {
   // Fija el GRUPO que contiene el módulo además del módulo, porque main-content
   // solo renderiza un módulo si hay un grupo seleccionado. Si no lo encuentra en
   // ningún grupo, cae a un grupo válido para salir del home.
-  const navigateToModule = (moduleName: string) => {
+  const navigateToModule = (destino: string) => {
+    // Nombres viejos (alias) y claves de hub (→ su primera pestaña) se resuelven
+    // aquí, en el punto de entrada: el estado siempre guarda el módulo HOJA.
+    let moduleName = resolverAlias(destino)
+    if (esHubKey(moduleName)) moduleName = HUB_POR_KEY.get(moduleName)?.tabs[0]?.module ?? moduleName
     let gk: GroupKey | null = null
     for (const g of groups) {
       const enDirecto = g.modules?.some((m) => m.name === moduleName)
@@ -71,6 +97,60 @@ export default function DashboardPage() {
     setSelectedGroup(key as GroupKey)
     setSelectedModule(null)
   }
+
+  // ---- Navegación ⇄ URL (`/?g=&m=&t=`): refrescar mantiene el lugar, el botón
+  // atrás funciona y los enlaces se pueden compartir (lib/navegacion-url.ts).
+  const estadoRef = useRef({ group: selectedGroup, module: selectedModule })
+  estadoRef.current = { group: selectedGroup, module: selectedModule }
+  const urlInicializadaRef = useRef(false)
+  const omitirEscrituraRef = useRef(false)
+
+  // 1) Lectura inicial, una vez que hay usuario (antes redirige a /login).
+  useEffect(() => {
+    if (!user || urlInicializadaRef.current) return
+    urlInicializadaRef.current = true
+    const e = leerEstadoDeUrl(window.location.search)
+    if (e.module) {
+      omitirEscrituraRef.current = true
+      navigateToModule(e.module)
+    } else if (e.group) {
+      omitirEscrituraRef.current = true
+      openGroup(e.group)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
+
+  // 2) Escritura: `replace` mientras no haya habido navegación real; `push` después.
+  const huboNavegacionRef = useRef(false)
+  useEffect(() => {
+    if (!user || !urlInicializadaRef.current) return
+    if (omitirEscrituraRef.current) {
+      omitirEscrituraRef.current = false
+      return
+    }
+    escribirUrl({ group: selectedGroup, module: selectedModule }, huboNavegacionRef.current ? "push" : "replace")
+    huboNavegacionRef.current = true
+  }, [user, selectedGroup, selectedModule])
+
+  // Recientes ("Continuar donde ibas" y buscador): cada módulo abierto se registra.
+  const { registrarVisita } = useNavegacionPersonal()
+  useEffect(() => {
+    if (selectedModule) registrarVisita(selectedModule)
+  }, [selectedModule, registrarVisita])
+
+  // 3) Botón atrás/adelante del navegador.
+  useEffect(() => {
+    const onPop = () => {
+      const e = leerEstadoDeUrl(window.location.search)
+      const actual = estadoRef.current
+      if (e.group === actual.group && e.module === actual.module) return
+      omitirEscrituraRef.current = true
+      setSelectedGroup(e.group)
+      setSelectedModule(e.module)
+    }
+    window.addEventListener("popstate", onPop)
+    return () => window.removeEventListener("popstate", onPop)
+  }, [])
   // Controla si la pantalla de bienvenida debe mostrarse antes del
   // dashboard. Solo se activa una vez por sesion: el login-form deja un
   // flag en `sessionStorage` que aqui leemos y limpiamos. Asi evitamos
@@ -117,6 +197,22 @@ export default function DashboardPage() {
     return null
   }
 
+  if (mfaPendiente) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+        <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <VerificarSegundoFactor
+            onVerificado={() => setMfaPendiente(false)}
+            onCancelar={async () => {
+              await signOut()
+              router.push("/login")
+            }}
+          />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden">
       {/* Pantalla de bienvenida tras login. Se monta encima del
@@ -140,16 +236,23 @@ export default function DashboardPage() {
       {/* Main Content — el ErrorBoundary evita que un error de render en un
           módulo (p. ej. al desbloquear una clave y montar contenido por
           primera vez) se lleve puesto TODO el árbol, sidebar incluido (ver
-          components/error-boundary.tsx). El `key` remonta el boundary limpio
-          cada vez que cambia el módulo/grupo seleccionado, así que navegar
-          fuera de un módulo roto lo recupera solo. */}
-      <ErrorBoundary key={`${selectedGroup ?? ""}|${selectedModule ?? ""}`}>
+          components/error-boundary.tsx). `resetKey` limpia el error cada vez
+          que cambia el módulo/grupo seleccionado, así que navegar fuera de un
+          módulo roto lo recupera solo. OJO: no usar `key` aquí — remontaría
+          MainContent y borraría el estado de los saltos con dato (orden a
+          Báscula, persona a Ausentismos, filtro a Gestión de Facturas,
+          registro del buscador) antes de que el destino lo lea. */}
+      <ErrorBoundary resetKey={`${selectedGroup ?? ""}|${selectedModule ?? ""}`}>
         <MainContent
           selectedGroup={selectedGroup}
           selectedModule={selectedModule}
           onSelectModule={setSelectedModule}
           onNavigateModule={navigateToModule}
           onOpenGroup={openGroup}
+          onInicio={() => {
+            setSelectedGroup(null)
+            setSelectedModule(null)
+          }}
           onBack={() => {
             if (selectedModule) {
               setSelectedModule(null)
@@ -178,6 +281,18 @@ export default function DashboardPage() {
           onOpenGroup={openGroup}
         />
       )}
+
+      {/* Buscador global "Buscar o ir a…" (Ctrl/⌘+K): siempre montado, también en Inicio. */}
+      <BuscadorGlobal
+        onNavigate={navigateToModule}
+        onOpenGroup={openGroup}
+        onInicio={() => {
+          setSelectedGroup(null)
+          setSelectedModule(null)
+        }}
+        moduloActual={selectedModule}
+        lipbotMontado={selectedModule !== "Asistente IA" && !!(selectedGroup || selectedModule)}
+      />
 
       {/* Background Watermark */}
       <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">

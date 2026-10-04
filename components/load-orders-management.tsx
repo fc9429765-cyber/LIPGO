@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 // Ver comentario en el JSX abajo.
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Chip, Eyebrow } from "@/components/ui/lipgo"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
@@ -22,7 +23,9 @@ import {
   Pencil,
   Trash2,
   RefreshCwIcon,
+  Search,
 } from "lucide-react"
+import { Orden360Dialog } from "@/components/orders/orden-360"
 import {
   Dialog,
   DialogContent,
@@ -74,9 +77,18 @@ interface EmpresaInfo {
   logo: string | null
 }
 
-export function LoadOrdersManagement() {
+interface LoadOrdersManagementProps {
+  /** Salto desde el buscador global (Ctrl+K › Registros): abre ya filtrado por
+   *  número de orden, en el período donde está esa orden. No cambia nada más. */
+  initialSearch?: { orden: string; periodo?: PeriodoListado } | null
+  onInitialSearchApplied?: () => void
+}
+
+export function LoadOrdersManagement({ initialSearch, onInitialSearchApplied }: LoadOrdersManagementProps = {}) {
   const [orders, setOrders] = useState<LoadOrder[]>([])
   const [loading, setLoading] = useState(true)
+  // Ciclo completo de una orden (orden → asignación de lotes → despacho).
+  const [orden360, setOrden360] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<"pendiente" | "finalizada" | "todas">("todas")
   // Periodo que se CARGA del servidor (ver lib/periodo-listados.ts); no aplica a
   // "Pendientes", que siempre trae todas.
@@ -112,6 +124,17 @@ export function LoadOrdersManagement() {
   useEffect(() => {
     applyFilters()
   }, [orders, searchOrden, filterFechaOrden, filterFechaCargue, filterTipoOperacion, filterPlaca, filterEmpresa])
+
+  // Filtro inicial del buscador global: se aplica una vez y se avisa para que
+  // el padre lo limpie (si no, al volver al módulo reaparecería).
+  useEffect(() => {
+    if (!initialSearch?.orden) return
+    setStatusFilter("todas")
+    if (initialSearch.periodo) setPeriodo(initialSearch.periodo)
+    setSearchOrden(initialSearch.orden)
+    onInitialSearchApplied?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSearch])
 
   useEffect(() => {
     loadEmpresasData()
@@ -450,21 +473,33 @@ export function LoadOrdersManagement() {
     <div className="p-2 sm:p-4 space-y-4">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold">Gestión de Órdenes de Cargue</h2>
-          <p className="text-xs sm:text-sm text-muted-foreground">Administra las órdenes de cargue generadas</p>
+          <Eyebrow>Recepción y Despacho{selectedEmpresaId ? ` · ID ${selectedEmpresaId}` : ""}</Eyebrow>
+          <h1 className="text-xl font-bold leading-tight sm:text-2xl">Gestión de Órdenes de Cargue</h1>
+          <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground sm:text-sm">
+            <span>Administra las órdenes de cargue generadas</span>
+            {!loading && orders.length > 0 && (
+              <Chip tono="neutro">
+                {filteredOrders.length === orders.length ? `${orders.length} órdenes` : `${filteredOrders.length} de ${orders.length} órdenes`}
+              </Chip>
+            )}
+          </p>
         </div>
 
         {selectedOrderEmpresa && (
-          <Card className="p-3 bg-blue-50 border-blue-200">
-            <div className="text-sm space-y-1">
-              <p className="font-semibold text-blue-900">Empresa: {selectedOrderEmpresa.nombre}</p>
-              <p className="text-blue-700">NIT: {selectedOrderEmpresa.nit}</p>
-              <p className="text-blue-700">Dirección: {selectedOrderEmpresa.direccion}</p>
-            </div>
-          </Card>
+          <div className="lg-card border-info-bd bg-info-bg p-3 text-sm text-info-fg">
+            <p className="font-semibold">Empresa: {selectedOrderEmpresa.nombre}</p>
+            <p>NIT: {selectedOrderEmpresa.nit}</p>
+            <p>Dirección: {selectedOrderEmpresa.direccion}</p>
+          </div>
         )}
 
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          {/* Ciclo completo de cualquier orden: se escribe el número y se ve qué pidió,
+              qué lotes se asignaron y qué se despachó (gerencia 2026-10-04). */}
+          <Button variant="outline" className="gap-1.5" onClick={() => setOrden360("")} title="Escribe el número de una orden y mira su ciclo completo">
+            <Search className="h-4 w-4" />
+            Ciclo de una orden
+          </Button>
           <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
             <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Filtrar por estado" />
@@ -705,6 +740,12 @@ export function LoadOrdersManagement() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            {/* Ciclo completo de la orden (gerencia 2026-10-04): qué pidió,
+                                qué lotes se asignaron y qué se despachó de verdad. */}
+                            <DropdownMenuItem onClick={() => setOrden360(order.ordendecargue)} className="text-xs">
+                              <Search className="mr-2 h-3 w-3" />
+                              Ver ciclo completo
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleEditFechaCargue(order)} className="text-xs">
                               <Pencil className="mr-2 h-3 w-3" />
                               Editar Fecha Cargue
@@ -860,6 +901,9 @@ export function LoadOrdersManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Ciclo completo de la orden: qué pidió, qué lotes se asignaron, qué se despachó. */}
+      <Orden360Dialog ordendecargue={orden360} open={orden360 !== null} onOpenChange={(v) => !v && setOrden360(null)} />
     </div>
   )
 }

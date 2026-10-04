@@ -1,16 +1,20 @@
 import type React from "react"
 import type { Metadata, Viewport } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
+import { IBM_Plex_Sans, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import Script from "next/script"
 import { AuthProvider } from "@/components/auth-provider"
 import { SubmoduloFiltroProvider } from "@/components/submodulo-filtro-context"
 import GlobalLocationScheduler from "@/components/global-location-scheduler"
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt"
+import { MonitorErrores } from "@/components/monitor-errores"
 import { Toaster } from "@/components/ui/toaster"
 import "./globals.css"
 
-const _geist = Geist({ subsets: ["latin"] })
+// Sistema visual LIPgo (2026-10-02): IBM Plex Sans en toda la app (industrial,
+// números tabulares limpios). Se expone como --font-plex y globals.css la usa
+// en --font-sans, así `font-sans` la aplica en todas partes sin tocar módulos.
+const plex = IBM_Plex_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-plex", display: "swap" })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const viewport: Viewport = {
@@ -60,7 +64,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body className={`font-sans antialiased`}>
+      <body className={`${plex.variable} font-sans antialiased`}>
         {/* Captura temprana del evento de instalacion (puede dispararse antes
             de montar React); el banner PWA lo consume desde window.__lipgoBIP. */}
         <Script id="pwa-bip-capture" strategy="beforeInteractive">
@@ -77,6 +81,8 @@ export default function RootLayout({
         </AuthProvider>
         {/* Banner "¿Quieres instalar LIPgo?" (PWA) en escritorio y movil. */}
         <PwaInstallPrompt />
+        {/* Monitoreo de errores propio (SQL 217): errores no capturados y promesas rechazadas. */}
+        <MonitorErrores />
         <Analytics />
         <Script
           src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"

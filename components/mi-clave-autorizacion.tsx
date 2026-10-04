@@ -34,8 +34,9 @@ import {
   solicitarVerificacionCorreo,
 } from "@/lib/autorizaciones-actions"
 import { CLAVE_MIN_LARGO, validarFormatoClave, type EstadoMiClave } from "@/lib/autorizaciones"
+import { SegundoFactorPanel } from "@/components/seguridad/segundo-factor"
 
-type Pestana = "clave" | "correo" | "recuperar" | "autorizaciones"
+type Pestana = "clave" | "correo" | "recuperar" | "autorizaciones" | "seguridad"
 
 function fmtFecha(iso: string | null | undefined): string {
   if (!iso) return ""
@@ -321,7 +322,7 @@ export function MiClaveAutorizacionDialog({
         </div>
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as Pestana)}>
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="clave">Mi clave</TabsTrigger>
             <TabsTrigger value="correo" className="gap-1">
               Correo
@@ -329,7 +330,15 @@ export function MiClaveAutorizacionDialog({
             </TabsTrigger>
             <TabsTrigger value="recuperar">Recuperar</TabsTrigger>
             <TabsTrigger value="autorizaciones">Permisos{estado ? ` (${estado.autorizaciones.length})` : ""}</TabsTrigger>
+            <TabsTrigger value="seguridad" className="gap-1">
+              <ShieldCheck className="h-3 w-3" /> Seguridad
+            </TabsTrigger>
           </TabsList>
+
+          {/* ===== Segundo factor (TOTP), opcional por usuario ===== */}
+          <TabsContent value="seguridad" className="mt-4 space-y-3">
+            <SegundoFactorPanel />
+          </TabsContent>
 
           {/* ===== Correo de recuperación ===== */}
           <TabsContent value="correo" className="mt-4 space-y-3">

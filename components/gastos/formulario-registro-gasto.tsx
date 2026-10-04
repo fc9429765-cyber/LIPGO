@@ -17,6 +17,7 @@
 import { useMemo, useRef, useState } from "react"
 import { useAuth } from "@/components/auth-provider"
 import { supabase } from "@/lib/supabase-client"
+import { registrarGasto } from "@/lib/finanzas-lectura-actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DatePickerField } from "@/components/ui/date-picker-field"
@@ -217,22 +218,18 @@ export default function FormularioRegistroGasto({
       //    - registrado_por (uuid -> auth.users.id) para trazabilidad
       //    - creado_por (text) con el username legible (o email como fallback)
       //    NO existe `soporte_path` en la tabla, asi que ya no se envia.
-      const creadoPorText =
-        profile?.usuario ?? user?.email ?? user?.id ?? null
-
-      const { error: insertError } = await supabase.from("gastos").insert({
-        id_empresa: idEmpresa,
+      // SEGURIDAD (2026-10-03): el insert lo hace el servidor con la sesión del usuario
+      // (registrado_por y creado_por salen de la sesión, no del navegador).
+      const r = await registrarGasto({
+        idEmpresa: idEmpresa as number,
         fecha,
         categoria,
         monto: Number.parseFloat(monto),
         descripcion: descripcion.trim(),
-        url_soporte: urlSoporte,
-        registrado_por: user?.id ?? null,
-        creado_por: creadoPorText,
+        urlSoporte,
       })
-
-      if (insertError) {
-        throw new Error(`Error al registrar el gasto: ${insertError.message}`)
+      if (!r.success) {
+        throw new Error(r.message)
       }
 
       toast({

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { getUserModulesCached } from "@/lib/user-modules-client-cache"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -48,12 +49,7 @@ export function Aprendizaje() {
       try {
         // `no-store` por el mismo motivo que el sidebar: un permiso recien
         // otorgado debe verse sin refresco fuerte.
-        const res = await fetch("/api/user-modules", { method: "GET", cache: "no-store" })
-        if (!res.ok) {
-          console.error("[v0] Aprendizaje: fallo /api/user-modules:", res.status)
-          return
-        }
-        const data = (await res.json()) as UserModulesResponse
+        const data = await getUserModulesCached()
         if (cancelled) return
         setProtectedModules(new Set(data.protectedModules))
         setAllowedModules(new Set(data.allowedModules))
@@ -125,7 +121,7 @@ export function Aprendizaje() {
     <div className="space-y-4 md:space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
-          <h1 className="text-xl md:text-3xl font-bold flex items-center gap-2">
+          <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2">
             <BookOpen className="h-5 w-5 md:h-7 md:w-7 text-primary" />
             Aprendizaje
           </h1>

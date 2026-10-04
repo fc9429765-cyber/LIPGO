@@ -5,6 +5,7 @@ import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import { AREA_KPI_TITULOS, type AreaKpiItem, type AreaKpiVariant } from "@/lib/area-kpis-util"
 import { KPI_DEFS, formatKpi, kpiSev, kpiIcon, kpisParaModulo } from "@/lib/kpis-area"
 import { getIndicadoresValores } from "@/lib/sig-actions"
+import { codigosOrdenPorUnidad } from "@/lib/ordenes-por-unidad"
 
 // Tira de INDICADORES del BSC por módulo/submódulo (valor real + meta + semáforo):
 // el módulo madre muestra sus indicadores GERENCIALES; cada submódulo el indicador
@@ -149,10 +150,11 @@ async function getSubmoduloKpis(
     try {
       let offset = 0
       const pageSize = 1000
+      const filas: { ordendecargue: string | null; pesovascula: number | null }[] = []
       for (;;) {
         const { data, error } = await sb
           .from("cabeceraoc")
-          .select("pesovascula")
+          .select("ordendecargue, pesovascula")
           .eq("idempresa", empresaId)
           .neq("tipooperacion", "proyeccion")
           .neq("tipooperacion", "Tolva")
@@ -163,10 +165,16 @@ async function getSubmoduloKpis(
           .order("id")
           .range(offset, offset + pageSize - 1)
         if (error) break
-        for (const r of data || []) toneladas += Number(r.pesovascula) || 0
-        cargues += (data || []).length
+        filas.push(...((data || []) as any[]))
         if (!data || data.length < pageSize) break
         offset += pageSize
+      }
+      // Huevos / Empaque MP (por unidad) fuera: su "peso" son unidades.
+      const porUnidad = await codigosOrdenPorUnidad(sb, filas.map((r) => r.ordendecargue))
+      for (const r of filas) {
+        if (porUnidad.has(String(r.ordendecargue ?? "").trim())) continue
+        toneladas += Number(r.pesovascula) || 0
+        cargues += 1
       }
     } catch {
       /* fail-safe: tarjeta en 0 sin romper el header */

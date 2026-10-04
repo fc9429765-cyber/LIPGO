@@ -70,7 +70,7 @@ export function CopilotoRotacion({
             size="sm"
             onClick={pedirSugerencia}
             disabled={loading || !empresaId || !fecha}
-            className="gap-1.5 rounded-full border-0 bg-gradient-to-br from-[#33D9E8] to-[#00A8C2] font-extrabold text-[#04222A] hover:opacity-90"
+            className="gap-1.5 rounded-full border-0 bg-gradient-to-br from-[#33D9E8] to-[#00A8C2] font-bold text-[#04222A] hover:opacity-90"
           >
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
             Sugerir rotación para {fecha || "…"}
@@ -81,7 +81,7 @@ export function CopilotoRotacion({
           <div className="mt-3.5 flex flex-wrap gap-2.5">
             {CRITERIOS.map((c) => (
               <div key={c.n} className="flex min-w-[200px] flex-1 gap-2.5 rounded-lg border border-white/10 bg-white/5 p-2.5">
-                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[#33D9E8]/15 font-mono text-[11px] font-extrabold text-[#33D9E8]">
+                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[#33D9E8]/15 font-mono text-[11px] font-bold text-[#33D9E8]">
                   {c.n}
                 </div>
                 <div>
@@ -161,7 +161,7 @@ export function CopilotoRotacion({
                 size="sm"
                 onClick={aplicar}
                 disabled={resultado.sugerencias.length === 0 || aplicado}
-                className="gap-1.5 rounded-lg border-0 bg-gradient-to-br from-[#33D9E8] to-[#00A8C2] font-extrabold text-[#04222A] hover:opacity-90"
+                className="gap-1.5 rounded-lg border-0 bg-gradient-to-br from-[#33D9E8] to-[#00A8C2] font-bold text-[#04222A] hover:opacity-90"
               >
                 <Check className="h-3.5 w-3.5" />
                 {aplicado ? "Aplicado a la tabla" : "Aplicar sugerencia a la tabla"}

@@ -353,7 +353,7 @@ export function PanelOperacionLIP() {
                 <Card className="p-0">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                      <tr className="border-b text-left lg-eyebrow">
                         <th className="px-3 py-2">Indicador</th>
                         <th className="px-3 py-2 text-right">Resultado</th>
                         <th className="px-3 py-2 text-right">Meta</th>
@@ -513,7 +513,7 @@ export function PanelOperacionLIP() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                        <tr className="border-b text-left lg-eyebrow">
                           <th className="px-2 py-2">Orden</th>
                           <th className="px-2 py-2">Fecha cargue</th>
                           <th className="px-2 py-2">Cliente</th>
@@ -629,7 +629,7 @@ export function PanelOperacionLIP() {
               <div className="mt-2 overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <tr className="border-b text-left lg-eyebrow">
                       <th className="px-3 py-2">Cliente / sitio</th>
                       <th className="px-3 py-2 text-right">Órdenes</th>
                       <th className="px-3 py-2 text-right">Toneladas</th>

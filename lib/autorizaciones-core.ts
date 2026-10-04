@@ -255,7 +255,9 @@ export async function autorizar(input: {
   // bloqueada (no se deja a nadie sin poder operar por equivocarse escribiendo).
   const bloqueada = Boolean(personal?.bloqueado_hasta && new Date(personal.bloqueado_hasta).getTime() > Date.now())
 
-  if (personal && !bloqueada && verificarClaveHash(clave, personal.clave_hash)) {
+  // La clave se guarda sin espacios al inicio/final (validarFormatoClave), así
+  // que un espacio de más al escribirla no debe contar como clave incorrecta.
+  if (personal && !bloqueada && verificarClaveHash(clave.trim(), personal.clave_hash)) {
     if (Number(personal.intentos_fallidos) > 0 || personal.bloqueado_hasta) {
       await sb.from("autorizacion_claves").update({ intentos_fallidos: 0, bloqueado_hasta: null }).eq("usuario_id", usuarioId)
     }

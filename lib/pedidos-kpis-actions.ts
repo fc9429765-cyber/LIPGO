@@ -39,7 +39,7 @@ export async function getPedidosKpis(selectedEmpresaId?: number | null): Promise
 
   // Base: pedidos de la empresa, excluyendo anulados (misma condición del dashboard).
   const base = () =>
-    sb.from("pedidoscabecera").select("*", { count: "exact", head: true }).eq("id_empresa", empresaId).or("estado.is.null,estado.not.ilike.%anulado%")
+    sb.from("pedidoscabecera").select("*", { count: "exact", head: true }).eq("id_empresa", empresaId).or("estado.is.null,and(estado.not.ilike.%anulado%,estado.not.ilike.no entregado)")
   // Pendiente = con promesa (fecha_programada) y sin entregar (fechaordencargue null).
   const pend = () => base().not("fecha_programada", "is", null).is("fechaordencargue", null)
 
@@ -59,7 +59,7 @@ export async function getPedidosKpis(selectedEmpresaId?: number | null): Promise
       .from("pedidoscabecera")
       .select("total_pagar")
       .eq("id_empresa", empresaId)
-      .or("estado.is.null,estado.not.ilike.%anulado%")
+      .or("estado.is.null,and(estado.not.ilike.%anulado%,estado.not.ilike.no entregado)")
       .not("fecha_programada", "is", null)
       .is("fechaordencargue", null)
       .lt("fecha_programada", hoyStr)

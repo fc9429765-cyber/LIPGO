@@ -204,7 +204,7 @@ export default function InduccionesEvidenciaDashboard() {
       {/* Cabecera */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-xl md:text-3xl font-bold tracking-tight">Evidencia de Inducciones</h2>
+          <h2 className="text-xl md:text-2xl font-bold tracking-tight">Evidencia de Inducciones</h2>
           <p className="text-xs md:text-sm text-muted-foreground">
             Registro de intentos de evaluacion de inducciones por trabajador
           </p>

@@ -460,7 +460,7 @@ function KpiCard({
           <Icon className="h-4 w-4" />
         </div>
         <div className="min-w-0 w-full">
-          <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
+          <p className="lg-eyebrow leading-tight">
             {label}
           </p>
           {/* Sin `truncate` para que no recorte cifras: el contenedor

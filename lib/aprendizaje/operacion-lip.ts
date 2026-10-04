@@ -4,6 +4,48 @@ import type { ContenidoAprendizaje } from "@/lib/aprendizaje-content"
 
 export const APRENDIZAJE_OPERACION_LIP: ContenidoAprendizaje[] = [
   // ==========================================================================
+  // CONSIGNAR PROGRAMACION DEL CLIENTE (2026-10-01)
+  // ==========================================================================
+  {
+    modulo: "Consignar programación del cliente",
+    resumen: "El coordinador consigna los vehiculos que el cliente programa para manana y ve cuanto se cumplio cada dia.",
+    proposito:
+      "El cliente envia un dia antes su programacion de vehiculos para manana (cuantos, de que tipo, a que destino o ruta). El coordinador LIP es el responsable de consignarla en LIPgo antes de las 5:00 p. m. (el cliente tambien puede registrarla desde Pedidos y solicitudes si quiere; vale la ultima version). Con ella se planea la operacion y el personal, y se mide el cumplimiento del cliente: cuantos vehiculos programados llegaron de verdad a porteria, por tipo de vehiculo.",
+    puedes: [
+      "Consignar la programacion de manana (o de otra fecha) con lineas de cantidad, tipo de vehiculo del catalogo, destino o ruta y producto opcional.",
+      "Corregirla cuando el cliente cambie algo: cada envio queda como version nueva y la ultima es la vigente.",
+      "Ver si quedo a tiempo (antes de las 5:00 p. m. del dia anterior) o tarde, quien la consigno y el historial de versiones.",
+      "Consultar el cumplimiento por semana, quincena, mes o fechas libres, con el detalle de cada dia por tipo de vehiculo.",
+      "Llegar desde Operacion del dia: el chip 'Programacion del cliente' y el punto de cierre 'Programacion de manana recibida' abren esta pestana.",
+    ],
+    noPuedes: [
+      "Medir el cumplimiento por destino: porteria registra el tipo de vehiculo, no el destino; la medicion es por tipo.",
+      "Borrar una programacion consignada: queda el historial de versiones.",
+      "Registrar la llegada de vehiculos: eso lo hace porteria en Registrar Vehiculos; aqui solo se programa y se compara.",
+    ],
+    funcionalidades: [
+      {
+        nombre: "Programacion del dia elegido",
+        descripcion:
+          "Botones Manana y Hoy o fecha libre. Estado (sin programacion, a tiempo o tarde, version, total de vehiculos), lineas vigentes y boton para modificar creando una version nueva.",
+      },
+      {
+        nombre: "Formulario de lineas",
+        descripcion:
+          "Cantidad, tipo de vehiculo (catalogo Tipos de Vehiculos con capacidad), destino o ruta con sugerencias, producto opcional y observacion. Al enviar queda la hora, quien la consigno y si fue a tiempo.",
+      },
+      {
+        nombre: "Cumplimiento",
+        descripcion:
+          "Programado vs. llegado a porteria por dia y por tipo de vehiculo: porcentaje, no llegaron, fuera de programacion, enviadas a tiempo, dias operados sin programacion y grafico del rango.",
+      },
+    ],
+    consejos: [
+      "Consignala apenas llegue el WhatsApp o el Excel del cliente: despues de las 5:00 p. m. queda marcada como tarde.",
+      "Si el cliente escribe 'Doble troque' y el catalogo dice 'Dobletroque', el cruce igual los reconoce como el mismo tipo.",
+    ],
+  },
+  // ==========================================================================
   // OPERACION LIP · Cargue / Descargue
   // ==========================================================================
   {
@@ -790,5 +832,88 @@ export const APRENDIZAJE_OPERACION_LIP: ContenidoAprendizaje[] = [
     consejos: [
       "Mientras el canal este en modo prueba, usa el historial para validar que los mensajes queden bien armados antes de activar el envio real.",
     ],
+  },
+  // Guías agregadas 2026-09-30 (reorg de navegación: el buscador global usa este texto).
+  {
+    modulo: "Operación del día",
+    resumen: "Panel del coordinador: cómo va el día en la planta, qué requiere atención y qué falta para cerrar.",
+    proposito: "Reúne en una sola pantalla lo que el coordinador necesita al llegar y antes de irse: cobertura de personal de hoy, vehículos y toneladas contra la meta, pendientes que bloquean (vehículos sin cerrar, personas sin marcar, turnos por aprobar), solicitudes de personal y la lista de cierre del día. No calcula nada por su cuenta: reúne las cifras de los módulos que ya las producen.",
+    puedes: [
+      "Ver la cobertura de hoy por turno: programados, presentes y sin marcar.",
+      "Ver vehículos de hoy, finalizados, sin cerrar, en patio, toneladas cerradas contra la meta y quién va más alto y más bajo.",
+      "Resolver cada pendiente de la bandeja con un botón que abre el módulo donde se gestiona.",
+      "Revisar las requisiciones de personal en curso y crear una nueva.",
+      "Completar la lista de cierre del día y anotar la bitácora de hoy sin salir del panel.",
+      "Generar el PDF de cierre del día desde Bitácora."
+    ],
+    noPuedes: [
+      "Cerrar vehículos, aprobar turnos o marcar asistencia aquí: cada botón te lleva al módulo que lo hace.",
+      "Ver dinero de nómina: el pago de la quincena vive en Compensación.",
+      "Cambiar de fecha: el panel es siempre el día de hoy de la planta seleccionada."
+    ],
+    funcionalidades: [
+      {
+        nombre: "Cabecera de hoy",
+        descripcion: "Vehículos y toneladas del día, finalizados y sin cerrar, meta del día, anillo de cobertura de hoy, vehículos en patio, personal activo y novedades abiertas."
+      },
+      {
+        nombre: "Cobertura de hoy",
+        descripcion: "Por cada turno, cuántos se programaron, cuántos marcaron y cuántos faltan por marcar, con la barra de asistencia confirmada."
+      },
+      {
+        nombre: "Bandeja del día",
+        descripcion: "Lo que requiere acción: turnos por aprobar, personas sin marcar, ausentismos sin completar y accidentes recientes, cada uno con su botón de ir a resolverlo."
+      },
+      {
+        nombre: "Vehículos y toneladas de hoy",
+        descripcion: "Las cifras del Centro de Coordinación y Control de Toneladas resumidas: toneladas cerradas contra la meta, más y menos toneladas por auxiliar, y los descargues por unidad aparte."
+      },
+      {
+        nombre: "Cierre del día",
+        descripcion: "Lista de lo que debe quedar en cero antes de irse: vehículos cerrados, asistencia completa, turnos aprobados y bitácora escrita. La bitácora se anota ahí mismo."
+      }
+    ],
+    consejos: [
+      "Si el anillo de cobertura baja, revisa primero 'personas sin marcar': suele ser gente que entró y no marcó en portería."
+    ]
+  },
+  {
+    modulo: "Productividad de Auxiliares",
+    resumen: "Quién carga de verdad: toneladas reales por auxiliar según el equipo asignado a cada vehículo, ranking y ficha 360°.",
+    proposito: "Informe de gerencia. Reparte el peso de cada vehículo cerrado entre el personal que el coordinador asignó de verdad en el Centro de Coordinación (no entre la lista de pago), para saber quién mueve más, quién menos y cómo se compara lo real con lo pagado. La tolva se muestra aparte porque es producción, y los descargues por unidad (huevos) no entran a toneladas.",
+    puedes: [
+      "Ver podios de cargue y descargue, ranking completo, toneladas por día y por mes, y vehículos por placa.",
+      "Abrir la ficha 360° de un auxiliar: posición, días con operación frente a programados, comparación con el promedio del equipo, dónde estuvo cada día, con quién trabaja y qué vehículos atiende.",
+      "Comparar toneladas reales contra las pagadas por nómina.",
+      "Ocultar los apoyos externos ('AUXILIAR PRUEBA') para ver solo el personal de planta.",
+      "Exportar todo a Excel."
+    ],
+    noPuedes: [
+      "Modificar quién estuvo en un vehículo: eso se corrige en el Centro de Coordinación o en Corrección de Órdenes.",
+      "Usarlo como nómina: la liquidación es la de Revisión de nómina.",
+      "Tomar como reales los vehículos sin equipo registrado: se marcan como estimados con la lista de pago."
+    ],
+    funcionalidades: [
+      {
+        nombre: "Modo Equipo",
+        descripcion: "Tarjetas por tipo de operación (cargue, descargue, distribución y tolva aparte), podios, ranking, vista por día, por mes y por vehículo."
+      },
+      {
+        nombre: "Ficha 360°",
+        descripcion: "Clic en cualquier auxiliar: toneladas y vehículos, días con operación contra programados, promedio del equipo en sus mismos días, gráfico diario, dónde estuvo día por día, compañeros frecuentes y placas que más atiende."
+      },
+      {
+        nombre: "Tolva aparte",
+        descripcion: "Las operaciones de tolva (producción de Indupan) se informan en su propia pestaña y nunca se suman a los vehículos."
+      },
+      {
+        nombre: "Real contra pagado",
+        descripcion: "Para cada auxiliar, lo que cargó de verdad frente a lo que la lista de pago le repartió; en verde cargó más de lo pagado, en rojo al revés."
+      },
+      {
+        nombre: "Exportar",
+        descripcion: "Excel con ranking, por día, matrices auxiliar por día y por mes, vehículos, tolva, detalle de órdenes y programación."
+      }
+    ]
   },
 ]

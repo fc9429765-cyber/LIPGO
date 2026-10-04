@@ -4,6 +4,42 @@ import type { ContenidoAprendizaje } from "@/lib/aprendizaje-content"
 
 export const APRENDIZAJE_PEDIDOS: ContenidoAprendizaje[] = [
   // ==========================================================================
+  // PROGRAMACION DEL CLIENTE (2026-10-01)
+  // ==========================================================================
+  {
+    modulo: "Programación del cliente",
+    resumen: "Si el cliente quiere, registra aqui los vehiculos que llegaran manana (el coordinador LIP la consigna si no) y ve cuanto se cumplio cada dia.",
+    proposito:
+      "Es la programacion para manana que el cliente entrega un dia antes: cuantos vehiculos, de que tipo y a que destino o ruta. El responsable de consignarla en LIPgo es el coordinador LIP (Operacion del dia > Programacion de manana), pero el cliente puede registrarla directamente aqui si lo prefiere; cualquiera de los dos, y vale la ultima version. Con ella LIP planea la operacion y el personal, y ambos miden el cumplimiento: cuantos de los vehiculos programados llegaron de verdad a porteria, por tipo de vehiculo.",
+    puedes: [
+      "Registrar la programacion de manana (o de otra fecha) con lineas de cantidad, tipo de vehiculo, destino o ruta y producto opcional.",
+      "Corregirla las veces que haga falta: cada envio queda como version nueva y la ultima es la vigente.",
+      "Ver si quedo a tiempo (antes de las 5:00 p. m. del dia anterior) o tarde, y a que hora se envio.",
+      "Consultar el cumplimiento por semana, quincena, mes o fechas libres, con el detalle de cada dia por tipo de vehiculo.",
+    ],
+    noPuedes: [
+      "Ver el cumplimiento por destino: porteria registra el tipo de vehiculo, no el destino, asi que la medicion es por tipo.",
+      "Borrar una programacion enviada: queda el historial de versiones.",
+      "Registrar vehiculos que llegaron: eso lo hace porteria en Registrar Vehiculos; aqui solo se programa y se compara.",
+    ],
+    funcionalidades: [
+      {
+        nombre: "Programacion de manana",
+        descripcion:
+          "Formulario con lineas (cantidad, tipo de vehiculo del catalogo, destino o ruta con sugerencias, producto, observacion) y el total de vehiculos. Muestra la hora limite y, si ya paso, avisa que quedara como tarde.",
+      },
+      {
+        nombre: "Cumplimiento",
+        descripcion:
+          "Porcentaje de vehiculos programados que llegaron, los que no llegaron, los que llegaron sin programar y cuantas programaciones fueron a tiempo; grafico por dia y tabla con detalle desplegable.",
+      },
+    ],
+    consejos: [
+      "Enviala antes de las 5:00 p. m.: despues de esa hora queda marcada como tarde aunque llegue completa.",
+      "Si cambia algo durante la noche, guarda una version nueva en vez de avisar por chat: asi el cumplimiento se mide contra lo ultimo que enviaste.",
+    ],
+  },
+  // ==========================================================================
   // GESTION DE PEDIDOS
   // ==========================================================================
   {
@@ -59,54 +95,55 @@ export const APRENDIZAJE_PEDIDOS: ContenidoAprendizaje[] = [
   },
   {
     modulo: "Gestionar pedidos",
-    resumen: "Consulta, edita, aprueba, anula y cierra los pedidos del proyecto activo.",
+    resumen: "Cola logistica del cliente: que pedidos van hoy, cuales estan atrasados, que falta aprobar y cuales ya no se van a entregar.",
     proposito:
-      "Es el centro de trabajo diario sobre los pedidos ya registrados. Aqui vive el ciclo de aprobacion en dos pasos (primero cartera, luego aprobacion final con contraseña) y las acciones de cierre: anular, cerrar un pedido parcial o cerrarlo con factura. Muestra los pedidos del proyecto seleccionado en la barra superior.",
+      "Es el centro de trabajo diario del cliente sobre sus pedidos ya registrados (el coordinador LIP no participa: quien decide que se carga es el cliente). Muestra los pedidos abiertos del proyecto como una cola ordenada por urgencia, con el estado derivado de los datos (atrasado, para hoy, programado, en cargue, parcial, nuevo) y el siguiente paso de cada uno. Tiene cuatro pestañas: Cola, Para mañana, Depurar pendientes e Historial. Las aprobaciones de cartera y gerencia solo aplican al canal manual (Entrada de pedidos); los pedidos que llegan del CRM ya vienen aprobados.",
     puedes: [
-      "Filtrar los pedidos por cliente, vendedor, destino, estado, aprobado si/no y rango de fechas, y aplicar o limpiar los filtros.",
-      "Ver el detalle completo de un pedido y abrir o descargar su PDF.",
-      "Editar un pedido que aun no tenga revision de cartera ni aprobacion; al guardar se regenera el PDF automaticamente.",
-      "Aprobar cartera y luego dar la aprobacion final del pedido, cada paso con su contraseña de autorizacion.",
-      "Anular un pedido aprobado (con contraseña y observaciones) mientras no tenga orden de cargue asignada.",
-      "Cerrar un pedido en estado parcial (Cerrar Pendiente) o hacer cierre con numero de factura para cualquier pedido aprobado.",
-      "Exportar el listado filtrado a Excel.",
+      "Ver la franja de seis cifras (atrasados, para hoy, para mañana, en cargue/parcial, por aprobar, candidatos a depurar) y tocar cualquiera para abrir su vista.",
+      "Trabajar la Cola: buscar por pedido, numero del cliente, OC, cliente o placa; filtrar por atrasados, hoy, programados, en cargue o por aprobar; y ejecutar el siguiente paso desde la misma fila (aprobar cartera, aprobar, generar orden de cargue, ver la orden, cerrar pendiente).",
+      "Abrir el detalle de un pedido con su linea de tiempo (registrado, cartera, aprobado, promesa, orden de cargue, entrega, cierre), sus datos, sus lineas con kilos y lo cargado, y el PDF.",
+      "Ver en Para mañana la demanda de un dia (pedidos, kilos y unidades por cliente y tipo de despacho) frente a la programacion de vehiculos del cliente, con la cobertura y los atrasados recientes que podrian salir el mismo dia.",
+      "Depurar pendientes: seleccionar en bloque los pedidos que nunca tuvieron orden de cargue, vehiculo ni lote (mas de 15 dias) o los parciales viejos (mas de 30 dias), darles un motivo y dejarlos como 'no entregado' con tu clave personal. No se borra nada.",
+      "Consultar el Historial de pedidos finalizados (entregados, entrega parcial, anulados y no entregados) por periodo, con filtros y exportacion a Excel.",
+      "Editar o eliminar un pedido solo mientras sea nuevo, sin revision de cartera ni aprobacion.",
+      "Anular un pedido aprobado sin orden de cargue, cerrar un pedido parcial o hacer cierre con factura, cada accion con su clave de autorizacion.",
     ],
     noPuedes: [
-      "Editar o eliminar un pedido que ya esta aprobado.",
-      "Editar un pedido que ya tiene revision de cartera.",
-      "Eliminar un pedido que ya tiene orden de cargue asignada.",
-      "Dar la aprobacion final si el pedido no paso antes por la aprobacion de cartera.",
+      "Editar o eliminar un pedido que ya esta aprobado o que ya tiene revision de cartera.",
+      "Anular o depurar un pedido que ya tiene orden de cargue, vehiculo o entrega: ese pedido se gestiona en Recepcion y Despacho.",
+      "Depurar sin clave personal con el proceso 'Depurar pedidos' (perfiles Gerencia de proyecto y Gerencia General LIPgo). El coordinador LIP no lo tiene.",
+      "Borrar un pedido depurado: queda en Historial como 'no entregado' con motivo, quien y cuando.",
     ],
     funcionalidades: [
       {
-        nombre: "Filtros y exportacion",
+        nombre: "Estado derivado y siguiente paso",
         descripcion:
-          "Barra de filtros por cliente (con buscador), vendedor, destino, aprobado, estado y fechas desde/hasta. El boton Exportar a Excel baja exactamente lo que este filtrado en pantalla.",
+          "El estado no se lee crudo de la base: se deriva de aprobacion, promesa, orden de cargue y lineas. Atrasado = aprobado con promesa vencida y sin orden de cargue; en cargue = con orden de cargue; parcial = cargo una parte. Cada estado trae su boton de siguiente paso. Los atrasados de mas de 15 dias se agrupan en una fila para no tapar la operacion de hoy.",
       },
       {
-        nombre: "Aprobacion en dos pasos",
+        nombre: "Para mañana",
         descripcion:
-          "Primero 'Aprobar Cartera' (valida contraseña y deja registrado quien reviso) y despues 'Aprobar' (contraseña de aprobacion). Una vez aprobado, el pedido queda blindado: no se edita ni se elimina.",
+          "Demanda del dia elegido (promesa = fecha programada) por cliente y tipo de despacho, atrasados de los ultimos 15 dias, y la programacion de vehiculos del cliente con su cobertura (vehiculos por capacidad del tipo frente a los kilos). Desde ahi se salta a Programacion de mañana.",
       },
       {
-        nombre: "Edicion con PDF regenerado",
+        nombre: "Depurar pendientes",
         descripcion:
-          "Mientras el pedido siga sin revision de cartera, se puede modificar todo (encabezado y productos). Al guardar, el PDF se regenera y descarga automaticamente.",
+          "Lista los candidatos con antiguedad, kilos, estado actual y pistas ('Reemplazado por #N' cuando hay un pedido posterior del mismo cliente con el mismo numero u OC; 'Promesa anterior al registro'; 'Nunca aprobado'). Motivos: reemplazado, el cliente desistio, modificado, vencido sin gestion, otro. Se confirma con clave personal y queda registrado quien depuro. En la previsualizacion solo simula.",
       },
       {
-        nombre: "Anular pedido",
+        nombre: "Acciones con clave",
         descripcion:
-          "Disponible solo para pedidos aprobados sin orden de cargue. Pide contraseña y observaciones del motivo, y deja el pedido anulado.",
+          "Aprobar cartera, Aprobar, Anular, Cerrar pendiente y Cierre con factura son las mismas acciones de siempre, ahora desde el menu de la fila o desde el detalle.",
       },
       {
-        nombre: "Cierres",
+        nombre: "Historial y Excel",
         descripcion:
-          "'Cerrar Pendiente' cierra un pedido en estado parcial (entrego parte y no va a completar). 'Cierre con Factura' registra el numero de factura para cerrar cualquier pedido aprobado.",
+          "Periodo (90 dias, 6 meses, año, todo), filtros por cliente, vendedor, despacho y estado final, y exportacion con kilos, unidades, orden de cargue, vehiculo, estado y motivo de depuracion.",
       },
     ],
     consejos: [
       "Este modulo obedece al selector global de empresa de la barra superior: si no ves un pedido, verifica primero en que proyecto estas parado.",
-      "El orden importa: cartera revisa primero; sin esa revision el boton Aprobar queda deshabilitado.",
+      "Si la Cola se llena de atrasados viejos, pasa por Depurar pendientes: lo que nunca se va a entregar debe salir de la operacion sin borrarse.",
     ],
   },
   {
@@ -155,45 +192,49 @@ export const APRENDIZAJE_PEDIDOS: ContenidoAprendizaje[] = [
   },
   {
     modulo: "Dashboard Pedidos",
-    resumen: "Tablero gerencial de pedidos: OTIF, tiempos de entrega y eficiencia de carga.",
+    resumen: "Indicadores logisticos del cliente por periodo: cumplimiento de la promesa, atraso, completitud, volumen, anticipacion, pendientes y demanda perdida.",
     proposito:
-      "Tablero de indicadores para leer la salud del proceso de pedidos sin abrir pedido por pedido. Arriba muestra un resumen ejecutivo (pedidos, lineas, facturado y ticket promedio) y luego tres pestañas: cumplimiento del dia, tiempos y atrasos, y eficiencia de carga. Es de consulta: aqui no se modifica ningun pedido.",
+      "Tablero para que el gerente del cliente decida con datos, no para mirar graficos. Un solo selector de periodo (semana, quincena, mes, mes anterior, 90 dias o rango) gobierna toda la pantalla y cada bloque responde a una pregunta: ¿se cargo el dia de la promesa?, ¿de cuanto es el atraso?, ¿se entrega completo o en partes?, ¿que dia pesa mas y cuanto va por vehiculo?, ¿con cuanto tiempo llega el pedido?, ¿que esta pendiente hoy? y ¿que se perdio y por que? Es de consulta; las acciones llevan a Gestionar pedidos. Lo comercial (vendedores, facturado, ticket) vive en el CRM, no aqui.",
     puedes: [
-      "Ver de un vistazo cuantos pedidos y lineas hay, cuanto suman en facturacion y el ticket promedio.",
-      "Medir entregas a tiempo, pedidos completos (In-Full) y el OTIF global, ademas del volumen despachado.",
-      "Comparar el tiempo de entrega prometido contra el real y detectar pedidos atrasados, que vencen hoy o por vencer.",
-      "Revisar el cumplimiento de carga: porcentaje global, tasa de carga perfecta y unidades pendientes, con comparacion contra meses anteriores.",
-      "Ver los top 5 de destinos, vendedores y clientes por volumen de pedidos.",
-      "Actualizar los datos en el momento con el boton Actualizar.",
+      "Elegir el periodo y ver la franja: pedidos prometidos, % a tiempo, kilos cargados frente a prometidos, pendientes del periodo y % de pedidos del mismo dia.",
+      "Leer el cumplimiento semana a semana (a tiempo, tarde, pendiente, no entregado, anulado), la tendencia de los ultimos seis meses y el detalle por tipo de despacho y por cliente.",
+      "Ver el tamaño del atraso cuando se incumple (promedio, mediana, maximo y su distribucion) y cuantos dias llevan los pendientes.",
+      "Ver completitud: entregas completas frente a parciales y los productos que mas quedan pendientes en los parciales.",
+      "Ver el volumen por dia de la semana, el dia pico, las ordenes de cargue y los kilos cargados por orden.",
+      "Ver la anticipacion con que se registra el pedido (mismo dia, 1 dia, 2 a 3, mas de 3) y los clientes que mas piden para el mismo dia.",
+      "Ver la foto de hoy: pendientes y atrasados por antiguedad y por cliente, y el cierre del dia, con botones a la Cola y a Depurar pendientes.",
+      "Ver los pedidos no entregados (depurados) por motivo y por cliente: la demanda perdida que debe volver a comercial.",
     ],
     noPuedes: [
       "Crear, editar o aprobar pedidos. Es un tablero de solo lectura.",
-      "Exportar los graficos; para llevarte datos usa la exportacion a Excel de Gestionar pedidos.",
+      "Ver indicadores comerciales (vendedores, facturado, ticket promedio): estan en el CRM.",
+      "Ver flete, demora o In-Full antiguo: esos campos no se registran y se retiraron para no mostrar datos vacios.",
     ],
     funcionalidades: [
       {
-        nombre: "Resumen ejecutivo",
+        nombre: "Definiciones",
         descripcion:
-          "Franja superior con fecha y hora, total de pedidos, total de lineas, valor facturado y ticket promedio del alcance visible.",
+          "Periodo = pedidos cuya fecha prometida cae en el rango. A tiempo = la orden de cargue (o la entrega, si no hubo OC) se dio el dia de la promesa o antes; el % se calcula sobre los pedidos que ya tienen fecha de cargue. Kilos = suma del peso de las lineas; kilos cargados solo donde hay unidades cargadas registradas, y se informa en cuantos pedidos existe el dato.",
       },
       {
-        nombre: "Centro de Comando Operativo",
+        nombre: "Kilos donde no hay dinero",
         descripcion:
-          "Cumplimiento del cierre del dia/mes/año: entregas a tiempo vs tarde, In-Full, OTIF global, volumen despachado, cuantos pedidos ingresaron y se entregaron, y los top 5 de destinos, vendedores y clientes.",
+          "Si menos de la mitad de los pedidos del periodo tiene valor (caso Avimol), el tablero habla en kilos y unidades; si lo tiene, muestra ademas el valor prometido.",
       },
       {
-        nombre: "Tiempos y Cuellos de Botella",
+        nombre: "Foto de hoy",
         descripcion:
-          "Lead time prometido vs real, pedidos a tiempo vs atrasados, retraso promedio y semaforo de pedidos atrasados, que vencen hoy y por vencer.",
+          "Pendiente y atraso y Cierre del dia no dependen del periodo: son el estado actual, con la misma definicion de la Cola de Gestionar pedidos.",
       },
       {
-        nombre: "Eficiencia de Carga e In-Full",
+        nombre: "Demanda perdida",
         descripcion:
-          "Porcentaje de cumplimiento global, tasa de carga perfecta y unidades pendientes, con tendencia del ultimo mes, delta contra el mes anterior, promedio de 3 meses y mejor/peor mes.",
+          "Los pedidos depurados (no entregado) se agrupan por motivo (reemplazado, el cliente desistio, modificado, vencido, otro) y por cliente, por fecha de depuracion dentro del periodo.",
       },
     ],
     consejos: [
       "El tablero sigue el selector global de empresa: cambia de proyecto en la barra superior y los indicadores se recargan solos.",
+      "Si el % a tiempo baja en un tipo de despacho o un cliente, abre la Cola filtrada por atrasados y revisa Programacion de mañana: la causa suele ser capacidad de vehiculos o promesas muy cortas.",
     ],
   },
 

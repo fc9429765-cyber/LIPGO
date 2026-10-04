@@ -10,6 +10,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { pesoBaseCalculo, excluirAvimolDistribucion, liquidable, normalizeName } from "@/lib/nomina-calculo-utils"
 import { getHcYHorasRealPorDia } from "@/lib/meta-productividad-actions"
+import { codigosOrdenPorUnidad } from "@/lib/ordenes-por-unidad"
 import { TON_MES_CARGUE_DESCARGUE, DIAS_OPERACION_MES, duracionHorasNetas } from "@/lib/meta-productividad-utils"
 
 // A diferencia de nómina (Revisión de Nómina, PILA, Bonos), aquí NO se
@@ -69,6 +70,8 @@ export interface ControlToneladasData {
   trabajadores: TrabajadorToneladas[]
   totalToneladas: number
   totalTrabajadores: number
+  /** Órdenes por unidad (Huevos / Empaque MP) del periodo: fuera de las toneladas, se informan aparte. */
+  porUnidad: { ordenes: number; unidades: number }
   periodoDesde: string
   periodoHasta: string
 }
@@ -185,10 +188,20 @@ export async function getControlToneladas(
     }
     const porPersona = new Map<string, Acc>()
 
+    // Órdenes por unidad (Huevos / Empaque MP): su "peso" son unidades y ese
+    // personal se paga aparte. Fuera de las toneladas; se informan aparte.
+    const porUnidadSet = await codigosOrdenPorUnidad(admin, ordenesRaw.map((o: any) => o.ordendecargue))
+    const porUnidad = { ordenes: 0, unidades: 0 }
+
     for (const o of ordenesRaw) {
       const planta = Number(o.idempresa)
       const tipo = String(o.tipooperacion || "").trim()
       if (excluirAvimolDistribucion(planta, tipo)) continue
+      if (porUnidadSet.has(String(o.ordendecargue ?? "").trim())) {
+        porUnidad.ordenes++
+        porUnidad.unidades += num(o.pesovascula) || num(o.pesoorden)
+        continue
+      }
       const fecha = String(o.fechacargue).slice(0, 10)
       const auxiliares = String(o.auxiliares || "")
         .split(",")
@@ -282,6 +295,7 @@ export async function getControlToneladas(
         trabajadores,
         totalToneladas: round3(totalToneladas),
         totalTrabajadores: trabajadores.length,
+        porUnidad: { ordenes: porUnidad.ordenes, unidades: Math.round(porUnidad.unidades) },
         periodoDesde: desde,
         periodoHasta: hasta,
       },

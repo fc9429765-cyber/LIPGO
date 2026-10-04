@@ -29,14 +29,49 @@ export function AreaKpis({
   groupKey,
   valores,
   loading,
+  compacto = false,
 }: {
   groupKey: GroupKey
   valores: Record<string, ValorBsc>
   loading: boolean
+  /** Una sola línea de chips (portal de área rediseñado 2026-09-30) en vez de tarjetas grandes. */
+  compacto?: boolean
 }) {
   const [ver, setVer] = useState<string | null>(null)
   const keys = AREA_KPIS[groupKey] ?? []
   if (keys.length === 0) return null
+
+  if (compacto) {
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="mr-1 text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">Indicadores del área</span>
+        {keys.map((k) => {
+          const def = KPI_DEFS[k]
+          if (!def) return null
+          const v = valores[k]
+          const sinDatos = (k === "sat_cliente" || k === "sat_conductor") && v?.base === "0 encuestas"
+          const sev = v && !sinDatos ? kpiSev(def, v.valor) : "none"
+          const color = SEV_COLOR[sev]
+          const valor = loading && !v ? "…" : sinDatos ? "sin datos" : v ? formatKpi(def, v.valor) : "—"
+          return (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setVer(k)}
+              className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-card py-1 pl-2 pr-2.5 text-[12px] leading-none shadow-sm transition-colors hover:bg-accent"
+              title={`${def.nombre}: ${valor}${def.meta != null ? ` · meta ${formatKpi(def, def.meta)}` : ""} · ver detalle`}
+            >
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: v && !sinDatos ? color : "var(--border)" }} aria-hidden="true" />
+              <span className="truncate text-muted-foreground">{def.nombre}</span>
+              <span className="shrink-0 font-bold tabular-nums" style={{ color: v && !sinDatos ? color : undefined }}>{valor}</span>
+              {def.meta != null && <span className="hidden text-[10.5px] text-muted-foreground lg:inline">· meta {formatKpi(def, def.meta)}</span>}
+            </button>
+          )
+        })}
+        {ver && <BscIndicadorModal codigo={ver} def={KPI_DEFS[ver]} actual={valores[ver]?.valor ?? null} onClose={() => setVer(null)} />}
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -76,7 +111,7 @@ export function AreaKpis({
                 <span className="truncate">{def.nombre}</span>
               </div>
               <div
-                className="mt-2 text-2xl font-extrabold tabular-nums tracking-tight"
+                className="mt-2 lg-num text-2xl font-bold tracking-tight"
                 style={{ color: v && !sinDatos ? color : "var(--muted-foreground)" }}
               >
                 {loading && !v ? "…" : sinDatos ? "Sin datos" : v ? formatKpi(def, v.valor) : "—"}

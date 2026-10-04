@@ -57,7 +57,14 @@ const DOCUMENT_FIELDS = [
   { key: "induccion", label: "Inducción" },
 ]
 
-export default function HeadcountManagement() {
+interface HeadcountManagementProps {
+  /** Salto desde el buscador global (Ctrl+K › Registros): abre ya filtrado por
+   *  cédula, en la pestaña (operativo/administrativo) donde está la persona. */
+  initialSearch?: { identificacion: string; tab?: "operativo" | "administrativo" } | null
+  onInitialSearchApplied?: () => void
+}
+
+export default function HeadcountManagement({ initialSearch, onInitialSearchApplied }: HeadcountManagementProps = {}) {
   const { selectedEmpresaId } = useAuth()
   // Pestaña activa: "operativo" o "administrativo". Las DOS filtran por el
   // proyecto seleccionado: el administrativo tambien pertenece a un proyecto.
@@ -133,6 +140,18 @@ export default function HeadcountManagement() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEmpresaId, activeTab])
+
+  // Filtro inicial del buscador global: se aplica una vez (pestaña, estado
+  // "todos" para que aparezca aunque esté retirada, y cédula) y se avisa al
+  // padre para que lo limpie.
+  useEffect(() => {
+    if (!initialSearch?.identificacion) return
+    if (initialSearch.tab) setActiveTab(initialSearch.tab)
+    setStatusFilter("todos")
+    setSearchId(initialSearch.identificacion)
+    onInitialSearchApplied?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSearch])
 
   const loadTransferCompanies = async () => {
     try {

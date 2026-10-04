@@ -179,7 +179,7 @@ export default function AutorizacionesClave() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
             <KeyRound className="h-7 w-7" /> Autorizaciones por clave
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">

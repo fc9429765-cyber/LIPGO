@@ -27,7 +27,9 @@ export default function AcumuladosLIPgo() {
   const { toast } = useToast()
   const hoy = new Date()
   const [anio, setAnio] = useState(hoy.getFullYear())
-  const [mesDesde, setMesDesde] = useState(1)
+  // Abre en el MES EN CURSO (antes enero→hoy: diez meses de nómina en una sola carga,
+  // minutos de espera; gerencia 2026-10-03). El rango sigue siendo libre.
+  const [mesDesde, setMesDesde] = useState(hoy.getMonth() + 1)
   const [mesHasta, setMesHasta] = useState(hoy.getMonth() + 1)
   const [data, setData] = useState<FilaAcumuladoLIPgo[]>([])
   const [loading, setLoading] = useState(true)

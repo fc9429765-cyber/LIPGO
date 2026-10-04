@@ -16,6 +16,7 @@ import { getColombiaDateTime, getColombiaTime } from "@/lib/date-utils"
 import { pesoBaseCalculo, excluirAvimolDistribucion } from "@/lib/nomina-calculo-utils"
 import { getSlaCargueMin, esNombreSubproducto, esModoCargaRequerido, type TipologiaProducto } from "@/lib/sla-acordados"
 import { esProductoPorUnidad } from "@/lib/facturacion-billed-party"
+import { idsOrdenPorUnidad } from "@/lib/ordenes-por-unidad"
 import { reportarInterno } from "@/lib/reporte-interno-actions"
 import {
   TON_MES_CARGUE_DESCARGUE,
@@ -433,12 +434,17 @@ export async function getCentroCoordinacion(
     const ordenesPausadas = new Set(await getOrdenesPausadas())
 
     // 7) Armar OrdenOperativa por cada orden activa.
+    // Huevos / Empaque MP (por unidad) también fuera de "cargado hoy": su peso
+    // son unidades (regla compartida en lib/ordenes-por-unidad.ts). El set de
+    // activas (`esPorUnidadPorOrden`) no cubre las ya cerradas de hoy.
+    const porUnidadCerradas = await idsOrdenPorUnidad(admin, todasOrdenes.filter((o: any) => o.fincargue).map((o: any) => o.id))
     let cargadoHoyTon = 0
     for (const o of todasOrdenes) {
       if (!o.fincargue) continue
       const tipo = String(o.tipooperacion || "").trim()
       if (tipo === "proyeccion") continue // residuo de un módulo manual descontinuado en jul-2026, nunca tonelaje real
       if (excluirAvimolDistribucion(idempresa, tipo)) continue
+      if (porUnidadCerradas.has(Number(o.id)) || esPorUnidadPorOrden.has(o.id)) continue
       const { peso } = pesoBaseCalculo(idempresa, tipo, num(o.pesovascula), num(o.pesoorden))
       if (peso > 0) cargadoHoyTon += peso
     }
@@ -1200,28 +1206,7 @@ export async function getHojaDelMuelle(orderId: number): Promise<{ success: bool
   }
 }
 
-/**
- * Deja trazada en `invtrans.observaciones` la confirmación de Picking hecha
- * por EXCEPCIÓN desde Centro de Coordinación — para distinguirla de la
- * confirmación normal del montacarguista en Picking (que no toca este
- * campo). "Confirmar Picking" sigue siendo su labor; esto es solo el
- * rescate cuando no se hizo ahí, y sirve para auditar cuánto se usa el
- * atajo. Se llama DESPUÉS de que `confirmPicking` ya haya aprobado las
- * líneas — no cambia `status` ni `cantidad`, solo anota quién y por qué.
- */
-export async function marcarPickingConfirmadoPorExcepcion(
-  lineIds: number[],
-  coordinador: string,
-): Promise<{ success: boolean; message?: string }> {
-  try {
-    if (lineIds.length === 0) return { success: true }
-    const admin: any = await getSupabaseAdmin()
-    const hora = await getColombiaTime()
-    const nota = `Confirmado por excepción desde Centro de Coordinación por ${coordinador} a las ${hora} — el montacarguista no lo confirmó en Picking.`
-    const { error } = await admin.from("invtrans").update({ observaciones: nota }).in("id", lineIds)
-    if (error) return { success: false, message: error.message }
-    return { success: true }
-  } catch (e: any) {
-    return { success: false, message: e?.message || "Error al anotar la excepción de picking." }
-  }
-}
+// El "Confirmar Picking" por excepción desde Centro de Coordinación
+// (marcarPickingConfirmadoPorExcepcion) se retiró el 2026-10-02 por decisión
+// de la gerencia: las líneas "por descontar" solo se aprueban desde Picking,
+// verificando lote y cantidad. El coordinador llega allá con "Ir a Picking".

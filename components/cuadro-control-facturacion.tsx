@@ -221,7 +221,7 @@ export function SoporteAnexo({ lineas }: { lineas: SoporteLinea[] }) {
       ))}
       <div className="flex items-center justify-between border-t-2 border-primary/40 pt-2">
         <span className="text-sm font-bold">TOTAL SOPORTE</span>
-        <span className="text-base font-extrabold tabular-nums text-primary">
+        <span className="text-base font-bold tabular-nums text-primary">
           {ton(totalTon)} t · {money(totalVal)}
         </span>
       </div>
@@ -1578,7 +1578,7 @@ export function CuadroControlFacturacion() {
                         <div className="flex items-center justify-end gap-1.5 text-xs uppercase tracking-wide text-emerald-700">
                           <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" /> Por facturar
                         </div>
-                        <div className="text-2xl font-extrabold tabular-nums text-emerald-600">{money(prefSel.totalPorFacturar)}</div>
+                        <div className="lg-num text-2xl font-bold text-emerald-600">{money(prefSel.totalPorFacturar)}</div>
                         <div className="text-xs text-muted-foreground">
                           {ton(prefSel.totalTon)} t · Total {money(prefSel.totalVal)}
                         </div>
@@ -1608,7 +1608,7 @@ export function CuadroControlFacturacion() {
                           <div className="overflow-x-auto rounded-md border">
                             <table className="w-full text-xs">
                               <thead>
-                                <tr className="border-b bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                                <tr className="border-b bg-muted/40 text-left lg-eyebrow">
                                   <th className="py-1.5 pl-2 font-medium">Concepto</th>
                                   <th className="py-1.5 text-right font-medium">Cantidad</th>
                                   <th className="py-1.5 text-right font-medium">Tarifa</th>
@@ -1798,7 +1798,7 @@ export function CuadroControlFacturacion() {
                       </div>
                       <div className="flex items-center gap-4">
                         <span className="text-xs text-muted-foreground">Total período {money(prefSel.totalVal)}</span>
-                        <span className="flex items-center gap-1.5 text-xl font-extrabold tabular-nums text-emerald-600">
+                        <span className="flex items-center gap-1.5 text-xl font-bold tabular-nums text-emerald-600">
                           <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" />
                           {money(prefSel.totalPorFacturar)}
                         </span>

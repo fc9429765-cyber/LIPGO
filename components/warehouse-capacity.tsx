@@ -609,7 +609,7 @@ function BucketCard({
           <p className={`text-[10px] ${toneStyles.muted}`}>{descripcion}</p>
         </CardHeader>
         <CardContent className="px-4 pb-4 space-y-2">
-          <div className={`text-3xl font-bold tabular-nums ${toneStyles.count}`}>
+          <div className={`text-2xl font-bold tabular-nums ${toneStyles.count}`}>
             {count.toLocaleString()}
           </div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">

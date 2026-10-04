@@ -4,6 +4,7 @@ import type React from "react"
 
 import { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
+import { invalidarUserModulesCache } from "@/lib/user-modules-client-cache"
 import type { User } from "@supabase/supabase-js"
 import type { UserProfile } from "@/lib/auth-actions"
 
@@ -40,6 +41,11 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  // La caché compartida de /api/user-modules es por pestaña: al cambiar el usuario
+  // de la sesión (entrar, salir, otro usuario) se vacía para no heredar módulos ajenos.
+  useEffect(() => {
+    invalidarUserModulesCache()
+  }, [profile?.id])
   const [loading, setLoading] = useState(true)
   // Ref (no state): solo lo lee el listener de auth para no recargar el perfil
   // dos veces. Como state era dependencia del efecto y se seteaba dentro, el
@@ -248,6 +254,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('selectedEmpresaId')
     setSelectedEmpresaIdState(null)
     setAccessibleEmpresas([])
+    // Que el siguiente usuario de esta misma pestaña no herede los módulos del anterior.
+    invalidarUserModulesCache()
     await supabase.auth.signOut()
     setUser(null)
     setProfile(null)

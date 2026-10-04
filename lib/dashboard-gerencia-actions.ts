@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase-client"
 import { fetchAllRows } from "@/lib/fetch-all-rows"
 import { getCurrentEmpresaId } from "@/lib/company-filter"
 import { getMetaDiaForEmpresa, rewriteMetaDiaRows } from "@/lib/empresa-meta-dia"
+import { codigosOrdenPorUnidad } from "@/lib/ordenes-por-unidad"
 
 // ============================================================================
 // Tipos
@@ -548,7 +549,7 @@ export async function getGerenciaDashboardData(
     // "toneladas procesadas" y el OTIF salían de un recorte arbitrario.
     const { data: opsDia } = await supabase
       .from("dashboardoperaciones")
-      .select("pesoorden, tipooperacion, estado")
+      .select("pesoorden, tipooperacion, estado, ordendecargue")
       .eq("idempresa", empresaId)
       .eq("fechacargue", today)
       .neq("tipooperacion", "Tolva")
@@ -558,9 +559,13 @@ export async function getGerenciaDashboardData(
     const isFinalized = (e: string | null) => e === "Fin Operación" || e === "Finalizado LIP"
     const vehiculosDespachados =
       opsDia?.filter((r) => r.tipooperacion === "Cargue" && isFinalized(r.estado)).length || 0
+    // Huevos / Empaque MP (por unidad) cuentan como vehículo pero NO como
+    // toneladas: su "peso" son unidades (lib/ordenes-por-unidad.ts, 2026-09-30).
+    const porUnidadHoy = await codigosOrdenPorUnidad(supabase, (opsDia ?? []).map((r: any) => r.ordendecargue))
     const toneladasProcesadas = Math.round(
-      (opsDia?.filter((r) => isFinalized(r.estado)).reduce((s, r) => s + (r.pesoorden || 0), 0) ||
-        0) * 10,
+      (opsDia
+        ?.filter((r: any) => isFinalized(r.estado) && !porUnidadHoy.has(String(r.ordendecargue ?? "").trim()))
+        .reduce((s: number, r: any) => s + (r.pesoorden || 0), 0) || 0) * 10,
     ) / 10
     const totalOps = opsDia?.length || 0
     const totalFinalizadas = opsDia?.filter((r) => isFinalized(r.estado)).length || 0

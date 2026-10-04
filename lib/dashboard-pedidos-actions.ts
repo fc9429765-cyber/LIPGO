@@ -161,7 +161,8 @@ export async function getDashboardPedidosData(
       // verdadero) por lo que la negacion las excluye; por eso
       // anadimos el OR explicito sobre `estado.is.null` para
       // dejarlas pasar.
-      q = q.or("estado.is.null,estado.not.ilike.%anulado%")
+      // Los depurados ("no entregado", SQL 215) tampoco cuentan.
+      q = q.or("estado.is.null,and(estado.not.ilike.%anulado%,estado.not.ilike.no entregado)")
       return q
     })
 

@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { LogIn, Eye, EyeOff } from "lucide-react"
 import Image from "next/image"
 import { createBrowserClient } from "@supabase/ssr"
+import { VerificarSegundoFactor } from "@/components/seguridad/verificar-segundo-factor"
 
 export function LoginForm() {
   const router = useRouter()
@@ -20,6 +21,29 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  // Segundo factor (solo para quien lo activó en "Mi clave › Seguridad").
+  const [pasoCodigo, setPasoCodigo] = useState(false)
+
+  // Tras autenticar: flag del splash y vuelta a la ruta protegida de origen si la hubo.
+  const irADestino = () => {
+    // Marcamos el flag de "recien iniciado" para que la pagina principal muestre el splash de
+    // bienvenida una sola vez tras el login. sessionStorage: se limpia al cerrar la pestaña.
+    try {
+      sessionStorage.setItem("lipgo:just-logged-in", "1")
+    } catch {
+      // modo privado restrictivo: seguimos sin splash
+    }
+    // Si se llegó desde una URL protegida (p. ej. el QR de un montacarga: /login?next=/equipo/abc)
+    // se vuelve allá. Solo rutas internas: un `next` con host propio sería un redirect abierto.
+    let destino = "/"
+    try {
+      const next = new URLSearchParams(window.location.search).get("next")
+      if (next && next.startsWith("/") && !next.startsWith("//")) destino = next
+    } catch {
+      // sin querystring utilizable, se va al inicio
+    }
+    window.location.href = destino
+  }
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -48,32 +72,15 @@ export function LoginForm() {
 
       if (data.user) {
         console.log("[v0] Login successful, user:", data.user.id)
-        console.log("[v0] Redirecting to home page...")
-        // Marcamos el flag de "recien iniciado" para que la pagina
-        // principal muestre el splash de bienvenida una sola vez tras
-        // el login. Usamos sessionStorage (no localStorage) para que
-        // se limpie al cerrar la pestana y NO vuelva a dispararse en
-        // cada refresh manual.
-        try {
-          sessionStorage.setItem("lipgo:just-logged-in", "1")
-        } catch {
-          // Si sessionStorage no esta disponible (modo privado
-          // restrictivo) seguimos sin splash en lugar de bloquear el
-          // login.
+        // Segundo factor: si la cuenta lo tiene activo, la sesión queda en aal1 hasta que el
+        // usuario escriba el código de su app autenticadora. Quien no lo activó entra directo.
+        const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+        if (aal?.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
+          setPasoCodigo(true)
+          setLoading(false)
+          return
         }
-        // Redirect to home - AuthProvider will detect the session.
-        // Si se llegó desde una URL protegida (p. ej. el QR de un montacarga:
-        // /login?next=/equipo/abc) se vuelve allá en vez de soltar al usuario
-        // en el inicio y obligarlo a escanear otra vez. Solo se aceptan rutas
-        // internas: un `next` con host propio sería un redirect abierto.
-        let destino = "/"
-        try {
-          const next = new URLSearchParams(window.location.search).get("next")
-          if (next && next.startsWith("/") && !next.startsWith("//")) destino = next
-        } catch {
-          // sin querystring utilizable, se va al inicio
-        }
-        window.location.href = destino
+        irADestino()
       }
     } catch (err) {
       console.error("[v0] Exception during login:", err)
@@ -91,6 +98,16 @@ export function LoginForm() {
           <CardDescription>Ingresa tus credenciales para acceder al sistema</CardDescription>
         </CardHeader>
         <CardContent>
+          {pasoCodigo ? (
+            <VerificarSegundoFactor
+              onVerificado={irADestino}
+              onCancelar={async () => {
+                await supabase.auth.signOut()
+                setPasoCodigo(false)
+                setPassword("")
+              }}
+            />
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Correo electrónico</Label>
@@ -152,6 +169,7 @@ export function LoginForm() {
               )}
             </Button>
           </form>
+          )}
         </CardContent>
       </Card>
     </div>
