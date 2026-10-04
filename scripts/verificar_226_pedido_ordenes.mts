@@ -3,6 +3,7 @@
 //
 // Uso (desde la raíz del repo):
 //   npx tsx --env-file=.env.local scripts/verificar_226_pedido_ordenes.mts --estado
+//   npx tsx --env-file=.env.local scripts/verificar_226_pedido_ordenes.mts --grupos
 //   npx tsx --env-file=.env.local scripts/verificar_226_pedido_ordenes.mts --diferencias
 //   npx tsx --env-file=.env.local scripts/verificar_226_pedido_ordenes.mts --pedido 8742
 //   npx tsx --env-file=.env.local scripts/verificar_226_pedido_ordenes.mts --foto 2 > foto_id2.json
@@ -15,6 +16,7 @@ const sb: any = await getSupabaseAdminAsSystem()
 const args = process.argv.slice(2)
 const modo = args[0] ?? "--estado"
 const n0 = (v: any) => Number(v) || 0
+const norm = (v: any) => String(v ?? "").trim().toUpperCase()
 const log = (...a: any[]) => console.error(...a)
 
 async function todas(q: (d: number, h: number) => any, pag = 1000): Promise<any[]> {
@@ -30,7 +32,7 @@ async function todas(q: (d: number, h: number) => any, pag = 1000): Promise<any[
 
 async function libroCompleto() {
   return todas((d, h) =>
-    sb.from("pedidodetalle_ocargue").select("transid, idpedido, id_empresa, ocargue, unidades, origen, creado_en").order("id", { ascending: true }).range(d, h),
+    sb.from("pedidodetalle_ocargue").select("id, transid, idpedido, id_empresa, ocargue, unidades, origen, creado_en").order("id", { ascending: true }).range(d, h),
   )
 }
 
@@ -102,6 +104,94 @@ if (modo === "--estado") {
   console.log("líneas según en cuántas órdenes salieron:", JSON.stringify([...lineasPorN.entries()].sort((a, b) => a[0] - b[0])))
   const multi = [...porLinea.entries()].filter(([, n]) => n > 1).map(([t]) => t)
   console.log(`líneas que salieron en más de una orden: ${multi.length}`)
+  process.exit(0)
+}
+
+if (modo === "--grupos") {
+  // Confronta el libro contra el DOCUMENTO de cada orden (`detalleoc`) y separa:
+  //   A1 falsas (la orden existe con detalle y no autorizó ese producto) -> SQL 228 las borra.
+  //   A2 no verificables (la orden ya no existe) -> se conservan, marcadas 'linea_sin_orden'.
+  //   B  salió MÁS de lo pedido -> no se corrige por software, se revisa con gerencia.
+  //   C  el pedido no cuenta lo que salió y cabe en lo pedido -> lo corrige el SQL 227.
+  if (!(await existeLibro())) process.exit(1)
+  const libro = await libroCompleto()
+  const transids = [...new Set<number>(libro.map((f: any) => Number(f.transid)))]
+  const linea = new Map<number, any>()
+  for (let i = 0; i < transids.length; i += 300) {
+    const { data } = await sb
+      .from("pedidosdetalle")
+      .select("transid, idpedido, id_empresa, producto, unidades, unidadescargadas, unidades_cargadas, estado")
+      .in("transid", transids.slice(i, i + 300))
+    for (const l of data ?? []) linea.set(Number(l.transid), l)
+  }
+  const codigos = [...new Set<string>(libro.map((f: any) => String(f.ocargue)))]
+  const codigoDeId = new Map<number, string>()
+  for (let i = 0; i < codigos.length; i += 100) {
+    const { data } = await sb.from("cabeceraoc").select("id, ordendecargue").in("ordendecargue", codigos.slice(i, i + 100))
+    for (const c of data ?? []) codigoDeId.set(Number(c.id), String(c.ordendecargue))
+  }
+  const autorizado = new Set<string>()
+  const conDetalle = new Set<string>()
+  const ids = [...codigoDeId.keys()]
+  for (let i = 0; i < ids.length; i += 100) {
+    const rows = await todas((d, h) => sb.from("detalleoc").select("idorden, producto").in("idorden", ids.slice(i, i + 100)).order("id").range(d, h))
+    for (const r of rows) {
+      const oc = String(codigoDeId.get(Number(r.idorden)))
+      conDetalle.add(oc)
+      autorizado.add(`${norm(oc)}|${norm(r.producto)}`)
+    }
+  }
+  const A1: any[] = []
+  const A2: any[] = []
+  const buenas: any[] = []
+  for (const f of libro) {
+    const l = linea.get(Number(f.transid))
+    if (!l) continue
+    const oc = String(f.ocargue)
+    const fila = { id: Number(f.id), id_empresa: Number(f.id_empresa), idpedido: Number(f.idpedido), transid: Number(f.transid), ocargue: oc, producto: String(l.producto), unidades: n0(f.unidades), origen: f.origen }
+    if (!conDetalle.has(oc)) { A2.push(fila); buenas.push(f); continue }
+    if (!autorizado.has(`${norm(oc)}|${norm(l.producto)}`)) A1.push(fila)
+    else buenas.push(f)
+  }
+  const suma = new Map<number, number>()
+  const nOrd = new Map<number, number>()
+  for (const f of buenas) {
+    const t = Number(f.transid)
+    suma.set(t, (suma.get(t) ?? 0) + n0(f.unidades))
+    nOrd.set(t, (nOrd.get(t) ?? 0) + 1)
+  }
+  const B: any[] = []
+  const C: any[] = []
+  for (const [t, s] of suma) {
+    const l = linea.get(t)
+    if (!l) continue
+    const pedidas = n0(l.unidades)
+    const dice = n0(l.unidadescargadas ?? l.unidades_cargadas)
+    if (s > pedidas + 0.01) B.push({ id_empresa: Number(l.id_empresa), idpedido: Number(l.idpedido), transid: t, producto: String(l.producto).slice(0, 32), pedidas, dice, salio: s, exceso: s - pedidas, ordenes: nOrd.get(t), estado: l.estado })
+    else if (s > dice + 0.01) C.push({ id_empresa: Number(l.id_empresa), idpedido: Number(l.idpedido), transid: t, producto: String(l.producto).slice(0, 32), pedidas, dice, salio: s, dif: s - dice })
+  }
+  const porEmpresa = (xs: any[], campo: string) => {
+    const m = new Map<number, { lineas: number; unidades: number }>()
+    for (const x of xs) {
+      const r = m.get(x.id_empresa) ?? { lineas: 0, unidades: 0 }
+      r.lineas++
+      r.unidades += n0(x[campo])
+      m.set(x.id_empresa, r)
+    }
+    return JSON.stringify([...m.entries()].sort())
+  }
+  console.log(`libro: ${libro.length} filas · ${codigos.length} órdenes`)
+  console.log(`\nA1 FALSAS (la orden existe y no autorizó ese producto): ${A1.length} filas, ${A1.reduce((s, f) => s + f.unidades, 0)} unidades`)
+  for (const f of A1) console.log("  ", JSON.stringify(f))
+  console.log(`\nA2 NO VERIFICABLES (la orden ya no existe): ${A2.length} filas, ${A2.reduce((s, f) => s + f.unidades, 0)} unidades, ${new Set(A2.map((f) => f.ocargue)).size} órdenes`)
+  console.log("   por ID:", porEmpresa(A2, "unidades"))
+  console.log(`\nB SALIÓ MÁS DE LO PEDIDO (no se corrige por software): ${B.length} líneas, ${new Set(B.map((x) => x.idpedido)).size} pedidos`)
+  console.log("   por ID:", porEmpresa(B, "exceso"))
+  for (const x of B) console.log("  ", JSON.stringify(x))
+  console.log(`\nC POR CORREGIR (SQL 227): ${C.length} líneas, ${new Set(C.map((x) => x.idpedido)).size} pedidos, ${C.reduce((s, x) => s + x.dif, 0)} unidades`)
+  console.log("   por ID:", porEmpresa(C, "dif"))
+  for (const x of C.slice(0, 30)) console.log("  ", JSON.stringify(x))
+  if (C.length > 30) console.log(`   … y ${C.length - 30} más`)
   process.exit(0)
 }
 

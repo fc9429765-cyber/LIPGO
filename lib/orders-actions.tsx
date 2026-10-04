@@ -2171,21 +2171,35 @@ export async function updatePedidoDetalleStatus(
 
     // TOPE DURO: el pedido es el documento con el que el cliente autoriza el cargue, así que
     // sumando todas sus órdenes una línea no puede despachar más de lo pedido.
+    //
+    // Hay pedidos viejos que ya recibieron todo pero siguen mostrando pendientes, porque la
+    // sobrescritura devolvía el pendiente a su valor anterior (medido el 2026-10-04: 16 líneas
+    // de ID2). La pantalla los va a ofrecer, así que el mensaje tiene que decir qué hacer:
+    // cerrar el pedido, no volver a cargarlo.
     if (libro) {
       const excedidas: string[] = []
+      let algunaYaCompleta = false
       for (const u of updates) {
         const l = porTransid.get(Number(u.transid))
         if (!l) continue
         const pedidas = Number(l.unidades) || 0
         if (pedidas > 0 && excedeLoPedido(pedidas, libro.get(Number(u.transid)) ?? [], orderCode!, Number(u.unidadescargadas) || 0)) {
-          const yaSalio = cargadoPorOtrasOrdenes(libro.get(Number(u.transid)) ?? [], orderCode!)
-          excedidas.push(`${l.producto} (pedido ${l.idpedido}): pide ${pedidas}, ya salieron ${yaSalio} en otras órdenes y esta llevaría ${Number(u.unidadescargadas) || 0}`)
+          const filas = libro.get(Number(u.transid)) ?? []
+          const yaSalio = cargadoPorOtrasOrdenes(filas, orderCode!)
+          const ordenes = filas.filter((f) => f.ocargue !== orderCode).map((f) => `${f.ocargue} llevó ${f.unidades}`)
+          if (yaSalio >= pedidas - 0.01) algunaYaCompleta = true
+          excedidas.push(
+            `${l.producto} del pedido ${l.idpedido}: pide ${pedidas} y ya salieron ${yaSalio}${ordenes.length ? ` (${ordenes.join(", ")})` : ""}; esta orden llevaría ${Number(u.unidadescargadas) || 0} más`,
+          )
         }
       }
       if (excedidas.length > 0) {
+        const quéHacer = algunaYaCompleta
+          ? " Ese pedido ya recibió todo lo que pidió: ciérralo con 'Cerrar pendiente' en vez de volver a cargarlo. Si de verdad el cliente pide más, necesita un pedido nuevo."
+          : " Baja la cantidad de esta orden o crea un pedido nuevo por la diferencia."
         return {
           success: false,
-          message: `No se puede cargar más de lo que pide el pedido. ${excedidas.join(" · ")}`,
+          message: `No se puede despachar más de lo que pide el pedido. ${excedidas.join(" · ")}.${quéHacer}`,
         }
       }
     }
