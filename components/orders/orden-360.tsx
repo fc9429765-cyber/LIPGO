@@ -130,8 +130,16 @@ export function Orden360Dialog({
                 {data.asignoLotes && <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Asignó lotes</dt><dd className="font-medium">{data.asignoLotes}</dd></div>}
                 {data.cargaron.length > 0 && (
                   <div className="sm:col-span-2">
-                    <dt className="text-muted-foreground">Cargaron</dt>
+                    {/* "Cargaron" solo cuando es el registro real del vehículo; si no, se dice
+                        que son los asignados, para no dar por hecho quién cargó. */}
+                    <dt className="text-muted-foreground">{data.cargaronEsReal ? "Cargaron este vehículo" : "Asignados al vehículo"}</dt>
                     <dd className="mt-1 flex flex-wrap gap-1.5">{data.cargaron.map((p) => <Chip key={p} tono="neutro">{p}</Chip>)}</dd>
+                  </div>
+                )}
+                {data.sinRegistroDeCuadrilla && (
+                  <div className="sm:col-span-2">
+                    <dt className="text-muted-foreground">Cargaron este vehículo</dt>
+                    <dd className="mt-1 text-xs text-muted-foreground">No quedó registrado quién cargó. El pago de ese día fue global, así que la lista de auxiliares es la de toda la jornada y no dice quién atendió esta orden.</dd>
                   </div>
                 )}
               </dl>

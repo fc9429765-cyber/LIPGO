@@ -58,8 +58,12 @@ export interface Orden360 {
   transporte: string | null
   muelle: string | null
   modoCarga: string | null
-  /** Quienes cargaron de verdad (auxiliares_real; si no, los planeados). */
+  /** La cuadrilla del vehículo. Vacío si no quedó registrada (ver `cargaronEsReal`). */
   cargaron: string[]
+  /** true = son los que cargaron de verdad (auxiliares_real); false = los asignados al vehículo. */
+  cargaronEsReal: boolean
+  /** true = no se puede saber quién cargó (pago global y sin registro real). */
+  sinRegistroDeCuadrilla: boolean
   /** Quién registró la asignación de lotes y quién verificó el picking. */
   asignoLotes: string | null
   tiqueteBascula: string | null
@@ -105,17 +109,25 @@ export async function getOrden360(ordendecargue: string, empresaId: number | nul
       .order("creado", { ascending: true })
 
     // --- Pedidos ligados -----------------------------------------------------------------
-    const { data: pdet } = await limitarPorOwners(
-      sb.from("pedidosdetalle").select("idpedido, producto, unidades, unidadescargadas").eq("ocargue", oc),
-      acceso,
-    )
+    //
+    // El vínculo vive en `pedidosdetalle.ocargue`: al armar la orden se toman pedidos (enteros
+    // o parciales) y se montan a un vehículo, así que una orden SIEMPRE está ligada a por lo
+    // menos un pedido (gerencia 2026-10-04).
+    //
+    // OJO: el filtro por owner (`limitarPorOwners`) se aplica a la CABECERA, que es donde vive
+    // `empresafactura`. Aplicarlo al detalle lo dejaba sin resultados —la columna no existe
+    // allí— y la orden aparecía "sin pedido ligado" (error detectado con MOL202610039820).
+    const { data: pdet } = await sb
+      .from("pedidosdetalle")
+      .select("idpedido, producto, unidades, unidadescargadas")
+      .eq("ocargue", oc)
     const idsPedido = [...new Set((pdet ?? []).map((p: any) => Number(p.idpedido)).filter(Boolean))]
     let pedidos: Pedido360[] = []
     if (idsPedido.length) {
-      const { data: pcab } = await sb
-        .from("pedidoscabecera")
-        .select("idpedido, cliente, fecha, fecha_programada, estado")
-        .in("idpedido", idsPedido)
+      const { data: pcab } = await limitarPorOwners(
+        sb.from("pedidoscabecera").select("idpedido, cliente, fecha, fecha_programada, estado").in("idpedido", idsPedido),
+        acceso,
+      )
       const unidadesDe = new Map<number, number>()
       for (const p of pdet ?? []) unidadesDe.set(Number(p.idpedido), (unidadesDe.get(Number(p.idpedido)) ?? 0) + n0(p.unidades))
       pedidos = (pcab ?? [])
@@ -180,8 +192,20 @@ export async function getOrden360(ordendecargue: string, empresaId: number | nul
     resumen.cuadra = resumen.diferencia === 0
 
     // --- Quién hizo qué ------------------------------------------------------------------
-    const auxReal = String(cab.auxiliares_real ?? cab.auxiliares ?? "").trim()
-    const cargaron = auxReal ? auxReal.split(",").map((x: string) => x.trim()).filter(Boolean) : []
+    //
+    // `auxiliares_real` = quiénes cargaron DE VERDAD ese vehículo (lo usa Productividad de
+    // Auxiliares). `auxiliares` es la lista de PAGO: con pago global trae a TODO el personal
+    // del día en todas las órdenes, así que mostrarla aquí haría parecer que cargaron todos
+    // (lo señaló gerencia el 2026-10-04). Reglas:
+    //   · Si hay `auxiliares_real` → esos cargaron.
+    //   · Si no, y el pago NO es global → `auxiliares` sí es la cuadrilla del vehículo.
+    //   · Si no, y el pago ES global → no se sabe: no se inventa una lista.
+    const partir = (s: unknown) => String(s ?? "").split(",").map((x) => x.trim()).filter(Boolean)
+    const esGlobal = String(cab.tipo_pago ?? "").toLowerCase() === "global"
+    const reales = partir(cab.auxiliares_real)
+    const cargaron = reales.length > 0 ? reales : esGlobal ? [] : partir(cab.auxiliares)
+    const cargaronEsReal = reales.length > 0
+    const sinRegistroDeCuadrilla = cargaron.length === 0
     const asignoLotes = (mov ?? []).find((m: any) => m.creadopor)?.creadopor ?? null
 
     // --- Línea de tiempo del día ---------------------------------------------------------
@@ -228,6 +252,8 @@ export async function getOrden360(ordendecargue: string, empresaId: number | nul
         muelle: cab.muelle != null ? String(cab.muelle) : null,
         modoCarga: cab.modo_carga ?? null,
         cargaron,
+        cargaronEsReal,
+        sinRegistroDeCuadrilla,
         asignoLotes,
         tiqueteBascula: cab.tiquetebascula != null ? String(cab.tiquetebascula) : null,
         pesoOrden: cab.pesoorden != null ? Number(cab.pesoorden) : null,
