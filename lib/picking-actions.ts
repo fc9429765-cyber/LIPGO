@@ -1155,6 +1155,67 @@ export async function confirmPicking(
 ) {
   const supabase = await createClient()
 
+  // ===================================================================================
+  // CANDADO 1 · Una orden ya verificada NO se vuelve a procesar.
+  //
+  // Gerencia 2026-10-04, tras el caso de la orden IND202608047608: con intermitencia de
+  // red el trabajador no ve el cierre, vuelve a confirmar, y al llegar la conexión el
+  // servidor procesa dos veces → DOBLE DESPACHO (salieron 70 bultos cuando la estiba
+  // tenía 35). El picking es "todo o nada": una orden se confirma UNA sola vez, así que
+  // si ya tiene salidas aprobadas es que esta confirmación ya se hizo.
+  //
+  // Responde ÉXITO, no error: el trabajo ya quedó hecho y así el trabajador deja de
+  // reintentar (reintentar es justo lo que disparó el problema).
+  // ===================================================================================
+  {
+    const { data: yaAprobadas } = await supabase
+      .from("invtrans")
+      .select("id, creado, creadopor")
+      .eq("ocargue", ordenCargue)
+      .eq("tipomov", "Salida")
+      .eq("origen", "orden de cargue")
+      .eq("status", "aprobado")
+      .order("creado", { ascending: true })
+      .limit(1)
+    const yaVerificada = (yaAprobadas ?? [])[0]
+    if (yaVerificada) {
+      const cuando = String(yaVerificada.creado || "").slice(0, 16).replace("T", " ")
+      console.log("[picking] confirmación repetida ignorada para", ordenCargue, "— ya verificada", cuando)
+      return {
+        success: true,
+        yaEstabaVerificada: true,
+        message: `Esta orden ya quedó verificada${cuando ? ` el ${cuando}` : ""}${yaVerificada.creadopor ? ` por ${yaVerificada.creadopor}` : ""}. No se despachó nada de más.`,
+      }
+    }
+  }
+
+  // ===================================================================================
+  // CANDADO 2 · La misma estiba (QR) no puede ir dos veces en el mismo envío.
+  //
+  // En el caso de agosto la lista llegó con el QR 960 repetido (la pantalla lo agregó dos
+  // veces durante los reintentos) y se insertaron DOS salidas idénticas en el mismo
+  // microsegundo. Una estiba física no puede salir dos veces: se descarta la repetición.
+  // ===================================================================================
+  const estibasVistas = new Set<number>()
+  const sinRepetir = <T extends { idqr: number }>(scans: T[] | undefined): T[] | undefined => {
+    if (!scans?.length) return scans
+    const out: T[] = []
+    for (const s of scans) {
+      if (estibasVistas.has(s.idqr)) {
+        console.warn(`[picking] estiba QR ${s.idqr} repetida en la confirmación de ${ordenCargue}: se ignora la repetición`)
+        continue
+      }
+      estibasVistas.add(s.idqr)
+      out.push(s)
+    }
+    return out
+  }
+  items = items.map((item) => ({
+    ...item,
+    qrScans: sinRepetir(item.qrScans),
+    alternoScans: sinRepetir(item.alternoScans),
+  }))
+
   // Helper: inserta una ENTRADA con status "Averia" copiando los datos de una
   // fila de invtrans existente, con la cantidad de averías indicada.
   const insertAveriaForRow = async (rowId: number, averias: number) => {

@@ -863,8 +863,11 @@ const loadOrders = async () => {
     const result = await confirmPicking(selectedOrder.id, selectedOrder.ordendecargue, itemsToUpdate)
 
     if (result.success) {
+      // Si la orden ya estaba verificada (confirmación repetida por intermitencia de red),
+      // NO es un error: el trabajo ya quedó hecho. Se cierra igual para que el trabajador
+      // no vuelva a intentar, que es lo que provocaba el doble despacho.
       toast({
-        title: "Éxito",
+        title: (result as { yaEstabaVerificada?: boolean }).yaEstabaVerificada ? "Ya estaba verificada" : "Éxito",
         description: result.message,
       })
       setShowPickingView(false)
