@@ -8,7 +8,16 @@
 // medias. Esto cierra un riesgo latente, no un daño existente.
 
 import { describe, expect, it } from "vitest"
-import { decidirConfirmacion, itemsPorProcesar, textoYaVerificada, type FilaSalida } from "@/lib/picking-estado"
+import {
+  decidirConfirmacion,
+  esCuarentena,
+  itemsPorProcesar,
+  textoReparos,
+  textoYaVerificada,
+  validarAntesDeEscribir,
+  type FilaParaValidar,
+  type FilaSalida,
+} from "@/lib/picking-estado"
 
 const apr = (id: number, extra: Partial<FilaSalida> = {}): FilaSalida => ({ id, status: "aprobado", creado: "2026-10-04T10:00:00Z", creadopor: "Ander Fabian", ...extra })
 const pend = (id: number, extra: Partial<FilaSalida> = {}): FilaSalida => ({ id, status: "por descontar", ...extra })
@@ -103,5 +112,82 @@ describe("al reanudar solo se procesa lo que falta", () => {
 
   it("si no falta nada, no se procesa nada", () => {
     expect(itemsPorProcesar([{ id: 10 }, { id: 11 }], new Set())).toEqual([])
+  })
+})
+
+// TODO O NADA DE VERDAD. Gerencia (2026-10-04): "al final del picking está el botón de
+// confirmar verificación, que garantiza que se verifique todo y salga, salvo una diferencia
+// por daño". Hasta hoy la revisión de CUARENTENA vivía dentro del bucle: si la estiba
+// bloqueada era la tercera línea, las dos primeras YA habían salido y la confirmación
+// abortaba a medias. Calidad puede bloquear un palé después de la asignación y antes del
+// picking (344 bloquear / 343 liberar), así que el caso es real.
+describe("revisar toda la lista antes de escribir la primera línea", () => {
+  const fila = (id: number, extra: Partial<FilaParaValidar> = {}): FilaParaValidar => ({ id, status: "por descontar", ...extra })
+
+  it("sin reparos, se puede escribir", () => {
+    expect(validarAntesDeEscribir([fila(1, { location: "A6" }), fila(2, { location: "B12" })], [1, 2])).toEqual([])
+  })
+
+  it("una estiba en CUARENTENA detiene la confirmación aunque sea la última línea", () => {
+    const r = validarAntesDeEscribir(
+      [fila(1, { location: "A6" }), fila(2, { location: "A6" }), fila(3, { location: "CUARENTENA-1", nombreproducto: "PT LA NIEVE 25LB", lote: "20260930" })],
+      [1, 2, 3],
+    )
+    expect(r).toHaveLength(1)
+    expect(r[0]).toMatchObject({ tipo: "cuarentena", id: 3, lote: "20260930" })
+    expect(textoReparos(r)).toContain("No se despachó nada")
+    expect(textoReparos(r)).toContain("343")
+  })
+
+  it("avisa de todas las estibas bloqueadas en un solo mensaje", () => {
+    const r = validarAntesDeEscribir(
+      [fila(1, { location: "cuarentena", nombreproducto: "A" }), fila(2, { location: "CUARENTENA 2", nombreproducto: "B" })],
+      [1, 2],
+    )
+    expect(r).toHaveLength(2)
+    expect(textoReparos(r)).toContain("2 estibas")
+  })
+
+  it("una línea que ya no existe también detiene la confirmación", () => {
+    const r = validarAntesDeEscribir([fila(1, { location: "A6" })], [1, 99])
+    expect(r).toEqual([{ tipo: "no_existe", id: 99 }])
+    expect(textoReparos(r)).toContain("recargar la lista")
+  })
+
+  it("una fila YA APROBADA no se revisa: su despacho ya ocurrió", () => {
+    // Al reanudar, una línea aprobada antes puede estar en una ubicación que luego
+    // se bloqueó; eso no puede impedir terminar lo que falta.
+    const r = validarAntesDeEscribir([{ id: 1, status: "aprobado", location: "CUARENTENA-9" }], [1])
+    expect(r).toEqual([])
+  })
+
+  it("reconoce la ubicación de cuarentena en cualquier forma de escritura", () => {
+    expect(esCuarentena("CUARENTENA")).toBe(true)
+    expect(esCuarentena("cuarentena-3")).toBe(true)
+    expect(esCuarentena("Zona Cuarentena B")).toBe(true)
+    expect(esCuarentena("A6")).toBe(false)
+    expect(esCuarentena(null)).toBe(false)
+  })
+})
+
+// Gerencia (2026-10-04): "cuando se despacha con QR la cantidad total es la suma de varios
+// QR; puede ser exacta o puede quedar saldo". Ese saldo es el menor despacho legítimo, así
+// que la validación previa NO mira cantidades: solo existencia, dueño y cuarentena.
+describe("la validación previa no toca cantidades", () => {
+  it("no se queja si lo escaneado suma menos que la línea", () => {
+    const filas: FilaParaValidar[] = [{ id: 1, status: "por descontar", cantidad: 200, location: "A6", ocargue: "MOL1" }]
+    expect(validarAntesDeEscribir(filas, [1], "MOL1")).toEqual([])
+  })
+
+  it("detiene la confirmación si una línea es de OTRA orden de cargue", () => {
+    const filas: FilaParaValidar[] = [{ id: 1, status: "por descontar", location: "A6", ocargue: "MOL2", nombreproducto: "PT CONCHAS" }]
+    const r = validarAntesDeEscribir(filas, [1], "MOL1")
+    expect(r[0]).toMatchObject({ tipo: "otra_orden", ocargue: "MOL2" })
+    expect(textoReparos(r)).toContain("otra orden de cargue")
+  })
+
+  it("sin pasar la orden, no se revisa el dueño (compatibilidad)", () => {
+    const filas: FilaParaValidar[] = [{ id: 1, status: "por descontar", location: "A6", ocargue: "MOL2" }]
+    expect(validarAntesDeEscribir(filas, [1])).toEqual([])
   })
 })

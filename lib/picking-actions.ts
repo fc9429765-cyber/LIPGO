@@ -12,7 +12,10 @@ import {
   esLoteAlterno,
   esPorDescontar,
   itemsPorProcesar,
+  textoReparos,
   textoYaVerificada,
+  validarAntesDeEscribir,
+  type FilaParaValidar,
   type FilaSalida,
 } from "@/lib/picking-estado"
 
@@ -1250,6 +1253,46 @@ export async function confirmPicking(
     qrScans: sinRepetir(item.qrScans),
     alternoScans: sinRepetir(item.alternoScans),
   }))
+
+  // ===================================================================================
+  // CANDADO 3 · TODO O NADA DE VERDAD: se revisa TODA la lista antes de escribir nada.
+  //
+  // Gerencia 2026-10-04: "al final del picking está el botón de confirmar verificación, que
+  // garantiza que se verifique todo y salga, salvo una diferencia por daño". Para que eso
+  // sea cierto, un problema en la línea 3 no puede encontrarse cuando las líneas 1 y 2 ya
+  // salieron. La revisión de CUARENTENA vivía dentro del bucle, así que pasaba exactamente
+  // eso: calidad puede bloquear un palé DESPUÉS de la asignación y ANTES del picking (344
+  // bloquear / 343 liberar), y la confirmación abortaba a medias. Ahora aborta antes de
+  // despachar la primera línea y el trabajador recibe un solo mensaje con todo lo que hay
+  // que arreglar. La revisión dentro del bucle se queda como segunda barrera.
+  // ===================================================================================
+  {
+    const idsRequeridos = [...new Set<number>(
+      items.flatMap((it) => [
+        Number(it.id),
+        ...(it.alternoScans ?? []).map((a) => Number(a.alternoId)),
+        ...(it.alternoSimple ?? []).map((a) => Number(a.alternoId)),
+      ]),
+    )]
+    if (idsRequeridos.length > 0) {
+      const { data: filas, error: errFilas } = await supabase
+        .from("invtrans")
+        .select("id, status, nombreproducto, lote, location, ocargue")
+        .in("id", idsRequeridos)
+      if (errFilas) {
+        console.error("[picking] no se pudo revisar la lista antes de confirmar:", errFilas.message)
+        return { success: false, message: `No se pudo revisar la lista antes de confirmar: ${errFilas.message}. No se despachó nada.` }
+      }
+      // NO se valida ninguna CANTIDAD aquí. Gerencia (2026-10-04): con QR el total de la
+      // línea es la suma de varios QR, y puede ser exacta o dejar saldo (el menor despacho
+      // legítimo). Exigir que la suma cuadre bloquearía despachos buenos.
+      const reparos = validarAntesDeEscribir((filas ?? []) as FilaParaValidar[], idsRequeridos, ordenCargue)
+      if (reparos.length > 0) {
+        console.warn(`[picking] ${ordenCargue}: confirmación detenida antes de escribir —`, JSON.stringify(reparos))
+        return { success: false, message: textoReparos(reparos) }
+      }
+    }
+  }
 
   // Helper: inserta una ENTRADA con status "Averia" copiando los datos de una
   // fila de invtrans existente, con la cantidad de averías indicada.

@@ -112,6 +112,89 @@ export function itemsPorProcesar<T extends { id: number; alternoScans?: { altern
   })
 }
 
+// ───────────────────────── Validación previa (todo o nada de verdad) ─────────────────────────
+//
+// Gerencia (2026-10-04): "al final del picking está el botón de confirmar verificación, que
+// garantiza que se verifique todo y salga, salvo una diferencia por daño".
+//
+// Para que esa promesa sea TOTAL hay que revisar todas las líneas ANTES de escribir la
+// primera. Hasta hoy la revisión de CUARENTENA vivía dentro del bucle, así que se evaluaba
+// cuando le llegaba el turno a esa línea: si la estiba bloqueada era la tercera, las dos
+// primeras ya habían salido y la confirmación abortaba a medias. Calidad puede bloquear un
+// palé DESPUÉS de la asignación y ANTES del picking (344 bloquear / 343 liberar), así que el
+// caso es real. Revisando antes, una estiba bloqueada aborta sin que salga nada.
+
+export interface FilaParaValidar extends FilaSalida {
+  location?: string | null
+  ocargue?: string | null
+}
+
+export interface Reparo {
+  tipo: "no_existe" | "cuarentena" | "otra_orden"
+  id: number
+  producto?: string | null
+  lote?: string | null
+  location?: string | null
+  ocargue?: string | null
+}
+
+/** ¿Está esa ubicación bloqueada por calidad? Misma regla que usaba el bucle. */
+export const esCuarentena = (location: unknown) => /CUARENTENA/i.test(String(location ?? ""))
+
+/**
+ * Revisa de una sola vez todas las filas que la confirmación va a tocar.
+ * `idsRequeridos` son los ids enviados que deben existir y estar despachables.
+ * Devuelve los reparos; si viene vacío, se puede escribir con tranquilidad.
+ */
+export function validarAntesDeEscribir(filas: FilaParaValidar[], idsRequeridos: number[], ordenCargue?: string): Reparo[] {
+  const porId = new Map<number, FilaParaValidar>(filas.map((f) => [Number(f.id), f]))
+  const reparos: Reparo[] = []
+  for (const id of idsRequeridos) {
+    const f = porId.get(Number(id))
+    if (!f) {
+      reparos.push({ tipo: "no_existe", id: Number(id) })
+      continue
+    }
+    // Ninguna confirmación puede tocar filas de OTRA orden de cargue. Si la pantalla quedó
+    // abierta con datos viejos, es mejor detenerse que aprobar el despacho de otro vehículo.
+    if (ordenCargue && String(f.ocargue ?? "").trim() !== String(ordenCargue).trim()) {
+      reparos.push({ tipo: "otra_orden", id: Number(f.id), producto: f.nombreproducto, ocargue: f.ocargue })
+      continue
+    }
+    // Una fila ya aprobada no se revisa: su despacho ya ocurrió.
+    if (esAprobada(f)) continue
+    if (esCuarentena(f.location)) {
+      reparos.push({ tipo: "cuarentena", id: Number(f.id), producto: f.nombreproducto, lote: f.lote, location: f.location })
+    }
+  }
+  return reparos
+}
+
+/** Mensaje único para el trabajador, explicando qué hay que arreglar antes de confirmar. */
+export function textoReparos(reparos: Reparo[]): string {
+  const cuarentena = reparos.filter((r) => r.tipo === "cuarentena")
+  const faltan = reparos.filter((r) => r.tipo === "no_existe")
+  const partes: string[] = []
+  if (cuarentena.length > 0) {
+    const lista = cuarentena.map((r) => `${r.producto ?? "producto"}${r.lote ? ` lote ${r.lote}` : ""}`).join(", ")
+    partes.push(
+      `${cuarentena.length === 1 ? "Una estiba está" : `${cuarentena.length} estibas están`} BLOQUEADAS en CUARENTENA por calidad y no se pueden despachar: ${lista}. Si calidad ya las aprobó, libéralas con el código 343 en Transacciones de Inventario.`,
+    )
+  }
+  if (faltan.length > 0) {
+    partes.push(
+      `${faltan.length === 1 ? "Una línea de la asignación ya no existe" : `${faltan.length} líneas de la asignación ya no existen`}. Vuelve a abrir la orden para recargar la lista.`,
+    )
+  }
+  const ajenas = reparos.filter((r) => r.tipo === "otra_orden")
+  if (ajenas.length > 0) {
+    partes.push(
+      `${ajenas.length === 1 ? "Una línea pertenece" : `${ajenas.length} líneas pertenecen`} a otra orden de cargue (${[...new Set(ajenas.map((r) => r.ocargue ?? "sin orden"))].join(", ")}). Cierra la pantalla y vuelve a abrir la orden.`,
+    )
+  }
+  return `No se despachó nada. ${partes.join(" ")}`
+}
+
 /** Mensaje de la orden que ya estaba verificada. */
 export function textoYaVerificada(d: DecisionConfirmacion): string {
   const f = d.primeraAprobada
