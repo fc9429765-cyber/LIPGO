@@ -13,13 +13,14 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { AyudaClaveAutorizacion } from "@/components/mi-clave-autorizacion"
+import { Orden360Dialog } from "@/components/orders/orden-360"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { SST_TOKENS } from "@/components/sst/sst-utils"
 import { SigHeader, SigFilterBar, SigField, SigKpi, sigControl } from "@/components/sst/sig-ui"
 import { useAuth } from "@/components/auth-provider"
 import { getPanelInventarioLIP, getKardexInventario, getMovimientosProducto, getTiposMovimiento, getCuadreDiario, getPreservacionInventario, getConciliacionMensualInventario, guardarCierreMesInventario, getConciliacionPedidosVsSalidas, getAuditoriaOrdenPedidoSalida, guardarCuadreManualPedidoSalida, getOrCrearActaCruce, corregirLineaActaCruce, firmarActaCruce, getProductosInventario, getConteoFisicoDelMes } from "@/lib/sig-actions"
-import { Loader2, Boxes, TrendingDown, ArrowDownToLine, AlertTriangle, RefreshCw, CalendarClock, Layers, FileText, BookOpen, ZoomIn, ClipboardList, ShieldAlert, FolderOpen, ExternalLink, CheckCircle2 } from "lucide-react"
+import { Truck, Loader2, Boxes, TrendingDown, ArrowDownToLine, AlertTriangle, RefreshCw, CalendarClock, Layers, FileText, BookOpen, ZoomIn, ClipboardList, ShieldAlert, FolderOpen, ExternalLink, CheckCircle2 } from "lucide-react"
 import { ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts"
 
 const DONUT_COLORS = ["#1E8449", "#0D3B6E", "#00B4CC", "#E0A800", "#7e57c2", "#C0392B"]
@@ -91,6 +92,8 @@ export function PanelInventarioLIP() {
   const [auditoria, setAuditoria] = useState<{ ocargue: string; producto?: string; data: any } | null>(null)
   const [loadingAud, setLoadingAud] = useState(false)
   const [modoEdicion, setModoEdicion] = useState(false)
+  // Ciclo completo de una orden (pidió · asignó · despachó), abierto desde la conciliación.
+  const [orden360, setOrden360] = useState<string | null>(null)
   // Cuadre manual con clave personal (gerencia 2026-10-04): líneas pendientes de confirmar.
   const [pendienteCuadre, setPendienteCuadre] = useState<any[] | null>(null)
   const [claveCuadre, setClaveCuadre] = useState("")
@@ -1081,9 +1084,16 @@ export function PanelInventarioLIP() {
                               <td className="px-2 py-1.5 text-center text-xs" style={{ color: f.empresa_distinta ? "#0369a1" : undefined, fontWeight: f.empresa_distinta ? 600 : undefined }}>{f.idempresa_salida ?? "—"}</td>
                               <td className="px-2 py-1.5">{badge(f.estado_alerta)}</td>
                               <td className="px-2 py-1.5 text-center">
-                                <Button variant="ghost" size="icon" className="h-7 w-7" title="Auditar orden (pedido detalle + invtrans)" onClick={() => abrirAuditoria(f)}>
-                                  <ZoomIn className="h-4 w-4" style={{ color: SST_TOKENS.navy }} />
-                                </Button>
+                                <span className="inline-flex items-center gap-0.5">
+                                  {/* Ciclo completo de la orden: qué pidió, qué lotes se asignaron
+                                      y qué se despachó. Es la vista que explica la diferencia. */}
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Ver el ciclo completo de esta orden (pidió · asignó · despachó)" onClick={() => setOrden360(String(f.ocargue))}>
+                                    <Truck className="h-4 w-4" style={{ color: SST_TOKENS.navy }} />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Auditar orden (pedido detalle + invtrans)" onClick={() => abrirAuditoria(f)}>
+                                    <ZoomIn className="h-4 w-4" style={{ color: SST_TOKENS.navy }} />
+                                  </Button>
+                                </span>
                               </td>
                             </tr>
                           ))}
@@ -1582,6 +1592,9 @@ export function PanelInventarioLIP() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Ciclo completo de la orden, abierto desde una línea de la conciliación. */}
+      <Orden360Dialog ordendecargue={orden360} open={orden360 !== null} onOpenChange={(v) => !v && setOrden360(null)} />
 
       {/* CUADRE MANUAL: exige la clave personal (proceso inv_cuadre_manual, SQL 224).
           Gerencia 2026-10-04: "esta acción sí debería estar con clave, la mía, solo esa acción". */}
