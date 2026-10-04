@@ -6869,11 +6869,32 @@ export async function getAuditoriaOrdenPedidoSalida(
  * IMPORTANTE: por decisión del negocio, este módulo NO modifica invtrans ni el
  * inventario de ningún proyecto. Las salidas son de solo lectura.
  */
+/**
+ * CUADRE MANUAL del pedido contra la salida (Panel de Inventario › Conciliación pedidos vs
+ * salidas › Auditar orden). Cambia a mano `unidades` / `unidadescargadas` de líneas de pedido.
+ *
+ * EXIGE CLAVE PERSONAL (proceso `inv_cuadre_manual`, SQL 224) por decisión de gerencia
+ * (2026-10-04): no toca el inventario físico, pero reescribe el lado del pedido y con eso
+ * puede hacer DESAPARECER una diferencia de la conciliación. Es decir, edita la evidencia del
+ * control de exactitud; por eso solo la Gerencia General de LIPgo puede ejecutarlo, y queda
+ * registrado quién lo hizo en la bitácora de autorizaciones.
+ */
 export async function guardarCuadreManualPedidoSalida(payload: {
   pedidos?: { transid: number; cargadas?: number; unidades?: number }[]
   actor?: string | null
+  clave?: string
+  idempresa?: number | null
 }): Promise<{ success: boolean; error?: string; data?: { pedidos: number } }> {
   try {
+    const { autorizar } = await import("@/lib/autorizaciones-core")
+    const auth = await autorizar({
+      proceso: "inv_cuadre_manual",
+      idempresa: payload.idempresa ?? null,
+      clave: payload.clave ?? "",
+      referencia: `cuadre manual de ${(payload.pedidos ?? []).length} línea(s) de pedido`,
+    })
+    if (!auth.ok) return { success: false, error: auth.error || "Clave incorrecta." }
+
     const supabase: any = await getSupabaseAdmin()
     let pOk = 0
 

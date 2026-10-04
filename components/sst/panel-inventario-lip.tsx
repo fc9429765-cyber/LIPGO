@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { AyudaClaveAutorizacion } from "@/components/mi-clave-autorizacion"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { SST_TOKENS } from "@/components/sst/sst-utils"
@@ -89,6 +91,10 @@ export function PanelInventarioLIP() {
   const [auditoria, setAuditoria] = useState<{ ocargue: string; producto?: string; data: any } | null>(null)
   const [loadingAud, setLoadingAud] = useState(false)
   const [modoEdicion, setModoEdicion] = useState(false)
+  // Cuadre manual con clave personal (gerencia 2026-10-04): líneas pendientes de confirmar.
+  const [pendienteCuadre, setPendienteCuadre] = useState<any[] | null>(null)
+  const [claveCuadre, setClaveCuadre] = useState("")
+  const [errorClaveCuadre, setErrorClaveCuadre] = useState("")
   const [edits, setEdits] = useState<{ ped: Record<number, string>; pedU: Record<number, string> }>({ ped: {}, pedU: {} })
   const [savingCuadre, setSavingCuadre] = useState(false)
   const [tab, setTab] = useState("dashboard")
@@ -366,19 +372,29 @@ export function PanelInventarioLIP() {
       toast({ title: "Sin cambios", description: "No hay cantidades de pedido modificadas." })
       return
     }
-    const msg = `Vas a guardar en Supabase ${peds.length} línea(s) de pedido (unidades/cargadas).\nEsto NO modifica el inventario.\n\n¿Confirmar el cuadre manual?`
-    if (!window.confirm(msg)) return
+    // Gerencia 2026-10-04: esta acción pide CLAVE. No toca el inventario físico, pero reescribe
+    // el lado del pedido y con eso puede hacer desaparecer una diferencia de la conciliación.
+    setPendienteCuadre(peds)
+    setClaveCuadre("")
+    setErrorClaveCuadre("")
+  }
+
+  /** Ejecuta el cuadre manual ya confirmado con la clave personal. */
+  async function confirmarCuadreConClave() {
+    if (!pendienteCuadre || !auditoria) return
     setSavingCuadre(true)
-    const r = await guardarCuadreManualPedidoSalida({ pedidos: peds, actor })
+    const r = await guardarCuadreManualPedidoSalida({ pedidos: pendienteCuadre, actor, clave: claveCuadre, idempresa: selectedEmpresaId })
     setSavingCuadre(false)
     if (r.success) {
-      toast({ title: "Cuadre manual guardado", description: `${r.data?.pedidos ?? 0} línea(s) de pedido actualizada(s).` })
+      toast({ title: "Cuadre manual guardado", description: `${r.data?.pedidos ?? 0} línea(s) de pedido actualizada(s). Queda registrado quién autorizó.` })
+      setPendienteCuadre(null)
+      setClaveCuadre("")
       setModoEdicion(false)
       setEdits({ ped: {}, pedU: {} })
       await abrirAuditoria({ ocargue: auditoria.ocargue, producto: auditoria.producto })
       cargarPedidosSalidas()
     } else {
-      toast({ title: "No se pudo guardar el cuadre", description: r.error })
+      setErrorClaveCuadre(r.error || "No se pudo guardar el cuadre.")
     }
   }
 
@@ -1564,6 +1580,47 @@ export function PanelInventarioLIP() {
               ))}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* CUADRE MANUAL: exige la clave personal (proceso inv_cuadre_manual, SQL 224).
+          Gerencia 2026-10-04: "esta acción sí debería estar con clave, la mía, solo esa acción". */}
+      <Dialog open={!!pendienteCuadre} onOpenChange={(o) => { if (!o && !savingCuadre) { setPendienteCuadre(null); setClaveCuadre(""); setErrorClaveCuadre("") } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base">Autorizar cuadre manual</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <div className="rounded-md border border-atencion-bd bg-atencion-bg p-3 text-xs text-atencion-fg">
+              <p className="font-semibold">Vas a cambiar a mano {pendienteCuadre?.length ?? 0} línea(s) de pedido.</p>
+              <p className="mt-1">No modifica el inventario físico, pero sí el lado del pedido: con esto una diferencia de la conciliación puede desaparecer. Queda registrado quién lo autorizó.</p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="clave-cuadre">Tu clave personal</Label>
+                <AyudaClaveAutorizacion />
+              </div>
+              <Input
+                id="clave-cuadre"
+                type="password"
+                value={claveCuadre}
+                onChange={(e) => { setClaveCuadre(e.target.value); setErrorClaveCuadre("") }}
+                placeholder="Clave de autorización"
+                disabled={savingCuadre}
+                autoComplete="off"
+                className={errorClaveCuadre ? "border-red-500" : ""}
+              />
+              {errorClaveCuadre && <p className="text-xs text-critico-fg">{errorClaveCuadre}</p>}
+              <p className="text-xs text-muted-foreground">Solo autoriza la Gerencia General de LIPgo.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setPendienteCuadre(null); setClaveCuadre(""); setErrorClaveCuadre("") }} disabled={savingCuadre}>Cancelar</Button>
+            <Button onClick={confirmarCuadreConClave} disabled={!claveCuadre.trim() || savingCuadre}>
+              {savingCuadre ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Autorizar y guardar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
