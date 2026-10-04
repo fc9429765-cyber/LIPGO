@@ -70,6 +70,21 @@ async function fetchAllRows(makeQuery: () => any): Promise<any[]> {
   return all
 }
 
+/** Ejecuta `fn` sobre `items` con a lo sumo `limite` en vuelo; resultados en el MISMO orden. */
+async function enParalelo<T, R>(items: T[], limite: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length)
+  let siguiente = 0
+  const trabajador = async () => {
+    for (;;) {
+      const i = siguiente++
+      if (i >= items.length) return
+      out[i] = await fn(items[i])
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limite, items.length) }, trabajador))
+  return out
+}
+
 function finDeQuincena(anio: number, mes: number, q: 1 | 2): string {
   if (q === 1) return `${anio}-${String(mes).padStart(2, "0")}-15`
   const ultimo = new Date(Date.UTC(anio, mes, 0)).getUTCDate()
@@ -127,16 +142,31 @@ export async function getAcumuladosLIPgo(
       "fecha, persona, novedad_reportada, actividad_registrada, base_dia, hed, hedf, hen, hef, hn, recargodominical, recargo_dominical_tasa_completa, bonif_prestacional, toneladas, total_liquidado_dia"
     // pagonomina_rango: la misma nómina que la vista, calculada solo para el
     // rango (scripts/200); orden (persona, fecha) para paginar sin repetir filas.
-    const rows = await fetchAllRows(() =>
-      admin
-        .rpc("pagonomina_rango", { p_desde: desde, p_hasta: hasta })
-        .select(cols)
-        .in("persona", nombres)
-        .gte("fecha", desde)
-        .lte("fecha", hasta)
-        .order("persona")
-        .order("fecha"),
+    //
+    // RENDIMIENTO (gerencia 2026-10-03, "acumulados se tarda tanto"): la función es
+    // un conjunto calculado, así que CADA página de 1.000 filas la vuelve a ejecutar
+    // completa. Medido: una quincena ~0,9 s, un mes ~1,2 s, enero–septiembre ~5,8 s por
+    // página; un año de una empresa son 25+ páginas → minutos. Por eso se consulta MES
+    // POR MES (cada llamada liviana, 2–3 páginas) y hasta 4 meses en paralelo. Mismas
+    // columnas, mismos filtros y mismo orden: el resultado es idéntico, solo más rápido.
+    const meses: { desde: string; hasta: string }[] = []
+    for (let m = mesDesde; m <= mesHasta; m++) {
+      const ultimo = new Date(Date.UTC(anio, m, 0)).getUTCDate()
+      meses.push({ desde: `${anio}-${String(m).padStart(2, "0")}-01`, hasta: `${anio}-${String(m).padStart(2, "0")}-${String(ultimo).padStart(2, "0")}` })
+    }
+    const porMes = await enParalelo(meses, 4, (mes) =>
+      fetchAllRows(() =>
+        admin
+          .rpc("pagonomina_rango", { p_desde: mes.desde, p_hasta: mes.hasta })
+          .select(cols)
+          .in("persona", nombres)
+          .gte("fecha", mes.desde)
+          .lte("fecha", mes.hasta)
+          .order("persona")
+          .order("fecha"),
+      ),
     )
+    const rows = porMes.flat()
     const rowsPorPersona = new Map<string, any[]>()
     for (const r of rows) {
       const nombre = String(r.persona).trim()

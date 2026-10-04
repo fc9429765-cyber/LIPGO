@@ -150,13 +150,64 @@ export async function leerPagonominaRango(input: {
 }): Promise<Fila[]> {
   await exigir([...ESTADO_RESULTADOS, ...NOMINA])
   const sb: any = await getSupabaseAdminAsSystem()
-  return todas((from, to) => {
-    let q = sb.rpc("pagonomina_rango", { p_desde: input.pDesde, p_hasta: input.pHasta }).select(input.columnas).in("idempresaliquidacion", input.ids)
-    if (input.fechaDesde) q = q.gte("fecha", input.fechaDesde)
-    if (input.fechaHasta) q = q.lte("fecha", input.fechaHasta)
-    q = input.orden === "persona_fecha" ? q.order("persona").order("fecha") : q.order("fecha", { ascending: false }).order("persona")
-    return q.range(from, to)
-  })
+  const leerTramo = (pDesde: string, pHasta: string) =>
+    todas((from, to) => {
+      let q = sb.rpc("pagonomina_rango", { p_desde: pDesde, p_hasta: pHasta }).select(input.columnas).in("idempresaliquidacion", input.ids)
+      if (input.fechaDesde) q = q.gte("fecha", input.fechaDesde)
+      if (input.fechaHasta) q = q.lte("fecha", input.fechaHasta)
+      q = input.orden === "persona_fecha" ? q.order("persona").order("fecha") : q.order("fecha", { ascending: false }).order("persona")
+      return q.range(from, to)
+    })
+  // RENDIMIENTO (2026-10-03): pagonomina_rango se recalcula completa en CADA página de 1.000
+  // filas (un mes ~1,2 s; nueve meses ~5,8 s por página). Un rango largo se parte por mes,
+  // hasta 4 en paralelo, y se reordena igual que la consulta original. Si el rango es
+  // enorme (fecha vacía → "2000-01-01") se deja una sola consulta, como antes.
+  const tramos = tramosMensuales(input.pDesde, input.pHasta)
+  const partes = tramos.length > 1 && tramos.length <= 36 ? await enParaleloFin(tramos, 4, (t) => leerTramo(t.desde, t.hasta)) : [await leerTramo(input.pDesde, input.pHasta)]
+  const filas = partes.flat()
+  if (partes.length > 1) {
+    const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+    filas.sort((a, b) =>
+      input.orden === "persona_fecha"
+        ? cmp(String(a.persona ?? ""), String(b.persona ?? "")) || cmp(String(a.fecha ?? ""), String(b.fecha ?? ""))
+        : cmp(String(b.fecha ?? ""), String(a.fecha ?? "")) || cmp(String(a.persona ?? ""), String(b.persona ?? "")),
+    )
+  }
+  return filas
+}
+
+/** Divide [desde, hasta] (YYYY-MM-DD) en tramos por mes calendario, recortados al rango. */
+function tramosMensuales(desde: string, hasta: string): { desde: string; hasta: string }[] {
+  const out: { desde: string; hasta: string }[] = []
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(desde) || !/^\d{4}-\d{2}-\d{2}$/.test(hasta) || desde > hasta) return [{ desde, hasta }]
+  let y = Number(desde.slice(0, 4))
+  let m = Number(desde.slice(5, 7))
+  for (let i = 0; i < 400; i++) {
+    const ini = `${y}-${String(m).padStart(2, "0")}-01`
+    const fin = `${y}-${String(m).padStart(2, "0")}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}`
+    if (ini > hasta) break
+    out.push({ desde: ini < desde ? desde : ini, hasta: fin > hasta ? hasta : fin })
+    m++
+    if (m > 12) {
+      m = 1
+      y++
+    }
+  }
+  return out.length ? out : [{ desde, hasta }]
+}
+
+async function enParaleloFin<T, R>(items: T[], limite: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length)
+  let siguiente = 0
+  const trabajador = async () => {
+    for (;;) {
+      const i = siguiente++
+      if (i >= items.length) return
+      out[i] = await fn(items[i])
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limite, items.length) }, trabajador))
+  return out
 }
 
 /** Vista toneladasauxiliarespago: todas las filas de la empresa (orden fechacargue desc, persona). */
