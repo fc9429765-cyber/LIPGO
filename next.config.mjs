@@ -19,6 +19,25 @@ const nextConfig = {
       bodySizeLimit: "50mb",
     },
   },
+  // Cabeceras de seguridad (paso 6 del programa, 2026-10-03). Vercel ya pone HSTS.
+  // Sin CSP todavía: la app carga fuentes y librerías de varios orígenes y una CSP
+  // mal afinada rompe pantallas; se hará con informe (report-only) primero.
+  // Cámara, micrófono y ubicación se permiten solo al propio origen: los usan el
+  // lector de QR, la báscula con foto y el visor de ubicaciones.
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(self), microphone=(self), geolocation=(self), payment=(), usb=()" },
+          { key: "X-DNS-Prefetch-Control", value: "on" },
+        ],
+      },
+    ]
+  },
 }
 
 export default nextConfig
