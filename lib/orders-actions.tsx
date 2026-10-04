@@ -16,6 +16,13 @@ import { cediDeDestino, PLANTAS_ORIGEN, type CediDestino } from "@/lib/cedis-des
 import { esProductoPorUnidad } from "@/lib/facturacion-billed-party"
 import { reportarInterno } from "@/lib/reporte-interno-actions"
 import { FILTRO_ABIERTOS_POSTGREST, normalizarEstado } from "@/lib/pedidos-estado"
+import {
+  cargadoPorOtrasOrdenes,
+  cargadoTrasGuardar,
+  excedeLoPedido,
+  lineaTrasReverso,
+  type CargueDeLinea,
+} from "@/lib/pedido-ordenes"
 
 /**
  * Obtiene los IDs de empresa accesibles para el usuario actual desde perfil_acceso_empresas
@@ -2114,27 +2121,123 @@ export async function registerSanitaryVerification(data: {
   }
 }
 
+// `unidadescargadas` de cada línea es lo que lleva ESTA orden. Un pedido puede salir en
+// VARIAS órdenes (gerencia, 2026-10-04), así que lo que se guarda en la línea es la SUMA de
+// lo que se llevó cada orden, anotada en el libro auxiliar `pedidodetalle_ocargue` (SQL 226).
+// Antes del 2026-10-04 la segunda orden sobrescribía a la primera: 59 líneas de 56 pedidos
+// dejaron de contar 18.129 unidades que sí salieron del inventario.
+//
+// Mientras el SQL 226 no esté corrido, la tabla no existe y esto se comporta EXACTAMENTE
+// como antes: una orden por línea, el valor tal cual. Así el código puede estar publicado
+// sin depender del script.
 export async function updatePedidoDetalleStatus(
   updates: Array<{
     transid: number
     unidadescargadas: number
     estado: "cerrado" | "parcial"
+    idpedido?: number
   }>,
   orderCode?: string,
 ) {
   const supabase = await createClient()
   try {
+    if (updates.length === 0) return { success: true }
+    const transids = updates.map((u) => u.transid)
+
+    // Las líneas: hacen falta las unidades pedidas para el tope y la empresa para el libro.
+    const { data: lineas } = await supabase
+      .from("pedidosdetalle")
+      .select("transid, idpedido, id_empresa, producto, unidades")
+      .in("transid", transids)
+    const porTransid = new Map<number, any>((lineas ?? []).map((l: any) => [Number(l.transid), l]))
+
+    // El libro auxiliar. Si la tabla todavía no existe, se sigue sin él.
+    let libro: Map<number, CargueDeLinea[]> | null = null
+    if (orderCode) {
+      const { data: filas, error: libroError } = await supabase
+        .from("pedidodetalle_ocargue")
+        .select("transid, ocargue, unidades, creado_en")
+        .in("transid", transids)
+      if (libroError) {
+        console.warn("[cargue] libro pedidodetalle_ocargue no disponible, se usa el modo de una sola orden:", libroError.message)
+      } else {
+        libro = new Map()
+        for (const f of filas ?? []) {
+          const t = Number(f.transid)
+          libro.set(t, [...(libro.get(t) ?? []), { ocargue: String(f.ocargue), unidades: Number(f.unidades) || 0, creadoEn: f.creado_en }])
+        }
+      }
+    }
+
+    // TOPE DURO: el pedido es el documento con el que el cliente autoriza el cargue, así que
+    // sumando todas sus órdenes una línea no puede despachar más de lo pedido.
+    if (libro) {
+      const excedidas: string[] = []
+      for (const u of updates) {
+        const l = porTransid.get(Number(u.transid))
+        if (!l) continue
+        const pedidas = Number(l.unidades) || 0
+        if (pedidas > 0 && excedeLoPedido(pedidas, libro.get(Number(u.transid)) ?? [], orderCode!, Number(u.unidadescargadas) || 0)) {
+          const yaSalio = cargadoPorOtrasOrdenes(libro.get(Number(u.transid)) ?? [], orderCode!)
+          excedidas.push(`${l.producto} (pedido ${l.idpedido}): pide ${pedidas}, ya salieron ${yaSalio} en otras órdenes y esta llevaría ${Number(u.unidadescargadas) || 0}`)
+        }
+      }
+      if (excedidas.length > 0) {
+        return {
+          success: false,
+          message: `No se puede cargar más de lo que pide el pedido. ${excedidas.join(" · ")}`,
+        }
+      }
+    }
+
+    // Anotar en el libro lo que se lleva esta orden (reemplaza si la orden se vuelve a guardar).
+    if (libro && orderCode) {
+      const filas = updates
+        .filter((u) => (Number(u.unidadescargadas) || 0) > 0)
+        .map((u) => {
+          const l = porTransid.get(Number(u.transid))
+          return {
+            id_empresa: Number(l?.id_empresa) || 0,
+            idpedido: Number(l?.idpedido ?? u.idpedido) || 0,
+            transid: Number(u.transid),
+            ocargue: orderCode,
+            unidades: Number(u.unidadescargadas) || 0,
+            origen: "app",
+          }
+        })
+      if (filas.length > 0) {
+        const { error: upErr } = await supabase.from("pedidodetalle_ocargue").upsert(filas, { onConflict: "transid,ocargue" })
+        if (upErr) {
+          console.error("[cargue] no se pudo anotar el libro pedidodetalle_ocargue:", upErr.message)
+          return { success: false, message: `Error al registrar la orden en el control del pedido: ${upErr.message}` }
+        }
+      }
+      // Si al volver a guardar la orden una línea queda en cero, su anotación se retira:
+      // el libro no puede decir que esa orden se llevó algo que ya no lleva.
+      const enCero = updates.filter((u) => (Number(u.unidadescargadas) || 0) <= 0).map((u) => Number(u.transid))
+      if (enCero.length > 0) {
+        await supabase.from("pedidodetalle_ocargue").delete().eq("ocargue", orderCode).in("transid", enCero)
+      }
+    }
+
     const updatePromises = updates.map((update) => {
+      const filasLinea = libro?.get(Number(update.transid)) ?? []
+      const cargadas = libro && orderCode ? cargadoTrasGuardar(filasLinea, orderCode, Number(update.unidadescargadas) || 0) : Number(update.unidadescargadas) || 0
+
       const updateData: {
         unidadescargadas: number
         estado: "cerrado" | "parcial"
         ocargue?: string
       } = {
-        unidadescargadas: update.unidadescargadas,
+        unidadescargadas: cargadas,
         estado: update.estado,
       }
 
-      if (orderCode) {
+      // Una orden que no se lleva nada de esta línea no puede reclamarla: la línea conserva
+      // la orden que de verdad la despachó. (Solo con el libro disponible, para que sin el
+      // SQL 226 el comportamiento sea idéntico al de siempre.)
+      const estaOrdenNoLleva = !!libro && (Number(update.unidadescargadas) || 0) <= 0 && filasLinea.length > 0
+      if (orderCode && !estaOrdenNoLleva) {
         updateData.ocargue = orderCode
       }
 
@@ -2617,7 +2720,65 @@ export async function deleteLoadOrder(orderId: number) {
 
     console.log("[v0] Cleared fields in pedidoscabecera for ocargue:", ordenDeCargue)
 
-    const { error: pedidosDetalleUpdateError } = await supabase
+    // REVERSO DE UNA SOLA ORDEN. Un pedido puede haber salido en varias órdenes, así que
+    // una línea que también salió en OTRA orden no puede perder ese despacho: solo se
+    // descuenta la parte de esta orden. El libro auxiliar `pedidodetalle_ocargue` (SQL 226)
+    // es el que lo sabe; donde no haya anotación (histórico anterior), se limpia como siempre.
+    const lineasConOtrasOrdenes = new Set<number>()
+    const pedidosConOtrasOrdenes = new Map<number, string>()
+    const { data: libroOrden, error: libroOrdenError } = await supabase
+      .from("pedidodetalle_ocargue")
+      .select("transid")
+      .eq("ocargue", ordenDeCargue)
+
+    if (libroOrdenError) {
+      console.warn("[reverso] libro pedidodetalle_ocargue no disponible, se limpia como siempre:", libroOrdenError.message)
+    } else {
+      const transids: number[] = [...new Set<number>((libroOrden ?? []).map((f: any) => Number(f.transid)))]
+      if (transids.length > 0) {
+        // Todas las anotaciones de esas líneas, para saber qué queda al retirar esta orden.
+        const { data: todasFilas } = await supabase
+          .from("pedidodetalle_ocargue")
+          .select("transid, ocargue, unidades, creado_en")
+          .in("transid", transids)
+        const { data: lineasRev } = await supabase.from("pedidosdetalle").select("transid, idpedido, unidades").in("transid", transids)
+        const pedidasDe = new Map<number, number>((lineasRev ?? []).map((l: any) => [Number(l.transid), Number(l.unidades) || 0]))
+        const pedidoDeLinea = new Map<number, number>((lineasRev ?? []).map((l: any) => [Number(l.transid), Number(l.idpedido)]))
+
+        const porLinea = new Map<number, CargueDeLinea[]>()
+        for (const f of todasFilas ?? []) {
+          const t = Number(f.transid)
+          porLinea.set(t, [...(porLinea.get(t) ?? []), { ocargue: String(f.ocargue), unidades: Number(f.unidades) || 0, creadoEn: f.creado_en }])
+        }
+
+        // Retirar las anotaciones de ESTA orden.
+        const { error: delError } = await supabase.from("pedidodetalle_ocargue").delete().eq("ocargue", ordenDeCargue)
+        if (delError) {
+          console.error("[reverso] no se pudo retirar la orden del control del pedido:", delError.message)
+          return { success: false, message: `Error al retirar la orden del control del pedido: ${delError.message}` }
+        }
+
+        for (const t of transids) {
+          const r = lineaTrasReverso(pedidasDe.get(t) ?? 0, porLinea.get(t) ?? [], ordenDeCargue)
+          if (!r.quedanOtrasOrdenes) continue
+          lineasConOtrasOrdenes.add(t)
+          const idp = pedidoDeLinea.get(t)
+          if (idp && r.ocargue) pedidosConOtrasOrdenes.set(idp, r.ocargue)
+          const { error: upError } = await supabase
+            .from("pedidosdetalle")
+            .update({ ocargue: r.ocargue, unidadescargadas: r.cargadas, estado: r.estado })
+            .eq("transid", t)
+          if (upError) {
+            console.error("[reverso] error al recalcular la línea", t, upError.message)
+            return { success: false, message: "Error al recalcular las líneas que salieron en otras órdenes" }
+          }
+          console.log(`[reverso] línea ${t}: sigue con ${r.cargadas} unidades de la orden ${r.ocargue}`)
+        }
+      }
+    }
+
+    // El resto de las líneas de esta orden vuelven a quedar sin cargar, como siempre.
+    let limpiar = supabase
       .from("pedidosdetalle")
       .update({
         ocargue: null,
@@ -2626,6 +2787,10 @@ export async function deleteLoadOrder(orderId: number) {
         estado: null,
       })
       .eq("ocargue", ordenDeCargue)
+    if (lineasConOtrasOrdenes.size > 0) {
+      limpiar = limpiar.not("transid", "in", `(${[...lineasConOtrasOrdenes].join(",")})`)
+    }
+    const { error: pedidosDetalleUpdateError } = await limpiar
 
     if (pedidosDetalleUpdateError) {
       console.error("[v0] Error updating pedidosdetalle:", pedidosDetalleUpdateError)
@@ -2633,6 +2798,35 @@ export async function deleteLoadOrder(orderId: number) {
     }
 
     console.log("[v0] Cleared fields in pedidos detalle for ocargue:", ordenDeCargue)
+
+    // Un pedido que TODAVÍA salió en otra orden no puede quedar como si nunca hubiera
+    // cargado: su cabecera vuelve a apuntar a la orden que queda y su estado se vuelve a
+    // derivar de las cantidades. (El paso anterior la había dejado en "aprobado" y en nulo,
+    // que es lo correcto cuando la orden eliminada era la única.)
+    for (const [idpedido, ocQueda] of pedidosConOtrasOrdenes) {
+      const { data: ocRow } = await supabase
+        .from("cabeceraoc")
+        .select("ordendecargue, fechaorden, fechacargue, placa, transporte")
+        .eq("ordendecargue", ocQueda)
+        .maybeSingle()
+      const { error: cabError } = await supabase
+        .from("pedidoscabecera")
+        .update({
+          ocargue: ocQueda,
+          vehiculo: ocRow?.placa ?? null,
+          transporte: ocRow?.transporte ?? null,
+          fechaordencargue: ocRow?.fechaorden ?? null,
+          fechadeentrega: ocRow?.fechacargue ?? null,
+        })
+        .eq("idpedido", idpedido)
+      if (cabError) {
+        console.error("[reverso] error al devolver la cabecera del pedido", idpedido, cabError.message)
+        return { success: false, message: "Error al recalcular los pedidos que salieron en otras órdenes" }
+      }
+      const rec = await checkAndUpdatePedidoCabeceraStatus(idpedido)
+      if (!rec.success) console.error("[reverso] no se pudo recalcular el estado del pedido", idpedido, rec.message)
+      console.log(`[reverso] pedido ${idpedido} sigue ligado a la orden ${ocQueda}`)
+    }
 
     const { error: citasUpdateError } = await supabase
       .from("citasvehiculos")

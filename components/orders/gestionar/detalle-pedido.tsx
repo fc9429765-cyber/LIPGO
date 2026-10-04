@@ -5,11 +5,12 @@
 // se disparan hacia el cascarón.
 
 import { useEffect, useState } from "react"
-import { Check, FileText, Pencil, Truck, X } from "lucide-react"
+import { Check, FileText, Pencil, Search, Truck, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Chip, Esqueleto, Eyebrow } from "@/components/ui/lipgo"
-import { getLineasPedido, type LineaPedido, type PedidoCola } from "@/lib/pedidos-cola-actions"
+import { getLineasPedido, type LineaPedido, type OrdenDePedido, type PedidoCola } from "@/lib/pedidos-cola-actions"
+import { Orden360Dialog } from "@/components/orders/orden-360"
 import { normalizarEstado } from "@/lib/pedidos-estado"
 import { EstadoChip } from "./estado-chip"
 import { COP, NUM, fechaCorta, fechaLarga, horaCorta, kgTexto } from "./formato"
@@ -68,8 +69,9 @@ export function DetallePedido({
   onVerOC: (pedido: PedidoCola) => void
   permisos: { generarOC: boolean; verOC: boolean }
 }) {
-  const [data, setData] = useState<{ cabecera: PedidoCola; lineas: LineaPedido[] } | null>(null)
+  const [data, setData] = useState<{ cabecera: PedidoCola; lineas: LineaPedido[]; ordenes: OrdenDePedido[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [orden360, setOrden360] = useState<string | null>(null)
 
   useEffect(() => {
     setData(null)
@@ -87,6 +89,7 @@ export function DetallePedido({
   const aprobado = p ? normalizarEstado(p.aprobado) === "si" : false
 
   return (
+    <>
     <Dialog open={abierto} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto p-0">
         <DialogHeader className="border-b border-border px-6 pt-6 pb-4">
@@ -207,7 +210,32 @@ export function DetallePedido({
                         <tr key={l.transid} className="border-t border-border/60">
                           <td className="px-4 py-2">
                             <span className="font-medium">{l.producto}</span>
-                            {l.categoria && <span className="block text-[11px] text-muted-foreground">{l.categoria}{l.ocargue ? ` · OC ${l.ocargue}` : ""}</span>}
+                            {l.categoria && <span className="block text-[11px] text-muted-foreground">{l.categoria}</span>}
+                            {/* Un pedido puede salir en VARIAS órdenes: aquí se ve cuál se llevó cuánto. */}
+                            {l.cargues.length > 0 ? (
+                              <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                {l.cargues.map((c) => (
+                                  <button
+                                    key={c.ocargue}
+                                    type="button"
+                                    onClick={() => setOrden360(c.ocargue)}
+                                    className="lg-num text-[11px] text-info-fg underline decoration-dotted underline-offset-2 hover:decoration-solid"
+                                    title="Ver el ciclo completo de esta orden"
+                                  >
+                                    {c.ocargue} · {NUM.format(c.unidades)}
+                                  </button>
+                                ))}
+                              </span>
+                            ) : l.ocargue ? (
+                              <button
+                                type="button"
+                                onClick={() => setOrden360(l.ocargue!)}
+                                className="lg-num mt-0.5 block text-[11px] text-info-fg underline decoration-dotted underline-offset-2 hover:decoration-solid"
+                                title="Ver el ciclo completo de esta orden"
+                              >
+                                OC {l.ocargue}
+                              </button>
+                            ) : null}
                           </td>
                           <td className="lg-num px-3 py-2 text-right">{NUM.format(l.unidades)}</td>
                           <td className="lg-num px-3 py-2 text-right">{NUM.format(Math.round(l.peso))}</td>
@@ -215,7 +243,15 @@ export function DetallePedido({
                           <td className="lg-num px-3 py-2 text-right">{l.total_linea > 0 ? NUM.format(l.total_linea) : "—"}</td>
                           <td className="lg-num px-4 py-2 text-right text-muted-foreground">
                             {NUM.format(l.unidadescargadas)}
-                            {l.unidades - l.unidadescargadas > 0 ? ` · faltan ${NUM.format(l.unidades - l.unidadescargadas)}` : ""}
+                            {l.unidades - l.unidadescargadas > 0.01 ? (
+                              <span className="block text-[11px] text-atencion-fg">faltan {NUM.format(l.unidades - l.unidadescargadas)}</span>
+                            ) : null}
+                            {/* Las órdenes son la prueba de lo que salió. Si no coinciden con la línea, se dice. */}
+                            {l.segunOrdenes > l.unidadescargadas + 0.01 ? (
+                              <span className="block text-[11px] text-critico-fg" title="Lo que sumó cada orden de cargue no coincide con lo que registra la línea del pedido">
+                                según las órdenes salieron {NUM.format(l.segunOrdenes)}
+                              </span>
+                            ) : null}
                           </td>
                         </tr>
                       ))}
@@ -237,6 +273,43 @@ export function DetallePedido({
                 </div>
               </div>
             </div>
+
+            {/* ÓRDENES QUE ATENDIERON EL PEDIDO. Un pedido puede salir en varias cuando el
+                cliente envía parciales, y el control debe quedar a la vista. */}
+            {data!.ordenes.length > 0 && (
+              <div className="border-t border-border px-6 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Eyebrow className="text-muted-foreground">
+                    {data!.ordenes.length === 1 ? "Orden de cargue que lo atendió" : `Salió en ${data!.ordenes.length} órdenes de cargue`}
+                  </Eyebrow>
+                  <span className="lg-num text-xs text-muted-foreground">
+                    {NUM.format(p.unidadesCargadas)} de {NUM.format(p.unidades)} und despachadas
+                  </span>
+                </div>
+                <ul className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {data!.ordenes.map((o) => (
+                    <li key={o.ocargue}>
+                      <button
+                        type="button"
+                        onClick={() => setOrden360(o.ocargue)}
+                        className="w-full rounded-lg border border-border px-3 py-2 text-left transition-colors hover:border-acento hover:bg-muted/40"
+                      >
+                        <span className="flex items-center justify-between gap-2">
+                          <span className="lg-num text-sm font-semibold">{o.ocargue}</span>
+                          <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        </span>
+                        <span className="lg-num mt-0.5 block text-xs text-muted-foreground">
+                          {NUM.format(o.unidades)} und · {o.lineas} {o.lineas === 1 ? "línea" : "líneas"}
+                          {o.fecha ? ` · ${fechaCorta(o.fecha)}` : ""}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">{o.placa ? `${o.placa}${o.conductor ? ` · ${o.conductor}` : ""}` : "sin vehículo"}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs text-muted-foreground">Toca una orden para ver su ciclo completo: qué pidió, qué lotes se asignaron y qué salió.</p>
+              </div>
+            )}
 
             {!c.esFinal && (
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-4">
@@ -266,5 +339,9 @@ export function DetallePedido({
         )}
       </DialogContent>
     </Dialog>
+    {/* El ciclo de una orden va FUERA del diálogo del pedido: dos diálogos anidados se
+        pelean el foco. */}
+    <Orden360Dialog ordendecargue={orden360} open={orden360 !== null} onOpenChange={(v) => !v && setOrden360(null)} />
+    </>
   )
 }

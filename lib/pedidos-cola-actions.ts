@@ -27,8 +27,10 @@ import { sumarDiasISO, normalizarEstado, textoMotivo, ESTADO_ENTREGA_PARCIAL, ES
 import { esDomingoISO, siguienteDiaOperativoISO } from "@/lib/pedidos-estado"
 import { MSG_SIN_ACCESO, aPedidoCola, cargarCola, n0, resumenLineas, resumir, txt, type ColaPedidos, type LineaPedido, type PedidoCola, type ResLineas, type ResumenCola } from "@/lib/pedidos-cola-core"
 import { registrarErrorServidor } from "@/lib/errores-servidor"
+import { ordenesDelPedido, totalCargado, type OrdenDePedido } from "@/lib/pedido-ordenes"
 
 export type { PedidoCola, ResumenCola, ColaPedidos, LineaPedido } from "@/lib/pedidos-cola-core"
+export type { OrdenDePedido } from "@/lib/pedido-ordenes"
 
 type Resp<T> = { success: true; data: T } | { success: false; message: string }
 
@@ -193,7 +195,10 @@ export async function getHistorialPedidos(empresaId: number | null | undefined, 
 
 // ─────────────────────────────── Detalle ───────────────────────────────
 
-export async function getLineasPedido(empresaId: number | null | undefined, idpedido: number): Promise<Resp<{ cabecera: PedidoCola; lineas: LineaPedido[] }>> {
+export async function getLineasPedido(
+  empresaId: number | null | undefined,
+  idpedido: number,
+): Promise<Resp<{ cabecera: PedidoCola; lineas: LineaPedido[]; ordenes: OrdenDePedido[] }>> {
   if (!empresaId) return { success: false, message: "Selecciona un proyecto." }
   if (!Number.isFinite(idpedido)) return { success: false, message: "Pedido inválido." }
   try {
@@ -205,19 +210,57 @@ export async function getLineasPedido(empresaId: number | null | undefined, idpe
     if (!cab) return { success: false, message: "El pedido no existe en este proyecto." }
     const { data: det, error: e2 } = await sb.from("pedidosdetalle").select("*").eq("id_empresa", empresaId).eq("idpedido", idpedido).order("transid", { ascending: true }).limit(500)
     if (e2) throw e2
-    const lineas: LineaPedido[] = (det ?? []).map((d: any) => ({
-      transid: Number(d.transid),
-      producto: String(d.producto ?? ""),
-      categoria: txt(d.categoria),
-      unidades: n0(d.unidades),
-      peso: n0(d.peso),
-      precio_und: n0(d.precio_und),
-      total_linea: n0(d.total_linea),
-      ocargue: txt(d.ocargue),
-      unidadescargadas: n0(d.unidadescargadas ?? d.unidades_cargadas),
-      unidadespendientes: n0(d.unidadespendientes),
-      estado: txt(d.estado),
-    }))
+    // Libro auxiliar: qué orden de cargue se llevó cuánto de cada línea. Un pedido puede
+    // salir en varias órdenes (gerencia, 2026-10-04). Si el SQL 226 no está corrido, la
+    // tabla no existe y el pedido se muestra como siempre.
+    const cargues = new Map<number, { ocargue: string; unidades: number }[]>()
+    const filasLibro: { transid: number; ocargue: string; unidades: number; creadoEn: string | null }[] = []
+    const { data: libro, error: eLibro } = await sb
+      .from("pedidodetalle_ocargue")
+      .select("transid, ocargue, unidades, creado_en")
+      .eq("idpedido", idpedido)
+      .order("creado_en", { ascending: true })
+    if (eLibro) console.warn("[pedidos-cola] libro pedidodetalle_ocargue no disponible:", eLibro.message)
+    for (const f of libro ?? []) {
+      const t = Number(f.transid)
+      const fila = { ocargue: String(f.ocargue), unidades: n0(f.unidades), creadoEn: txt(f.creado_en) }
+      cargues.set(t, [...(cargues.get(t) ?? []), { ocargue: fila.ocargue, unidades: fila.unidades }])
+      filasLibro.push({ transid: t, ...fila })
+    }
+
+    const lineas: LineaPedido[] = (det ?? []).map((d: any) => {
+      const cs = cargues.get(Number(d.transid)) ?? []
+      return {
+        transid: Number(d.transid),
+        producto: String(d.producto ?? ""),
+        categoria: txt(d.categoria),
+        unidades: n0(d.unidades),
+        peso: n0(d.peso),
+        precio_und: n0(d.precio_und),
+        total_linea: n0(d.total_linea),
+        ocargue: txt(d.ocargue),
+        unidadescargadas: n0(d.unidadescargadas ?? d.unidades_cargadas),
+        unidadespendientes: n0(d.unidadespendientes),
+        estado: txt(d.estado),
+        cargues: cs,
+        segunOrdenes: totalCargado(cs),
+      }
+    })
+
+    // Las órdenes que atendieron este pedido, con su vehículo y su fecha.
+    const codigos = [...new Set(filasLibro.map((f) => f.ocargue))]
+    const datosOrden = new Map<string, { fecha: string | null; placa: string | null; conductor: string | null }>()
+    if (codigos.length > 0) {
+      const { data: ocs } = await sb.from("cabeceraoc").select("ordendecargue, fechaorden, fechacargue, placa, conductor").in("ordendecargue", codigos)
+      for (const o of ocs ?? []) {
+        datosOrden.set(String(o.ordendecargue), {
+          fecha: o.fechacargue ? String(o.fechacargue).slice(0, 10) : o.fechaorden ? String(o.fechaorden).slice(0, 10) : null,
+          placa: txt(o.placa),
+          conductor: txt(o.conductor),
+        })
+      }
+    }
+    const ordenes = ordenesDelPedido(filasLibro, datosOrden)
     const res: ResLineas = { kg: 0, und: 0, lineas: lineas.length, oc: 0, cargadas: 0, pend: 0 }
     for (const l of lineas) {
       res.kg += l.peso
@@ -226,7 +269,7 @@ export async function getLineasPedido(empresaId: number | null | undefined, idpe
       res.cargadas += l.unidadescargadas
       res.pend += l.unidadespendientes
     }
-    return { success: true, data: { cabecera: aPedidoCola(cab, res, hoyBogotaISO()), lineas } }
+    return { success: true, data: { cabecera: aPedidoCola(cab, res, hoyBogotaISO()), lineas, ordenes } }
   } catch (e: any) {
     console.error("[pedidos-cola] getLineasPedido:", e?.message ?? e)
     return { success: false, message: e?.message || "No se pudo cargar el pedido." }

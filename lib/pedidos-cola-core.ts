@@ -100,6 +100,13 @@ export interface LineaPedido {
   unidadescargadas: number
   unidadespendientes: number
   estado: string | null
+  /**
+   * Qué orden de cargue se llevó cuánto de esta línea (libro auxiliar, SQL 226). Una línea
+   * puede salir en varias órdenes. Vacío = sin anotaciones (histórico anterior al libro).
+   */
+  cargues: { ocargue: string; unidades: number }[]
+  /** Suma de `cargues`. Si no coincide con `unidadescargadas`, hay algo que informar. */
+  segunOrdenes: number
 }
 
 export type ResLineas = { kg: number; und: number; lineas: number; oc: number; cargadas: number; pend: number }
