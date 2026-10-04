@@ -1,7 +1,9 @@
 "use client"
 
 import useSWR from "swr"
-import { supabase } from "@/lib/supabase-client"
+// SEGURIDAD (2026-10-03): nada se lee desde el navegador; todas las filas de nómina
+// vienen de lib/finanzas-lectura-actions.ts (sesión + permiso + service role).
+import { leerAjustesProyeccionAprobados, leerBonosNominaAprobados, leerNombresRetirados, leerPagonominaRango, leerPrestacionesPagadas } from "@/lib/finanzas-lectura-actions"
 import { getParafiscales } from "@/lib/parafiscales-actions"
 import type { ConceptoPrestacion } from "@/lib/prestaciones-activos-actions"
 
@@ -146,15 +148,8 @@ async function obtenerPrestacionRealSiPagada(
   desde: string,
   hasta: string,
 ): Promise<number | null> {
-  const { data, error } = await supabase
-    .from("prestaciones_activos_pagos")
-    .select("idempresa, periodo_desde, periodo_hasta, valor_real, valor_calculado, estado")
-    .eq("concepto", concepto)
-    .eq("estado", "pagada")
-    .in("idempresa", ids)
-    .lte("periodo_desde", desde)
-    .gte("periodo_hasta", hasta)
-  if (error || !data || data.length === 0) return null
+  const data = await leerPrestacionesPagadas(ids, concepto, desde, hasta).catch(() => null)
+  if (!data || data.length === 0) return null
   // Todas las filas encontradas ya cumplen periodo_desde<=desde y
   // periodo_hasta>=hasta (cobertura completa) por el filtro de arriba.
   let total = 0
@@ -286,18 +281,12 @@ export function useCostoNomina({
         // Nominapersonal. Asi la tarjeta "Total liquidado del mes" y el
         // costo de nomina del estado de resultados muestran exactamente
         // el mismo total para una misma empresa y periodo.
-        const { data: pageData, error: pageError } = await supabase
-          .rpc("pagonomina_rango", { p_desde: desde, p_hasta: hasta })
-          .select("persona, fecha, bonif_prestacional, total_liquidado_dia")
-          .in("idempresaliquidacion", ids)
-          .gte("fecha", desde)
-          .lte("fecha", hasta)
-          // Orden único y estable para paginar (ver lib/liquidaciones-actions.ts).
-          .order("persona")
-          .order("fecha")
-          .range(offset, offset + PAGE_SIZE - 1)
-
-        if (pageError) throw pageError
+        // El servidor pagina y devuelve TODAS las filas de una vez (misma consulta y
+        // mismo orden persona, fecha); la segunda vuelta del bucle recibe vacío y corta.
+        const pageData =
+          offset === 0
+            ? await leerPagonominaRango({ ids, pDesde: desde, pHasta: hasta, fechaDesde: desde, fechaHasta: hasta, columnas: "persona, fecha, bonif_prestacional, total_liquidado_dia", orden: "persona_fecha" })
+            : []
         // `.rpc()` tipa el resultado como T | T[] porque no sabe que la función
         // devuelve un SET de filas; siempre es un arreglo.
         const page = (pageData ?? []) as typeof allRows
@@ -314,14 +303,8 @@ export function useCostoNomina({
       // contar como costo aqui tampoco. Match por NOMBRE (igual que
       // pagonomina/archivoplano — no hay una llave mas fuerte disponible
       // en `pagonomina.persona`).
-      const { data: retirados, error: retiradosError } = await supabase
-        .from("headcount")
-        .select("nombre")
-        .eq("estado", "Inactivo")
-      if (retiradosError) throw retiradosError
-      const nombresRetirados = new Set(
-        (retirados || []).map((h: any) => String(h.nombre || "").trim().toUpperCase()),
-      )
+      const retirados = await leerNombresRetirados()
+      const nombresRetirados = new Set(retirados.map((n) => String(n || "").trim().toUpperCase()))
       const filasActivas = allRows.filter(
         (r: any) => !nombresRetirados.has(String(r.persona || "").trim().toUpperCase()),
       )
@@ -367,12 +350,7 @@ export function useCostoNomina({
         quincenasEnRango(desde, hasta).map((p) => bucketQuincena(p.anio, p.mes, p.quincena)),
       )
       if (periodosEnRango.size > 0) {
-        const { data: ajustes, error: ajustesError } = await supabase
-          .from("ajustes_proyeccion")
-          .select("persona, idempresa, valor_ajuste, anio_aplica, mes_aplica, quincena_aplica")
-          .eq("estado", "aprobado")
-          .in("idempresa", ids)
-        if (ajustesError) throw ajustesError
+        const ajustes = await leerAjustesProyeccionAprobados(ids)
         for (const a of ajustes || []) {
           // Mismo filtro de retirados que arriba (y que `ajustes_aplicables`
           // en 059_archivoplano_reemplazo.sql).
@@ -397,14 +375,7 @@ export function useCostoNomina({
       // solo APROBADOS, retirados fuera. Por definicion NO cotizan IBC (por
       // eso "no prestacional"), asi que NO entran a `totalLiquidado` ni a la
       // base de las provisiones de abajo — se suman directo al costo total.
-      const { data: bonosNomina, error: bonosError } = await supabase
-        .from("bonos_nomina")
-        .select("nombre, valor")
-        .eq("estado", "aprobado")
-        .in("idempresa", ids)
-        .gte("fecha", desde)
-        .lte("fecha", hasta)
-      if (bonosError) throw bonosError
+      const bonosNomina = await leerBonosNominaAprobados(ids, desde, hasta)
       const totalBonosNoPrestacionales = (bonosNomina || [])
         .filter((b: any) => !nombresRetirados.has(String(b.nombre || "").trim().toUpperCase()))
         .reduce((acc: number, b: any) => acc + (Number(b.valor) || 0), 0)

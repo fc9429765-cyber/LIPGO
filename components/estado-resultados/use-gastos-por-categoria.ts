@@ -1,7 +1,7 @@
 "use client"
 
 import useSWR from "swr"
-import { supabase } from "@/lib/supabase-client"
+import { leerCargosFijosGenerados, leerGastosRango } from "@/lib/finanzas-lectura-actions"
 
 /**
  * Fila agregada por categoria. La UI renderiza una fila por cada elemento
@@ -32,9 +32,9 @@ interface Args {
  * usa `id_empresa` (snake_case) y `fecha` (DATE), distinto del resto de
  * tablas del estado de resultados.
  *
- * Decision: NO usamos `count: 'exact'` ni un agregado SQL aparte porque
- * Supabase no tiene `group by` en el cliente JS. Traemos las filas y
- * agregamos en memoria (volumen esperado: decenas/cientos por mes, ok).
+ * SEGURIDAD (2026-10-03): las filas las trae lib/finanzas-lectura-actions.ts
+ * (sesión + permiso + service role); el navegador ya no consulta `gastos` ni
+ * `cargos_fijos_generados` directo. La agregación en memoria es la misma.
  */
 export function useGastosPorCategoria({
   ids,
@@ -49,37 +49,13 @@ export function useGastosPorCategoria({
   const { data, error, isLoading } = useSWR<GastosResumen>(
     swrKey,
     async () => {
-      const { data: rows, error: err } = await supabase
-        .from("gastos")
-        .select("categoria, monto")
-        .in("id_empresa", ids)
-        .gte("fecha", desde)
-        .lte("fecha", hasta)
-
-      if (err) throw err
-
       // Alquiler de montacargas: gasto FIJO calculado (no registrado a mano
       // en `gastos`), ver lib/cargos-fijos-actions.ts. Aplica a id1/id2/id3
       // (los tres pagan el alquiler; solo id1/id3 lo facturan aparte, pero
       // el GASTO es el mismo en los tres). Mismo filtro de periodo que el
-      // resto del hook: `periodo` es el primer dia del mes.
-      //
-      // TOLERANTE a que la tabla aun no exista (migraciones nuevas,
-      // scripts/create_cargos_fijos_*.sql): sin esto, abrir el Estado de
-      // Resultados se rompía por completo hasta correrlas.
-      let fijosRows: Array<{ valor: number }> = []
-      const { data: fijosData, error: errFijos } = await supabase
-        .from("cargos_fijos_generados")
-        .select("valor")
-        .in("idempresa", ids)
-        .eq("tipo", "gasto")
-        .gte("periodo", desde)
-        .lte("periodo", hasta)
-      if (errFijos) {
-        console.warn("[estado-resultados] cargos_fijos_generados no disponible todavia (¿faltan migraciones?):", errFijos)
-      } else {
-        fijosRows = fijosData ?? []
-      }
+      // resto del hook: `periodo` es el primer dia del mes. La acción es
+      // tolerante a que la tabla aun no exista (devuelve vacío).
+      const [rows, fijosRows] = await Promise.all([leerGastosRango(ids, desde, hasta), leerCargosFijosGenerados(ids, "gasto", desde, hasta)])
 
       // Agregamos por categoria en memoria. Usamos un Map para preservar
       // orden de insercion estable.

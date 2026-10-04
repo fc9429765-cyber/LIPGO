@@ -12,6 +12,7 @@ import { Check, ChevronsUpDown, Plus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "@/components/ui/use-toast"
 import { createClient } from "@/lib/supabase-client"
+import { leerPersonalBasico } from "@/lib/finanzas-lectura-actions"
 import { Calendar } from "@/components/ui/calendar"
 import { useAuth } from "@/components/auth-provider"
 import { format, parseISO } from "date-fns"
@@ -163,19 +164,13 @@ export function Tolva({
         }
       }
 
-      // Fetch employees from headcount table for the current empresa
-      const { data: employeesData, error: employeeError } = await supabase
-        .from("headcount")
-        .select("id, nombre")
-        .eq("idempresa", selectedEmpresaId)
-
-      if (!employeeError && employeesData) {
-        // Transform headcount data to match Employee interface
-        const transformedEmployees = employeesData.map((emp: any) => ({
-          id: emp.id,
-          nombreempleado: emp.nombre,
-        }))
-        setEmployees(transformedEmployees as Employee[])
+      // Personal de la empresa (solo id y nombre) vía servidor: el navegador ya no
+      // consulta `headcount` directo (SEGURIDAD 2026-10-03).
+      try {
+        const employeesData = selectedEmpresaId != null ? await leerPersonalBasico(selectedEmpresaId, false) : []
+        setEmployees(employeesData.map((emp) => ({ id: emp.id, nombreempleado: emp.nombre })) as Employee[])
+      } catch (e) {
+        console.error("[v0] Tolva: personal no disponible:", e)
       }
     } catch (error) {
       console.error("[v0] Error loading tolva data:", error)

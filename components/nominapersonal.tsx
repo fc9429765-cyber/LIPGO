@@ -8,8 +8,7 @@ import { DatePickerField } from "@/components/ui/date-picker-field"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAuth } from "@/components/auth-provider"
-import { createClient } from "@/lib/supabase-client"
-import { fetchAllRows } from "@/lib/fetch-all-rows"
+import { leerPagonominaRango, leerToneladasAuxiliares, leerToneladasAuxiliaresPago } from "@/lib/finanzas-lectura-actions"
 import { getArchivoPlano } from "@/lib/archivo-plano-actions"
 import { useToast } from "@/components/ui/use-toast"
 import { Download, RefreshCw } from "lucide-react"
@@ -194,70 +193,34 @@ export default function Nominapersonal() {
     if (!selectedEmpresaId) return
     setLoading(true)
     try {
-      const supabase = await createClient()
-
-      // Paginamos: PostgREST limita a 1000 filas por consulta por
-      // defecto. Sin esto, rangos amplios (ej. todo un mes) podian
-      // cortar los datos silenciosamente.
+      // NOTA: La pestana "Ver Liquidacion" filtra por `idempresaliquidacion`
+      // (no por `idempresa`) a peticion del negocio. Ese campo identifica
+      // a la empresa CONTRATANTE de la liquidacion, mientras que
+      // `idempresa` corresponde a la empresa donde se registro la
+      // operacion. Las demas pestanas siguen usando `idempresa`.
+      // `pagonomina_rango` calcula la nómina SOLO para el rango pedido (misma
+      // lógica que la vista `pagonomina`, verificada fila por fila). Si el
+      // usuario deja una fecha vacía y da "Buscar", se respeta su intención de
+      // ver todo hacia atrás / hasta hoy — igual que antes, solo que más lento.
+      // SEGURIDAD (2026-10-03): la consulta la hace el servidor (sesión + permiso
+      // de Nominapersonal + service role), paginada y con el mismo orden
+      // (fecha desc, persona); el navegador ya no toca la función directo.
       let allData: any[] = []
-      let offset = 0
-      const pageSize = 1000
-      let hasMore = true
-
-      while (hasMore) {
-        // NOTA: La pestana "Ver Liquidacion" filtra por `idempresaliquidacion`
-        // (no por `idempresa`) a peticion del negocio. Ese campo identifica
-        // a la empresa CONTRATANTE de la liquidacion, mientras que
-        // `idempresa` corresponde a la empresa donde se registro la
-        // operacion. Las demas pestanas siguen usando `idempresa`.
-        // `pagonomina_rango` calcula la nómina SOLO para el rango pedido (misma
-        // lógica que la vista `pagonomina`, verificada fila por fila). Si el
-        // usuario deja una fecha vacía y da "Buscar", se respeta su intención de
-        // ver todo hacia atrás / hasta hoy — igual que antes, solo que más lento.
-        let query = supabase
-          .rpc("pagonomina_rango", {
-            p_desde: fechaInicio || "2000-01-01",
-            p_hasta: fechaFin || fechaLocalISO(new Date()),
-          })
-          .select(
+      try {
+        allData = await leerPagonominaRango({
+          ids: [selectedEmpresaId],
+          pDesde: fechaInicio || "2000-01-01",
+          pHasta: fechaFin || fechaLocalISO(new Date()),
+          fechaDesde: fechaInicio || null,
+          fechaHasta: fechaFin || null,
+          columnas:
             "fecha, persona, actividad_registrada, novedad_reportada, toneladas, pago_produccion, base_dia, bonif_prestacional, bonif_no_prestacional, hed, hedf, hen, hef, hn, pago_domingo, recargodominical, total_liquidado_dia",
-          )
-          .eq("idempresaliquidacion", selectedEmpresaId)
-
-        // Filtros de fecha aplicados a nivel de BD. Solo se anaden si
-        // el usuario realmente eligio una fecha; ambos son opcionales
-        // e independientes (puede acotar solo el inicio, solo el fin,
-        // o ambos).
-        if (fechaInicio) query = query.gte("fecha", fechaInicio)
-        if (fechaFin) query = query.lte("fecha", fechaFin)
-
-        // `persona` como desempate: orden único y estable para paginar sin
-        // duplicar/perder filas en los cortes de página (ver
-        // lib/liquidaciones-actions.ts). El orden visual sigue siendo por fecha.
-        const { data: dataRaw, error } = await query
-          .order("fecha", { ascending: false })
-          .order("persona")
-          .range(offset, offset + pageSize - 1)
-
-        if (error) {
-          console.error("[v0] Error loading liquidaciones:", error)
-          toast({ title: "Error", description: "Error al cargar datos", variant: "destructive" })
-          return
-        }
-        // `.rpc()` tipa el resultado como T | T[] porque no sabe que la función
-        // devuelve un SET de filas; siempre es un arreglo.
-        const data = (dataRaw ?? []) as any[]
-
-        if (!data || data.length === 0) {
-          hasMore = false
-        } else {
-          allData = [...allData, ...data]
-          if (data.length < pageSize) {
-            hasMore = false
-          } else {
-            offset += pageSize
-          }
-        }
+          orden: "fecha_desc_persona",
+        })
+      } catch (error) {
+        console.error("[v0] Error loading liquidaciones:", error)
+        toast({ title: "Error", description: "Error al cargar datos", variant: "destructive" })
+        return
       }
 
       setLiquidaciones(allData)
@@ -276,22 +239,13 @@ export default function Nominapersonal() {
     if (!selectedEmpresaId) return
     setLoading(true)
     try {
-      const supabase = await createClient()
-      // PAGINADO: la vista tiene más de 1.000 filas por empresa (al 2026-09-27:
-      // ID1 3.179, ID2 1.774, ID3 1.422, ID4 1.145) y Supabase corta en 1.000
-      // sin avisar -- esta tabla mostraba solo los días más recientes. Orden
-      // único (fecha, persona) para que las páginas no se solapen.
+      // PAGINADO en el servidor: la vista tiene más de 1.000 filas por empresa (al
+      // 2026-09-27: ID1 3.179, ID2 1.774, ID3 1.422, ID4 1.145) y Supabase corta en
+      // 1.000 sin avisar. Orden único (fecha, persona) para que las páginas no se
+      // solapen. SEGURIDAD (2026-10-03): lib/finanzas-lectura-actions.ts.
       let data: any[]
       try {
-        data = await fetchAllRows((from, to) =>
-          supabase
-            .from("toneladasauxiliarespago")
-            .select("*")
-            .eq("idempresa", selectedEmpresaId)
-            .order("fechacargue", { ascending: false })
-            .order("persona")
-            .range(from, to),
-        )
+        data = await leerToneladasAuxiliaresPago(selectedEmpresaId)
       } catch (error) {
         console.error("Error loading totales:", error)
         toast({ title: "Error", description: "Error al cargar datos", variant: "destructive" })
@@ -330,44 +284,16 @@ export default function Nominapersonal() {
     if (!selectedEmpresaId) return
     setLoading(true)
     try {
-      const supabase = await createClient()
-      console.log("[v0] Nominapersonal: Starting loadDetalles for empresa:", selectedEmpresaId)
-      
+      // SEGURIDAD (2026-10-03): paginado en el servidor con el mismo orden
+      // (fechacargue desc); ver lib/finanzas-lectura-actions.ts.
       let allData: any[] = []
-      let offset = 0
-      const pageSize = 1000
-      let hasMore = true
-
-      // Fetch all data using pagination with offset
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from("toneladasauxiliares")
-          .select("*")
-          .eq("idempresa", selectedEmpresaId)
-          .order("fechacargue", { ascending: false })
-          .range(offset, offset + pageSize - 1)
-
-        if (error) {
-          console.error("[v0] Error loading detalles:", error)
-          toast({ title: "Error", description: "Error al cargar datos", variant: "destructive" })
-          return
-        }
-
-        if (!data || data.length === 0) {
-          hasMore = false
-        } else {
-          allData = [...allData, ...data]
-          console.log("[v0] Nominapersonal: Loaded batch at offset", offset, "records count:", data.length, "total so far:", allData.length)
-          
-          if (data.length < pageSize) {
-            hasMore = false
-          } else {
-            offset += pageSize
-          }
-        }
+      try {
+        allData = await leerToneladasAuxiliares(selectedEmpresaId)
+      } catch (error) {
+        console.error("[v0] Error loading detalles:", error)
+        toast({ title: "Error", description: "Error al cargar datos", variant: "destructive" })
+        return
       }
-
-      console.log("[v0] Nominapersonal: Total detalles loaded:", allData.length)
       setDetalles(allData)
     } catch (error) {
       console.error("[v0] Error:", error)

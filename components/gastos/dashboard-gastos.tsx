@@ -17,7 +17,7 @@
 import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
 import { useAuth } from "@/components/auth-provider"
-import { supabase } from "@/lib/supabase-client"
+import { leerGastos } from "@/lib/finanzas-lectura-actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DatePickerField } from "@/components/ui/date-picker-field"
@@ -134,26 +134,10 @@ export default function DashboardGastos({ idEmpresa: idEmpresaProp }: Props) {
     ? ["gastos", idEmpresa, desde, hasta, categoria, debounced]
     : null
 
+  // SEGURIDAD (2026-10-03): la consulta la hace el servidor con los mismos filtros,
+  // orden y límite (lib/finanzas-lectura-actions.ts); el navegador no toca `gastos`.
   const fetcher = async (): Promise<GastoRow[]> => {
-    let query = supabase
-      .from("gastos")
-      .select("*")
-      .eq("id_empresa", idEmpresa as number)
-      .gte("fecha", desde)
-      .lte("fecha", hasta)
-      .order("fecha", { ascending: false })
-      .order("id", { ascending: false })
-      .limit(100)
-
-    if (categoria && categoria !== "Todas") {
-      query = query.eq("categoria", categoria)
-    }
-    if (debounced.trim()) {
-      query = query.ilike("descripcion", `%${debounced.trim()}%`)
-    }
-
-    const { data, error } = await query
-    if (error) throw error
+    const data = await leerGastos({ idEmpresa: idEmpresa as number, desde, hasta, categoria, buscar: debounced })
     return (data ?? []) as GastoRow[]
   }
 

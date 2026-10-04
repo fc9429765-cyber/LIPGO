@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/components/auth-provider"
 import { supabase } from "@/lib/supabase"
+import { leerPersonalBasico } from "@/lib/finanzas-lectura-actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -100,24 +101,17 @@ export default function NovedadesTiempoReal() {
   useEffect(() => {
     if (!selectedEmpresaId) return
     let vivo = true
-    supabase
-      .from("headcount")
-      .select("identificacion, nombre, cargo")
-      .eq("idempresa", selectedEmpresaId)
-      .eq("estado", "Activo")
-      .order("nombre", { ascending: true })
-      .then(({ data: d }: any) => {
+    // Vía servidor (SEGURIDAD 2026-10-03): solo identificación, nombre y cargo, activos.
+    leerPersonalBasico(selectedEmpresaId, true)
+      .then((d) => {
         if (!vivo) return
         setPersonas(
-          (d ?? [])
-            .filter((r: any) => !/prueba/i.test(String(r.nombre ?? "")))
-            .map((r: any) => ({
-              identificacion: String(r.identificacion ?? "").trim(),
-              nombre: r.nombre ?? "",
-              cargo: r.cargo ?? null,
-            })),
+          d
+            .filter((r) => !/prueba/i.test(String(r.nombre ?? "")))
+            .map((r) => ({ identificacion: r.identificacion, nombre: r.nombre ?? "", cargo: r.cargo ?? null })),
         )
       })
+      .catch(() => {})
     return () => {
       vivo = false
     }
