@@ -73,6 +73,8 @@ export interface ResumenCola {
   sinFecha: number
   enCargue: number
   parciales: number
+  /** Unidades que les faltan a los parciales por despachar. */
+  undParciales: number
   porAprobar: number
   porAprobarConCartera: number
   candidatosSinRastro: number
@@ -232,6 +234,7 @@ export function resumir(pedidos: PedidoCola[]): ResumenCola {
     sinFecha: 0,
     enCargue: 0,
     parciales: 0,
+    undParciales: 0,
     porAprobar: 0,
     porAprobarConCartera: 0,
     candidatosSinRastro: 0,
@@ -263,6 +266,7 @@ export function resumir(pedidos: PedidoCola[]): ResumenCola {
         break
       case "parcial":
         r.parciales++
+        r.undParciales += Math.max(0, p.unidadesPendientes || p.unidades - p.unidadesCargadas)
         break
       case "nuevo":
         r.porAprobar++

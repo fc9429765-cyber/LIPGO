@@ -15,14 +15,18 @@ import { EstadoChip } from "./estado-chip"
 import { NUM, fechaCorta, relativoPromesa } from "./formato"
 import type { TipoAccion } from "./acciones-pedido"
 
-export type FiltroCola = "todos" | "atrasados" | "hoy" | "programados" | "en_cargue" | "por_aprobar" | "sin_fecha" | `fecha:${string}`
+export type FiltroCola = "todos" | "atrasados" | "hoy" | "programados" | "en_cargue" | "parciales" | "por_aprobar" | "sin_fecha" | `fecha:${string}`
 
 export const FILTROS_COLA: { valor: FiltroCola; etiqueta: string; tono: "critico" | "info" | "atencion" | "neutro" | null }[] = [
   { valor: "todos", etiqueta: "Todos", tono: null },
   { valor: "atrasados", etiqueta: "Atrasados", tono: "critico" },
   { valor: "hoy", etiqueta: "Hoy", tono: "info" },
   { valor: "programados", etiqueta: "Programados", tono: "info" },
-  { valor: "en_cargue", etiqueta: "En cargue / parcial", tono: "atencion" },
+  // Los parciales van aparte de "en cargue" (gerencia 2026-10-04: "sería bueno que en el
+  // módulo de pedidos estén muy visibles los que tienen entregas parciales"): un pedido que
+  // salió a medias necesita seguimiento propio hasta completarse o cerrarse con su motivo.
+  { valor: "parciales", etiqueta: "Entregas parciales", tono: "atencion" },
+  { valor: "en_cargue", etiqueta: "En cargue", tono: "info" },
   { valor: "por_aprobar", etiqueta: "Por aprobar", tono: "neutro" },
 ]
 
@@ -39,7 +43,9 @@ export function filtrarCola(pedidos: PedidoCola[], filtro: FiltroCola): PedidoCo
     case "programados":
       return pedidos.filter((p) => p.calc.estado === "programado" && p.calc.atrasoDias < 0)
     case "en_cargue":
-      return pedidos.filter((p) => p.calc.estado === "en_cargue" || p.calc.estado === "parcial")
+      return pedidos.filter((p) => p.calc.estado === "en_cargue")
+    case "parciales":
+      return pedidos.filter((p) => p.calc.estado === "parcial")
     case "por_aprobar":
       return pedidos.filter((p) => p.calc.estado === "nuevo")
     case "sin_fecha":

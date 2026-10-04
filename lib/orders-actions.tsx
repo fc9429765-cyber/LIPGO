@@ -2159,10 +2159,11 @@ export async function updatePedidoDetalleStatus(
 export async function checkAndUpdatePedidoCabeceraStatus(idpedido: number) {
   const supabase = await createClient()
   try {
-    // Get all lines for this order
+    // Get all lines for this order. Se traen también las CANTIDADES: el estado de la línea
+    // dice si está cerrada (gestión), no si salió completa (hecho físico).
     const { data: allLines, error: linesError } = await supabase
       .from("pedidosdetalle")
-      .select("estado")
+      .select("estado, unidades, unidadescargadas, unidades_cargadas")
       .eq("idpedido", idpedido)
 
     if (linesError) {
@@ -2180,10 +2181,28 @@ export async function checkAndUpdatePedidoCabeceraStatus(idpedido: number) {
     // Check if at least one line is partial
     const hasPartial = allLines.some((line) => line.estado === "parcial")
 
+    // ¿Quedaron unidades SIN DESPACHAR? Una línea puede cerrarse (gestión) con unidades
+    // pendientes: cerrar no significa que haya salido todo. Hasta el 2026-10-04 el estado se
+    // decidía SOLO por las banderas de línea, así que un pedido con unidades que nunca
+    // salieron quedaba como "entregado" y desaparecía de la cola. Medido ese día: 87 pedidos
+    // "entregados" con 17.505 unidades sin despachar entre los tres proyectos.
+    //
+    // Regla de gerencia: "un pedido creado no puede despachar más de lo que se creó, menos sí
+    // porque se permiten entregas parciales". Entonces: cerrado y completo = "entregado";
+    // cerrado con faltante = "entrega parcial" (estado que ya existe, también final y que ya
+    // cuenta como parcial en el indicador de entregas completas del BSC).
+    // Tolerancia de 0,01 porque hay cantidades con decimales.
+    const faltante = allLines.reduce((suma, line: any) => {
+      const pedidas = Number(line.unidades) || 0
+      const cargadas = Number(line.unidadescargadas ?? line.unidades_cargadas ?? 0) || 0
+      return suma + Math.max(0, pedidas - cargadas)
+    }, 0)
+    const salioCompleto = faltante <= 0.01
+
     let newEstado: string | null = null
 
     if (allClosed) {
-      newEstado = "entregado"
+      newEstado = salioCompleto ? "entregado" : "entrega parcial"
     } else if (hasPartial) {
       newEstado = "parcial"
     }
