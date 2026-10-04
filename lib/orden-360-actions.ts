@@ -117,11 +117,21 @@ export async function getOrden360(ordendecargue: string, empresaId: number | nul
     // OJO: el filtro por owner (`limitarPorOwners`) se aplica a la CABECERA, que es donde vive
     // `empresafactura`. Aplicarlo al detalle lo dejaba sin resultados —la columna no existe
     // allí— y la orden aparecía "sin pedido ligado" (error detectado con MOL202610039820).
-    const { data: pdet } = await sb
-      .from("pedidosdetalle")
-      .select("idpedido, producto, unidades, unidadescargadas")
-      .eq("ocargue", oc)
-    const idsPedido = [...new Set((pdet ?? []).map((p: any) => Number(p.idpedido)).filter(Boolean))]
+    //
+    // El vínculo puede quedar en DOS sitios y hay que mirar los dos: en las LÍNEAS
+    // (`pedidosdetalle.ocargue`, el caso normal) y en la CABECERA del pedido
+    // (`pedidoscabecera.ocargue`). En ID3 hay 41 órdenes de los últimos dos meses ligadas solo
+    // por cabecera: mirando una sola fuente aparecían "sin pedido" (detectado 2026-10-04).
+    const [{ data: pdet }, { data: pcabPorOc }] = await Promise.all([
+      sb.from("pedidosdetalle").select("idpedido, producto, unidades, unidadescargadas").eq("ocargue", oc),
+      sb.from("pedidoscabecera").select("idpedido").eq("ocargue", oc),
+    ])
+    const idsPedido = [
+      ...new Set([
+        ...(pdet ?? []).map((p: any) => Number(p.idpedido)),
+        ...(pcabPorOc ?? []).map((p: any) => Number(p.idpedido)),
+      ].filter(Boolean)),
+    ]
     let pedidos: Pedido360[] = []
     if (idsPedido.length) {
       const { data: pcab } = await limitarPorOwners(
