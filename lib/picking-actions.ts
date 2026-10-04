@@ -7,6 +7,14 @@ import { getCurrentEmpresaIdForInsert, getCurrentEmpresaId } from "@/lib/company
 import { normalizeName } from "@/lib/nomina-calculo-utils"
 import { getHorarioTolva, type HorarioTolvaDia } from "@/lib/horario-tolva-actions"
 import { esProductoPorUnidad } from "@/lib/facturacion-billed-party"
+import {
+  decidirConfirmacion,
+  esLoteAlterno,
+  esPorDescontar,
+  itemsPorProcesar,
+  textoYaVerificada,
+  type FilaSalida,
+} from "@/lib/picking-estado"
 
 export interface PendingLoadOrder {
   id: number
@@ -1156,36 +1164,63 @@ export async function confirmPicking(
   const supabase = await createClient()
 
   // ===================================================================================
-  // CANDADO 1 · Una orden ya verificada NO se vuelve a procesar.
+  // CANDADO 1 · Una orden ya verificada NO se vuelve a procesar, pero una confirmación
+  //             que se quedó A MEDIAS SÍ se termina.
   //
   // Gerencia 2026-10-04, tras el caso de la orden IND202608047608: con intermitencia de
   // red el trabajador no ve el cierre, vuelve a confirmar, y al llegar la conexión el
   // servidor procesa dos veces → DOBLE DESPACHO (salieron 70 bultos cuando la estiba
-  // tenía 35). El picking es "todo o nada": una orden se confirma UNA sola vez, así que
-  // si ya tiene salidas aprobadas es que esta confirmación ya se hizo.
+  // tenía 35). El picking es "todo o nada": una orden se confirma UNA sola vez.
   //
-  // Responde ÉXITO, no error: el trabajo ya quedó hecho y así el trabajador deja de
-  // reintentar (reintentar es justo lo que disparó el problema).
+  // Pero la confirmación NO es una transacción: es una secuencia de llamadas. Si se corta
+  // a la mitad, la orden queda con unas líneas aprobadas y otras en "por descontar". La
+  // primera versión de este candado bastaba con ver UNA aprobada para responder "ya está",
+  // y eso dejaba esas sobras atascadas para siempre: nadie las aprobaba y además bloquean
+  // el Conteo total del mes, que se niega cuando hay salidas por descontar.
+  //
+  // Ahora se distingue: nada pendiente → ÉXITO (el trabajador deja de reintentar, que es
+  // lo que disparó el problema); con pendientes → se REANUDA y se termina lo que falta.
+  // La decisión y sus pruebas viven en lib/picking-estado.ts.
   // ===================================================================================
+  // Qué filas de invtrans verificó el trabajador en ESTA confirmación. Hace falta más
+  // abajo: una fila "por descontar" que NADIE verificó es una RESERVA legítima de la
+  // asignación de lotes (separa el producto para que otra orden no lo tome; asignar no es
+  // despachar), y no puede tratarse como un error.
+  const idsEnviados = new Set<number>()
+  for (const it of items) {
+    idsEnviados.add(Number(it.id))
+    for (const a of it.alternoScans ?? []) idsEnviados.add(Number(a.alternoId))
+    for (const a of it.alternoSimple ?? []) idsEnviados.add(Number(a.alternoId))
+  }
+
+  let reanudando = false
+  let pendientesId = new Set<number>()
   {
-    const { data: yaAprobadas } = await supabase
+    const { data: salidas } = await supabase
       .from("invtrans")
-      .select("id, creado, creadopor")
+      .select("id, status, nombreproducto, lote, cantidad, creado, creadopor")
       .eq("ocargue", ordenCargue)
       .eq("tipomov", "Salida")
-      .eq("origen", "orden de cargue")
-      .eq("status", "aprobado")
-      .order("creado", { ascending: true })
-      .limit(1)
-    const yaVerificada = (yaAprobadas ?? [])[0]
-    if (yaVerificada) {
-      const cuando = String(yaVerificada.creado || "").slice(0, 16).replace("T", " ")
-      console.log("[picking] confirmación repetida ignorada para", ordenCargue, "— ya verificada", cuando)
-      return {
-        success: true,
-        yaEstabaVerificada: true,
-        message: `Esta orden ya quedó verificada${cuando ? ` el ${cuando}` : ""}${yaVerificada.creadopor ? ` por ${yaVerificada.creadopor}` : ""}. No se despachó nada de más.`,
-      }
+      // En la base conviven "orden de cargue", "Orden de cargue" y "Orden de Cargue" (datos
+      // viejos). Con igualdad exacta el candado se saltaba esas filas, asi que ilike.
+      .ilike("origen", "orden de cargue")
+      .order("id", { ascending: true })
+
+    const d = decidirConfirmacion((salidas ?? []) as FilaSalida[], idsEnviados)
+    if (d.reservas > 0) {
+      console.log(`[picking] ${ordenCargue}: ${d.reservas} líneas asignadas quedan reservadas (asignar no es despachar).`)
+    }
+    if (d.accion === "ya_verificada") {
+      console.log("[picking] confirmación repetida ignorada para", ordenCargue, "— ya verificada")
+      return { success: true, yaEstabaVerificada: true, message: textoYaVerificada(d) }
+    }
+    if (d.accion === "reanudar") {
+      reanudando = true
+      pendientesId = new Set((salidas ?? []).filter((f: any) => esPorDescontar(f) || esLoteAlterno(f)).map((f: any) => Number(f.id)))
+      console.warn(
+        `[picking] ${ordenCargue}: confirmación A MEDIAS (${d.aprobadas} aprobadas, ${d.porDescontar} por descontar). Se reanuda y se termina: ${d.pendientesTexto}`,
+      )
+      items = itemsPorProcesar(items, pendientesId)
     }
   }
 
@@ -1218,6 +1253,7 @@ export async function confirmPicking(
 
   // Helper: inserta una ENTRADA con status "Averia" copiando los datos de una
   // fila de invtrans existente, con la cantidad de averías indicada.
+  // IDEMPOTENTE: si al reanudar esa avería ya se registró, no se duplica.
   const insertAveriaForRow = async (rowId: number, averias: number) => {
     if (!averias || averias <= 0) return
     const { data: row, error } = await supabase.from("invtrans").select("*").eq("id", rowId).single()
@@ -1226,6 +1262,22 @@ export async function confirmPicking(
       throw error || new Error("No se encontró la línea de invtrans para registrar la avería")
     }
     const { id: _id, ...rest } = row as Record<string, any>
+    if (reanudando) {
+      const { data: yaHay } = await supabase
+        .from("invtrans")
+        .select("id")
+        .eq("ocargue", ordenCargue)
+        .eq("tipomov", "Entrada")
+        .eq("status", "Averia")
+        .eq("nombreproducto", rest.nombreproducto)
+        .eq("lote", rest.lote)
+        .eq("cantidad", averias)
+        .limit(1)
+      if ((yaHay ?? []).length > 0) {
+        console.warn(`[picking] avería ya registrada para ${rest.nombreproducto} lote ${rest.lote} (${averias}): no se duplica`)
+        return
+      }
+    }
     const { error: insErr } = await supabase
       .from("invtrans")
       .insert([{ ...rest, cantidad: averias, tipomov: "Entrada", status: "Averia" }])
@@ -1264,9 +1316,34 @@ export async function confirmPicking(
       )
     }
 
+    // AL REANUDAR, no se vuelve a sacar una estiba que ya salió.
+    //
+    // Este es el riesgo que abre la reanudación: si la confirmación anterior insertó las
+    // salidas y murió ANTES de borrar la fila original, la fila sigue en "por descontar" y
+    // al reanudar se dividiría otra vez → DOBLE DESPACHO, justo lo que cerramos en agosto.
+    // Una estiba (QR) es un palé físico: si ya tiene salida aprobada en esta orden, no se
+    // inserta de nuevo; solo se termina lo que faltaba (borrar la original).
+    let scansPorInsertar = scans
+    if (reanudando && scans.length > 0) {
+      const { data: yaSalieron } = await supabase
+        .from("invtrans")
+        .select("qrestiba")
+        .eq("ocargue", ordenCargue)
+        .eq("tipomov", "Salida")
+        .ilike("status", "apr%")
+        .in("qrestiba", scans.map((s) => s.idqr))
+      const hechas = new Set((yaSalieron ?? []).map((r: any) => Number(r.qrestiba)))
+      if (hechas.size > 0) {
+        scansPorInsertar = scans.filter((s) => !hechas.has(s.idqr))
+        console.warn(
+          `[picking] ${ordenCargue}: las estibas ${[...hechas].join(", ")} ya tenían salida aprobada; no se vuelven a despachar. Se completa el cierre de la línea.`,
+        )
+      }
+    }
+
     // Salida aprobada por estiba: la cantidad es el total escaneado (incluye
     // lo que luego se descuenta como avería, según la regla de negocio).
-    const salidaRows = scans.map((scan) => ({
+    const salidaRows = scansPorInsertar.map((scan) => ({
       ...rest,
       cantidad: scan.cantidad,
       qrestiba: scan.idqr,
@@ -1274,8 +1351,8 @@ export async function confirmPicking(
       status: "aprobado",
     }))
 
-    // Entradas por avería: una por cada estiba con averías > 0.
-    const averiaRows = scans
+    // Entradas por avería: una por cada estiba con averías > 0 (solo de las que se insertan).
+    const averiaRows = scansPorInsertar
       .filter((scan) => (scan.averias || 0) > 0)
       .map((scan) => ({
         ...rest,
@@ -1392,9 +1469,52 @@ export async function confirmPicking(
       throw horaError
     }
 
-    console.log("[v0] Picking confirmed successfully for order:", ordenCargue, "with horapicking:", currentTime)
+    // ===============================================================================
+    // INVARIANTE DE CIERRE. El picking es todo o nada: lo que el trabajador verificó en
+    // esta confirmación tiene que quedar aprobado. Si una de ESAS líneas sigue en "por
+    // descontar", la confirmación se cortó a la mitad y hay que decirlo, no responder
+    // éxito: esas sobras bloquean el Conteo total del mes y alguien podría aprobarlas
+    // después, despachando de más. Al volver a confirmar, el candado 1 reanuda y termina.
+    //
+    // OJO (gerencia, 2026-10-04): una fila "por descontar" que NADIE verificó NO es un
+    // error. La asignación de lotes deja el producto en stock y separado a propósito, para
+    // que otra orden de cargue no lo tome; asignar un lote no significa que se despachó.
+    // El que saca del inventario es el picking. Esa lógica se respeta: solo se revisan las
+    // líneas que entraron en esta confirmación.
+    // ===============================================================================
+    const { data: despues } = await supabase
+      .from("invtrans")
+      .select("id, status, nombreproducto, lote, cantidad")
+      .eq("ocargue", ordenCargue)
+      .eq("tipomov", "Salida")
+      // En la base conviven "orden de cargue", "Orden de cargue" y "Orden de Cargue" (datos
+      // viejos). Con igualdad exacta el candado se saltaba esas filas, asi que ilike.
+      .ilike("origen", "orden de cargue")
+    const pendientesDespues = ((despues ?? []) as FilaSalida[]).filter(esPorDescontar)
+    const sobras = pendientesDespues.filter((f) => idsEnviados.has(Number(f.id)))
+    const reservas = pendientesDespues.filter((f) => !idsEnviados.has(Number(f.id)))
+    if (reservas.length > 0) {
+      console.log(
+        `[picking] ${ordenCargue}: ${reservas.length} líneas asignadas siguen reservadas (no entraron en esta verificación). Es normal: la asignación separa el producto, el despacho lo hace el picking.`,
+      )
+    }
+    if (sobras.length > 0) {
+      const detalle = sobras.map((f) => `${f.nombreproducto ?? "producto"}${f.lote ? ` lote ${f.lote}` : ""}`).join(", ")
+      console.error(`[picking] ${ordenCargue}: quedaron ${sobras.length} líneas verificadas sin aprobar: ${detalle}`)
+      return {
+        success: false,
+        message: `La verificación quedó incompleta: ${sobras.length} ${sobras.length === 1 ? "línea que verificaste sigue" : "líneas que verificaste siguen"} sin aprobar (${detalle}). Vuelve a confirmar para terminarla; no se despachó nada de más.`,
+      }
+    }
 
-    return { success: true, message: "Picking confirmado exitosamente" }
+    console.log(
+      `[v0] Picking confirmed successfully for order: ${ordenCargue} with horapicking: ${currentTime}${reanudando ? " (se reanudó una confirmación a medias)" : ""}`,
+    )
+
+    return {
+      success: true,
+      message: reanudando ? "Picking confirmado: se terminó una verificación que había quedado a medias." : "Picking confirmado exitosamente",
+    }
   } catch (error: any) {
     console.error("[v0] Error confirming picking:", error)
     return { success: false, message: error.message || "Error al confirmar el picking" }
