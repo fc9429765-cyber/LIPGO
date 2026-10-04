@@ -15,9 +15,27 @@ import { useAuth } from "@/components/auth-provider"
 import { getAtencionDelDiaCompartida } from "@/lib/atencion-del-dia-cache"
 import type { AtencionItem } from "@/components/lip-ai-assistant"
 import { useRouter } from "next/navigation"
+import { VerificarSegundoFactor, requiereSegundoFactor } from "@/components/seguridad/verificar-segundo-factor"
 
 export default function DashboardPage() {
-  const { user, loading, selectedEmpresaId, profile } = useAuth()
+  const { user, loading, selectedEmpresaId, profile, signOut } = useAuth()
+  // Segundo factor (opcional por usuario): si la cuenta lo tiene activo y esta sesión aún no
+  // lo verificó (p. ej. una sesión abierta antes de activarlo), se pide el código antes de
+  // mostrar la app. null = sin comprobar todavía.
+  const [mfaPendiente, setMfaPendiente] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (!user) {
+      setMfaPendiente(null)
+      return
+    }
+    let vivo = true
+    requiereSegundoFactor().then((r) => {
+      if (vivo) setMfaPendiente(r)
+    })
+    return () => {
+      vivo = false
+    }
+  }, [user])
   const router = useRouter()
   const [selectedGroup, setSelectedGroup] = useState<GroupKey | null>(null)
   const [selectedModule, setSelectedModule] = useState<string | null>(null)
@@ -177,6 +195,22 @@ export default function DashboardPage() {
 
   if (!user) {
     return null
+  }
+
+  if (mfaPendiente) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+        <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <VerificarSegundoFactor
+            onVerificado={() => setMfaPendiente(false)}
+            onCancelar={async () => {
+              await signOut()
+              router.push("/login")
+            }}
+          />
+        </div>
+      </div>
+    )
   }
 
   return (
