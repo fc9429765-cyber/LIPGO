@@ -6811,6 +6811,104 @@ export async function getConciliacionPedidosVsSalidas(
 }
 
 /**
+ * Conciliación del DESPACHO: ORDEN DE CARGUE vs SALIDAS — lee la vista
+ * v_orden_vs_salidas (script sig/48).
+ *
+ * Gerencia (2026-10-04): "la orden de cargue creada es la fuente de verdad... no puedo
+ * cargar más de lo que dice la orden" y "si puede salir menos debe mostrar la diferencia,
+ * ya que se puede dañar una unidad en el cargue; lo que nunca puede pasar es que salga más".
+ *
+ * Esto mide el cumplimiento del despacho; la conciliación de pedidos
+ * (getConciliacionPedidosVsSalidas) mide el control del pedido y se queda como está.
+ * Solo órdenes de Cargue: Tolva es PRODUCCIÓN y no entra en este radar.
+ */
+export async function getConciliacionOrdenVsSalidas(
+  empresaId?: number | null,
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    if (!empresaId) {
+      return { success: false, error: "Seleccione un cliente/sitio en el selector global (un proyecto a la vez)." }
+    }
+    const supabase: any = await getSupabaseAdmin()
+
+    const filas: any[] = []
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from("v_orden_vs_salidas")
+        .select("idempresa, ocargue, producto, fechaorden, fechacargue, placa, autorizado, despachado, diferencia, movimientos, primera_salida, ultima_salida, estado_alerta")
+        .eq("idempresa", empresaId)
+        // Orden único y estable para paginar.
+        .order("ocargue")
+        .order("producto")
+        .range(from, from + 999)
+      if (error) return { success: false, error: error.message }
+      filas.push(...(data ?? []))
+      if (!data || data.length < 1000) break
+      from += 1000
+      if (from > 200000) break
+    }
+
+    const resumen = {
+      total: filas.length,
+      cuadra: 0,
+      salioMas: 0,
+      salioMenos: 0,
+      fueraDeLaOrden: 0,
+      sinSalida: 0,
+      totalAutorizado: 0,
+      totalDespachado: 0,
+      unidadesDeMas: 0,
+      unidadesDeMenos: 0,
+      /** Lo que nunca puede pasar: despachar por encima de la orden, o algo que no estaba en ella. */
+      criticas: 0,
+    }
+    for (const f of filas) {
+      resumen.totalAutorizado += Number(f.autorizado) || 0
+      resumen.totalDespachado += Number(f.despachado) || 0
+      switch (f.estado_alerta) {
+        case "CUADRA":
+          resumen.cuadra++
+          break
+        case "SALIO_MAS":
+          resumen.salioMas++
+          resumen.unidadesDeMas += Number(f.diferencia) || 0
+          break
+        case "FUERA_DE_LA_ORDEN":
+          resumen.fueraDeLaOrden++
+          resumen.unidadesDeMas += Number(f.despachado) || 0
+          break
+        case "SALIO_MENOS":
+          resumen.salioMenos++
+          resumen.unidadesDeMenos += Math.abs(Number(f.diferencia) || 0)
+          break
+        case "SIN_SALIDA":
+          resumen.sinSalida++
+          break
+      }
+    }
+    resumen.criticas = resumen.salioMas + resumen.fueraDeLaOrden
+    resumen.totalAutorizado = Math.round(resumen.totalAutorizado)
+    resumen.totalDespachado = Math.round(resumen.totalDespachado)
+    resumen.unidadesDeMas = Math.round(resumen.unidadesDeMas)
+    resumen.unidadesDeMenos = Math.round(resumen.unidadesDeMenos)
+
+    // Lo crítico primero y, dentro, por tamaño de la diferencia.
+    const orden: Record<string, number> = { SALIO_MAS: 0, FUERA_DE_LA_ORDEN: 1, SALIO_MENOS: 2, SIN_SALIDA: 3, CUADRA: 4 }
+    filas.sort((a, b) => {
+      const oa = orden[a.estado_alerta] ?? 9
+      const ob = orden[b.estado_alerta] ?? 9
+      if (oa !== ob) return oa - ob
+      return Math.abs(Number(b.diferencia) || 0) - Math.abs(Number(a.diferencia) || 0)
+    })
+
+    return { success: true, data: { filas, resumen } }
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Error desconocido" }
+  }
+}
+
+/**
  * Auditoría directa de una orden de cargue: trae las filas CRUDAS de
  * pedidosdetalle (con estado de cabecera) e invtrans para ese ocargue,
  * en TODAS las empresas (el cruce ignora empresa). Sirve para investigar

@@ -15,6 +15,7 @@ export const ORDEN_PAGINACION: Record<string, string[]> = {
   facturacion: ["numeroorden", "producto", "toneladas", "cantidad", "tiquetebascula"],
   saldoinvdetalle: ["idempresa", "idproducto", "lote", "location"],
   v_pedidos_vs_salidas: ["ocargue", "producto", "idempresa_pedido", "idempresa_salida"],
+  v_orden_vs_salidas: ["ocargue", "producto"],
   pedidoscabecera: ["idpedido"],
   pedidosdetalle: ["idpedido", "producto", "transid"],
   parametros_legales_anio: ["anio"],

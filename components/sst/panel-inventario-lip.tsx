@@ -19,7 +19,7 @@ import { useToast } from "@/hooks/use-toast"
 import { SST_TOKENS } from "@/components/sst/sst-utils"
 import { SigHeader, SigFilterBar, SigField, SigKpi, sigControl } from "@/components/sst/sig-ui"
 import { useAuth } from "@/components/auth-provider"
-import { getPanelInventarioLIP, getKardexInventario, getMovimientosProducto, getTiposMovimiento, getCuadreDiario, getPreservacionInventario, getConciliacionMensualInventario, guardarCierreMesInventario, getConciliacionPedidosVsSalidas, getAuditoriaOrdenPedidoSalida, guardarCuadreManualPedidoSalida, getOrCrearActaCruce, corregirLineaActaCruce, firmarActaCruce, getProductosInventario, getConteoFisicoDelMes } from "@/lib/sig-actions"
+import { getPanelInventarioLIP, getKardexInventario, getMovimientosProducto, getTiposMovimiento, getCuadreDiario, getPreservacionInventario, getConciliacionMensualInventario, guardarCierreMesInventario, getConciliacionPedidosVsSalidas, getConciliacionOrdenVsSalidas, getAuditoriaOrdenPedidoSalida, guardarCuadreManualPedidoSalida, getOrCrearActaCruce, corregirLineaActaCruce, firmarActaCruce, getProductosInventario, getConteoFisicoDelMes } from "@/lib/sig-actions"
 import { Truck, Loader2, Boxes, TrendingDown, ArrowDownToLine, AlertTriangle, RefreshCw, CalendarClock, Layers, FileText, BookOpen, ZoomIn, ClipboardList, ShieldAlert, FolderOpen, ExternalLink, CheckCircle2 } from "lucide-react"
 import { ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts"
 
@@ -87,6 +87,11 @@ export function PanelInventarioLIP() {
   const firmaActaRef = useRef<SignaturePadHandle | null>(null)
   const [pedSal, setPedSal] = useState<{ filas: any[]; resumen: any } | null>(null)
   const [loadingPedSal, setLoadingPedSal] = useState(false)
+  // Conciliación del DESPACHO: la orden de cargue contra lo que salió del inventario.
+  const [ordSal, setOrdSal] = useState<{ filas: any[]; resumen: any } | null>(null)
+  const [loadingOrdSal, setLoadingOrdSal] = useState(false)
+  const [filtroAlertaOrden, setFiltroAlertaOrden] = useState("DISC")
+  const [filtroOrdenOC, setFiltroOrdenOC] = useState("")
   const [filtroAlerta, setFiltroAlerta] = useState("DISC") // DISC | "" (todas) | OK | CANTIDAD_DIFERENTE | PEDIDO_SIN_SALIDA | SALIDA_SIN_PEDIDO
   const [filtroOrden, setFiltroOrden] = useState("")
   const [auditoria, setAuditoria] = useState<{ ocargue: string; producto?: string; data: any } | null>(null)
@@ -151,6 +156,7 @@ export function PanelInventarioLIP() {
     else if (tab === "preservacion") cargarPreservacion()
     else if (tab === "conciliacion") cargarConciliacion()
     else if (tab === "pedidos_salidas") cargarPedidosSalidas()
+    else if (tab === "orden_salidas") cargarOrdenSalidas()
     else if (tab === "cruce") cargarCruce()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, selectedEmpresaId, anio, mes])
@@ -347,6 +353,21 @@ export function PanelInventarioLIP() {
     }
     setLoadingPedSal(false)
   }
+  async function cargarOrdenSalidas() {
+    if (!selectedEmpresaId) {
+      setOrdSal(null)
+      return
+    }
+    setLoadingOrdSal(true)
+    const r = await getConciliacionOrdenVsSalidas(selectedEmpresaId)
+    if (r.success) setOrdSal({ filas: r.data?.filas ?? [], resumen: r.data?.resumen ?? {} })
+    else {
+      setOrdSal(null)
+      toast({ title: "No se pudo cargar orden vs salidas", description: r.error })
+    }
+    setLoadingOrdSal(false)
+  }
+
   async function abrirAuditoria(f: any) {
     setModoEdicion(false)
     setEdits({ ped: {}, pedU: {} })
@@ -568,6 +589,7 @@ export function PanelInventarioLIP() {
           <TabsTrigger value="kardex">Inventario detalle (Kardex)</TabsTrigger>
           <TabsTrigger value="diario">Cuadre diario</TabsTrigger>
           <TabsTrigger value="preservacion">Preservación / FIFO</TabsTrigger>
+          <TabsTrigger value="orden_salidas">Orden de cargue vs salidas</TabsTrigger>
           <TabsTrigger value="pedidos_salidas">Conciliación pedidos vs salidas</TabsTrigger>
           <TabsTrigger value="cruce">Acta de Cruce (apertura de mes)</TabsTrigger>
         </TabsList>
@@ -956,6 +978,145 @@ export function PanelInventarioLIP() {
                 </div>
               </Card>
               <p className="text-[11px] text-muted-foreground">FIFO: el sistema sugiere despachar el lote más antiguo primero (orden por lote). Vida útil = <code>productos.vidautildias</code> (p. ej. harina ~15 días → carpar). Antigüedad estimada desde la fecha del lote (AAAAMMDD). ISO 9001 8.5.4 (preservación).</p>
+            </>
+          )}
+        </TabsContent>
+
+        {/* CONCILIACIÓN DEL DESPACHO. La orden de cargue es el documento con el que el cliente
+            autoriza: puede salir MENOS (una unidad dañada en el cargue) y debe verse, pero nunca
+            MÁS. Tolva no entra: es producción. */}
+        <TabsContent value="orden_salidas" className="space-y-3 pt-3">
+          {!selectedEmpresaId ? (
+            <Card className="p-8 text-center text-sm text-muted-foreground">Seleccione un cliente/sitio en el selector global para ver la conciliación.</Card>
+          ) : loadingOrdSal ? (
+            <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 animate-spin" style={{ color: SST_TOKENS.navy }} /></div>
+          ) : !ordSal ? (
+            <Card className="p-8 text-center text-sm text-muted-foreground">Sin datos. Si la pantalla sigue vacía, falta correr <code>scripts/sig/48_orden_vs_salidas.sql</code>.</Card>
+          ) : (
+            <>
+              <p className="text-[11px] text-muted-foreground">
+                Cruce por <b>orden de cargue + producto</b>: lo que la <b>orden autorizó</b> (<code>detalleoc</code>) vs lo que <b>salió del inventario</b> (<code>invtrans</code>, movimiento 601 aprobado). La orden es el documento con el que el cliente autoriza el cargue: <b>puede salir menos</b> y la diferencia debe explicarse (una unidad dañada en el cargue), pero <b>nunca más</b>. No entran Tolva (es producción), Descargue, Distribución ni proyección, ni el movimiento 702 (salida de material). Todo el histórico del proyecto.
+              </p>
+
+              {ordSal.resumen.criticas > 0 ? (
+                <Card className="flex items-center gap-3 border-l-4 p-3" style={{ borderLeftColor: "#C0392B" }}>
+                  <AlertTriangle className="h-5 w-5 shrink-0" style={{ color: "#C0392B" }} />
+                  <div className="text-sm">
+                    <b>{ordSal.resumen.criticas.toLocaleString("es-CO")}</b> {ordSal.resumen.criticas === 1 ? "caso" : "casos"} donde salió <b>más de lo que la orden autorizó</b> o salió un producto que <b>no estaba en la orden</b>: {ordSal.resumen.unidadesDeMas.toLocaleString("es-CO")} unidades. Eso no debe ocurrir.
+                  </div>
+                </Card>
+              ) : (
+                <Card className="flex items-center gap-3 border-l-4 p-3" style={{ borderLeftColor: "#1E8449" }}>
+                  <CheckCircle2 className="h-5 w-5 shrink-0" style={{ color: "#1E8449" }} />
+                  <div className="text-sm">Nunca se despachó por encima de la orden. {ordSal.resumen.cuadra.toLocaleString("es-CO")} de {ordSal.resumen.total.toLocaleString("es-CO")} combinaciones cuadran exactamente.</div>
+                </Card>
+              )}
+
+              {ordSal.resumen.salioMenos > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  <b>{ordSal.resumen.salioMenos}</b> {ordSal.resumen.salioMenos === 1 ? "línea salió" : "líneas salieron"} con menos de lo autorizado ({ordSal.resumen.unidadesDeMenos.toLocaleString("es-CO")} unidades). Es válido, y queda a la vista para explicarlo.
+                </p>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+                <KPI label="Cuadran" valor={ordSal.resumen.cuadra} Icon={CheckCircle2} color="#1E8449" />
+                <KPI label="Salió MÁS" valor={ordSal.resumen.salioMas} Icon={AlertTriangle} color="#C0392B" />
+                <KPI label="Fuera de la orden" valor={ordSal.resumen.fueraDeLaOrden} Icon={AlertTriangle} color="#C0392B" />
+                <KPI label="Salió menos" valor={ordSal.resumen.salioMenos} Icon={ArrowDownToLine} color="#E0A800" />
+                <KPI label="Autorizado" valor={(ordSal.resumen.totalAutorizado || 0).toLocaleString("es-CO")} Icon={ClipboardList} color="#0D3B6E" />
+                <KPI label="Despachado" valor={(ordSal.resumen.totalDespachado || 0).toLocaleString("es-CO")} Icon={ArrowDownToLine} color="#00B4CC" />
+              </div>
+
+              <div className="flex flex-wrap items-end gap-3">
+                <SigField label="Alerta">
+                  <select value={filtroAlertaOrden} onChange={(e) => setFiltroAlertaOrden(e.target.value)} className={sigControl}>
+                    <option value="DISC">Con diferencia</option>
+                    <option value="">Todas (incluye las que cuadran)</option>
+                    <option value="SALIO_MAS">Salió más</option>
+                    <option value="FUERA_DE_LA_ORDEN">Fuera de la orden</option>
+                    <option value="SALIO_MENOS">Salió menos</option>
+                    <option value="SIN_SALIDA">Sin salida aún</option>
+                    <option value="CUADRA">Solo las que cuadran</option>
+                  </select>
+                </SigField>
+                <SigField label="Orden de cargue">
+                  <Input value={filtroOrdenOC} onChange={(e) => setFiltroOrdenOC(e.target.value)} placeholder="Buscar ocargue…" className="h-9 w-48" />
+                </SigField>
+                {(filtroAlertaOrden !== "DISC" || filtroOrdenOC) && (
+                  <Button variant="outline" size="sm" onClick={() => { setFiltroAlertaOrden("DISC"); setFiltroOrdenOC("") }}>Limpiar</Button>
+                )}
+                <span className="ml-auto text-[11px] text-muted-foreground">{ordSal.resumen.total.toLocaleString("es-CO")} combinaciones (orden × producto)</span>
+              </div>
+
+              {(() => {
+                const q = filtroOrdenOC.trim().toLowerCase()
+                const criticos = new Set(["SALIO_MAS", "FUERA_DE_LA_ORDEN", "SALIO_MENOS"])
+                const vista = ordSal.filas.filter((f: any) => {
+                  if (q && !String(f.ocargue ?? "").toLowerCase().includes(q)) return false
+                  if (filtroAlertaOrden === "DISC") return criticos.has(f.estado_alerta)
+                  if (filtroAlertaOrden) return f.estado_alerta === filtroAlertaOrden
+                  return true
+                })
+                const ETIQUETA: Record<string, { texto: string; color: string }> = {
+                  SALIO_MAS: { texto: "Salió más", color: "#C0392B" },
+                  FUERA_DE_LA_ORDEN: { texto: "No estaba en la orden", color: "#C0392B" },
+                  SALIO_MENOS: { texto: "Salió menos", color: "#E0A800" },
+                  SIN_SALIDA: { texto: "Sin salida aún", color: "#0284c7" },
+                  CUADRA: { texto: "Cuadra", color: "#1E8449" },
+                }
+                if (vista.length === 0)
+                  return <Card className="p-8 text-center text-sm text-muted-foreground">Nada que mostrar con este filtro.</Card>
+                return (
+                  <Card className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 text-[11px] uppercase tracking-wide text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-semibold">Orden</th>
+                          <th className="px-3 py-2 text-left font-semibold">Producto</th>
+                          <th className="px-3 py-2 text-left font-semibold">Fecha · vehículo</th>
+                          <th className="px-3 py-2 text-right font-semibold">Autorizado</th>
+                          <th className="px-3 py-2 text-right font-semibold">Despachado</th>
+                          <th className="px-3 py-2 text-right font-semibold">Diferencia</th>
+                          <th className="px-3 py-2 text-left font-semibold">Estado</th>
+                          <th className="px-3 py-2 text-right font-semibold"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {vista.slice(0, 500).map((f: any, i: number) => {
+                          const et = ETIQUETA[f.estado_alerta] ?? { texto: f.estado_alerta, color: "#64748b" }
+                          const dif = Number(f.diferencia) || 0
+                          return (
+                            <tr key={`${f.ocargue}-${f.producto}-${i}`} className="border-t border-border/60">
+                              <td className="px-3 py-2 font-mono text-[12px]">{f.ocargue}</td>
+                              <td className="px-3 py-2">{f.producto}</td>
+                              <td className="px-3 py-2 text-[12px] text-muted-foreground">
+                                {f.fechacargue ? String(f.fechacargue).slice(0, 10) : f.fechaorden ? String(f.fechaorden).slice(0, 10) : "—"}
+                                {f.placa ? ` · ${f.placa}` : ""}
+                              </td>
+                              <td className="px-3 py-2 text-right">{(Number(f.autorizado) || 0).toLocaleString("es-CO")}</td>
+                              <td className="px-3 py-2 text-right">{(Number(f.despachado) || 0).toLocaleString("es-CO")}</td>
+                              <td className="px-3 py-2 text-right font-semibold" style={{ color: dif > 0 ? "#C0392B" : dif < 0 ? "#E0A800" : undefined }}>
+                                {dif > 0 ? "+" : ""}{dif.toLocaleString("es-CO")}
+                              </td>
+                              <td className="px-3 py-2">
+                                <span className="rounded px-2 py-0.5 text-[11px] font-semibold text-white" style={{ backgroundColor: et.color }}>{et.texto}</span>
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                <Button variant="outline" size="sm" className="h-7 gap-1 px-2 text-[11px]" onClick={() => setOrden360(f.ocargue)}>
+                                  <Truck className="h-3 w-3" /> Ciclo
+                                </Button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                    {vista.length > 500 && (
+                      <p className="px-3 py-2 text-[11px] text-muted-foreground">Se muestran las primeras 500 de {vista.length.toLocaleString("es-CO")}. Filtra por orden de cargue para ver el resto.</p>
+                    )}
+                  </Card>
+                )
+              })()}
             </>
           )}
         </TabsContent>
