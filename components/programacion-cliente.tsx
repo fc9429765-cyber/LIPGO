@@ -33,7 +33,8 @@ import {
   type LineaProgramacion,
   type ProgramacionCliente as Programacion,
 } from "@/lib/programacion-cliente-tipos"
-import { sumarDias } from "@/lib/programacion-cliente-calculo"
+import { diaSemana, siguienteDiaOperativo, sumarDias } from "@/lib/programacion-cliente-calculo"
+import { DemandaDelDia } from "@/components/orders/gestionar/demanda-del-dia"
 
 const TZ = "America/Bogota"
 const hoyBogota = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
@@ -84,7 +85,10 @@ export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" | "geren
   const { selectedEmpresaId, selectedEmpresaNombre } = useAuth()
   const { toast } = useToast()
   const hoy = hoyBogota()
-  const manana = sumarDias(hoy, 1)
+  // "Mañana" = siguiente día operativo: los proyectos no trabajan los domingos (gerencia
+  // 2026-10-03), así que un sábado la programación es para el lunes.
+  const manana = siguienteDiaOperativo(hoy)
+  const etiquetaManana = manana === sumarDias(hoy, 1) ? "Mañana" : diaSemana(manana) === 1 ? "Lunes" : "Próximo día"
 
   // ---- Programación de un día -----------------------------------------------
   const [fecha, setFecha] = useState(manana)
@@ -238,7 +242,7 @@ export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" | "geren
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <Button size="sm" variant={fecha === manana ? "default" : "outline"} onClick={() => setFecha(manana)}>
-            Mañana · {fechaCorta(manana)}
+            {etiquetaManana} · {fechaCorta(manana)}
           </Button>
           <Button size="sm" variant={fecha === hoy ? "default" : "outline"} onClick={() => setFecha(hoy)}>
             Hoy
@@ -254,6 +258,10 @@ export function ProgramacionCliente({ modo }: { modo: "cliente" | "lip" | "geren
           </p>
         </div>
       )}
+
+      {/* Demanda de pedidos del día (entrega 3 del plan de Pedidos): solo cliente y gerencia.
+          El coordinador LIP (modo "lip") no ve pedidos: es un proceso del cliente. */}
+      {modo !== "lip" && <DemandaDelDia empresaId={selectedEmpresaId} fecha={fecha} className={cn(modo === "gerencia" && "order-2")} />}
 
       {/* Estado del día elegido (en gerencia va después del cumplimiento) */}
       <section className={cn("lg-card", modo === "gerencia" && "order-2")}>

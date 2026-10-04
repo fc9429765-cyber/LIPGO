@@ -7,7 +7,9 @@
 // Devuelve conteos por NOMBRE DE MÓDULO hoja; el portal los agrega por hub.
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
-import { diaSemana, sumarDias } from "@/lib/programacion-cliente-calculo"
+import { diaSemana, siguienteDiaOperativo } from "@/lib/programacion-cliente-calculo"
+import { cargarCola } from "@/lib/pedidos-cola-core"
+import type { AccesoPedidos } from "@/lib/acceso-empresa"
 
 export interface PendientePantalla {
   /** `name` del módulo hoja al que lleva. */
@@ -46,7 +48,9 @@ export async function getPendientesPorPantalla(
     // Programación del cliente para MAÑANA (SQL 211): solo cuenta como pendiente
     // si la empresa ya usa el módulo (tiene alguna programación), desde el
     // mediodía, y si mañana no es domingo.
-    const manana = sumarDias(hoy, 1)
+    // "Mañana" = siguiente día operativo (los proyectos no trabajan los domingos, gerencia
+    // 2026-10-03): un sábado se exige la programación del lunes.
+    const manana = siguienteDiaOperativo(hoy)
     const horaBogota = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Bogota", hour: "numeric", hour12: false }).format(new Date()))
     const mananaDomingo = diaSemana(manana) === 0
 
@@ -81,7 +85,18 @@ export async function getPendientesPorPantalla(
       }
     } catch { /* sin acceso a la tabla: no se muestra el pendiente */ }
 
+    // Pedidos ATRASADOS del cliente (entrega 3 del plan de Pedidos): aprobados con promesa
+    // vencida y sin orden de cargue, con la MISMA definición de Gestionar pedidos y del BSC
+    // (cargarCola → derivarEstado). Es un proceso del cliente: el distintivo va en Gestionar.
+    let pedidosAtrasados = 0
+    try {
+      const accesoSistema: AccesoPedidos = { id: "sistema", usuario: null, empresa_id: null, empresas: [empresaId], owners: [] }
+      const cola = await cargarCola(sb, accesoSistema, empresaId, hoy)
+      pedidosAtrasados = cola.filter((p) => p.calc.estado === "programado" && p.calc.atrasoDias > 0).length
+    } catch { /* sin acceso a pedidos: no se muestra el pendiente */ }
+
     const out: PendientePantalla[] = []
+    if (pedidosAtrasados) out.push({ modulo: "Gestionar pedidos", cantidad: pedidosAtrasados, texto: plural(pedidosAtrasados, "pedido atrasado", "pedidos atrasados"), nivel: pedidosAtrasados > 20 ? "alto" : "medio" })
     if (salidasSinConfirmar) out.push({ modulo: "Centro de Coordinación", cantidad: salidasSinConfirmar, texto: plural(salidasSinConfirmar, "salida sin confirmar de orden finalizada", "salidas sin confirmar de órdenes finalizadas"), nivel: "alto" })
     if (usaProgramacion > 0 && programacionManana === 0 && horaBogota >= 12 && !mananaDomingo) {
       // Al coordinador (responsable de consignarla) y al cliente (puede registrarla).

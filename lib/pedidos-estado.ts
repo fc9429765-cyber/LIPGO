@@ -120,6 +120,22 @@ export function sumarDiasISO(fechaISO: string, n: number): string {
 
 const tieneTexto = (v: unknown) => String(v ?? "").trim().length > 0
 
+/** true si la fecha 'YYYY-MM-DD' cae en domingo. */
+export function esDomingoISO(fechaISO: string): boolean {
+  const [y, m, d] = fechaISO.slice(0, 10).split("-").map(Number)
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay() === 0
+}
+
+/**
+ * Siguiente día OPERATIVO: los proyectos no trabajan los domingos (gerencia 2026-10-03), así
+ * que "mañana" un sábado es el lunes. Misma regla que lib/programacion-cliente-calculo.ts.
+ */
+export function siguienteDiaOperativoISO(hoyISO: string): string {
+  let f = sumarDiasISO(hoyISO, 1)
+  while (esDomingoISO(f)) f = sumarDiasISO(f, 1)
+  return f
+}
+
 export function derivarEstado(p: PedidoParaEstado, hoyISO: string, opts: OpcionesDerivar = {}): EstadoDerivado {
   const est = normalizarEstado(p.estado)
   const promesa = soloFecha(p.fecha_programada)
@@ -133,7 +149,7 @@ export function derivarEstado(p: PedidoParaEstado, hoyISO: string, opts: Opcione
   const aprobado = normalizarEstado(p.aprobado) === "si"
   const sinRastro = !tieneTexto(p.ocargue) && !p.fechaordencargue && !tieneTexto(p.vehiculo) && !p.fechadeentrega && lineasOc === 0 && est !== "parcial"
 
-  const base = { atrasoDias: atraso, esHoy: atraso === 0 && !!promesa, esManana: atraso === -1, conCartera, sinRastro, antiguedadDias: antiguedad, anteriorAlMes }
+  const base = { atrasoDias: atraso, esHoy: atraso === 0 && !!promesa, esManana: !!promesa && promesa === siguienteDiaOperativoISO(hoyISO), conCartera, sinRastro, antiguedadDias: antiguedad, anteriorAlMes }
   const fin = (estado: EstadoPedido, etiqueta: string, tono: TonoEstado): EstadoDerivado => ({
     ...base,
     estado,
@@ -186,7 +202,7 @@ export function derivarEstado(p: PedidoParaEstado, hoyISO: string, opts: Opcione
     return {
       ...base,
       estado: "programado",
-      etiqueta: atraso === 0 ? "Para hoy" : atraso === -1 ? "Para mañana" : "Programado",
+      etiqueta: atraso === 0 ? "Para hoy" : base.esManana ? "Para mañana" : "Programado",
       tono: "info",
       esFinal: false,
       candidatoDepuracion: null,

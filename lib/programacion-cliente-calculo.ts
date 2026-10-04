@@ -38,6 +38,17 @@ export function diaSemana(iso: string): number {
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay()
 }
 
+/**
+ * Siguiente día OPERATIVO después de `iso`: los proyectos (IDs) no trabajan los domingos
+ * (gerencia 2026-10-03), así que "mañana" un sábado es el lunes. Es la fecha que usan
+ * Programación del cliente, la pestaña "Para mañana" y el resumen de la cola.
+ */
+export function siguienteDiaOperativo(iso: string): string {
+  let f = sumarDias(iso, 1)
+  while (diaSemana(f) === 0) f = sumarDias(f, 1)
+  return f
+}
+
 export interface CitaResumen {
   /** 'YYYY-MM-DD' de llegada. */
   fecha: string

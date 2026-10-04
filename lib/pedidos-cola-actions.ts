@@ -24,6 +24,7 @@ import { autorizar } from "@/lib/autorizaciones-core"
 import { desdeDePeriodo, hoyBogotaISO, type PeriodoListado } from "@/lib/periodo-listados"
 import { accesoPedidos, limitarPorOwners, type AccesoPedidos } from "@/lib/acceso-empresa"
 import { sumarDiasISO, normalizarEstado, textoMotivo, ESTADO_ENTREGA_PARCIAL, ESTADO_NO_ENTREGADO, FILTRO_ABIERTOS_POSTGREST, MOTIVOS_DEPURACION, type MotivoDepuracion } from "@/lib/pedidos-estado"
+import { esDomingoISO, siguienteDiaOperativoISO } from "@/lib/pedidos-estado"
 import { MSG_SIN_ACCESO, aPedidoCola, cargarCola, n0, resumenLineas, resumir, txt, type ColaPedidos, type LineaPedido, type PedidoCola, type ResLineas, type ResumenCola } from "@/lib/pedidos-cola-core"
 import { registrarErrorServidor } from "@/lib/errores-servidor"
 
@@ -131,7 +132,7 @@ export async function getColaPedidos(empresaId: number | null | undefined): Prom
     if (!acceso) return { success: false, message: MSG_SIN_ACCESO }
     const hoy = hoyBogotaISO()
     const pedidos = await cargarCola(sb, acceso, empresaId, hoy)
-    return { success: true, data: { hoy, manana: sumarDiasISO(hoy, 1), pedidos, resumen: resumir(pedidos) } }
+    return { success: true, data: { hoy, manana: siguienteDiaOperativoISO(hoy), pedidos, resumen: resumir(pedidos) } }
   } catch (e: any) {
     console.error("[pedidos-cola] getColaPedidos:", e?.message ?? e)
     void registrarErrorServidor("pedidos-cola.getColaPedidos", e, { empresaId })
@@ -148,7 +149,7 @@ export async function getResumenCola(empresaId: number | null | undefined): Prom
     if (!acceso) return { success: false, message: MSG_SIN_ACCESO }
     const hoy = hoyBogotaISO()
     const pedidos = await cargarCola(sb, acceso, empresaId, hoy)
-    return { success: true, data: { hoy, manana: sumarDiasISO(hoy, 1), resumen: resumir(pedidos) } }
+    return { success: true, data: { hoy, manana: siguienteDiaOperativoISO(hoy), resumen: resumir(pedidos) } }
   } catch (e: any) {
     console.error("[pedidos-cola] getResumenCola:", e?.message ?? e)
     return { success: false, message: e?.message || "No se pudo leer la cola de pedidos." }
@@ -463,10 +464,13 @@ export async function getDemandaFecha(empresaId: number | null | undefined, fech
       atrCli.set(p.cliente, a)
     }
 
+    // Los proyectos no operan los domingos (gerencia 2026-10-03): un domingo solo aparece si
+    // tiene pedidos con esa promesa. Se recorren 9 días para seguir mostrando ~8 botones.
     const proximosDias: { fecha: string; pedidos: number; kg: number }[] = []
-    for (let i = 1; i <= 8; i++) {
+    for (let i = 1; i <= 9; i++) {
       const f = sumarDiasISO(hoy, i)
       const ps = cola.filter((p) => p.fecha_programada === f)
+      if (esDomingoISO(f) && ps.length === 0) continue
       proximosDias.push({ fecha: f, pedidos: ps.length, kg: ps.reduce((s, p) => s + p.kg, 0) })
     }
 

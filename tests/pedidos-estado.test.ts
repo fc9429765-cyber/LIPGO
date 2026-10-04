@@ -1,6 +1,6 @@
 // Reglas del estado derivado de un pedido (lib/pedidos-estado.ts). Si alguna cambia sin
 // querer, la Cola, Generar órdenes de cargue, los indicadores y la depuración se
-// desalinean. Fecha fija: hoy = viernes 3 de octubre de 2026.
+// desalinean. Fecha fija: hoy = SÁBADO 3 de octubre de 2026; los proyectos no trabajan los domingos, así que "mañana" es el lunes 5.
 import { describe, expect, it } from "vitest"
 import {
   derivarEstado,
@@ -73,7 +73,7 @@ describe("derivarEstado · precedencia", () => {
     const h = derivarEstado({ ...base, aprobado: "si", fecha_programada: HOY }, HOY)
     expect(h.esHoy).toBe(true)
     expect(h.etiqueta).toBe("Para hoy")
-    const m = derivarEstado({ ...base, aprobado: "si", fecha_programada: "2026-10-04" }, HOY)
+    const m = derivarEstado({ ...base, aprobado: "si", fecha_programada: "2026-10-05" }, HOY)
     expect(m.esManana).toBe(true)
     expect(m.etiqueta).toBe("Para mañana")
     expect(derivarEstado({ ...base, aprobado: "si", fecha_programada: "2026-10-06" }, HOY).etiqueta).toBe("Programado")
@@ -135,7 +135,7 @@ describe("orden de la cola y utilidades", () => {
     const pesos = [
       derivarEstado({ ...base, aprobado: "si", fecha_programada: "2026-09-29" }, HOY),
       derivarEstado({ ...base, aprobado: "si", fecha_programada: HOY }, HOY),
-      derivarEstado({ ...base, aprobado: "si", fecha_programada: "2026-10-04" }, HOY),
+      derivarEstado({ ...base, aprobado: "si", fecha_programada: "2026-10-05" }, HOY),
       derivarEstado({ ...base, aprobado: "si", fecha_programada: "2026-10-09" }, HOY),
       derivarEstado({ ...base, aprobado: "si", fecha_programada: null }, HOY),
       derivarEstado({ ...base, aprobado: "si", ocargue: "MOL1" }, HOY),
