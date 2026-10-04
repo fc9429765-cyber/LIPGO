@@ -30,6 +30,7 @@ import {
   reanudarOrden,
   getOrdenesPausadas,
 } from "@/lib/picking-actions"
+import { justificacionValida, JUSTIFICACION_MINIMA } from "@/lib/picking-estado"
 import { FacturarCheckbox } from "@/components/facturar-checkbox"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -115,6 +116,10 @@ function Picking({
   // --- Averías y Lote alterno en modo SIMPLE (sin QR) ---
   // Averías reportadas sobre el lote principal de la línea (modo simple).
   const [simpleAverias, setSimpleAverias] = useState<Map<number, number>>(new Map())
+  /** Motivo del FALTANTE por línea. Obligatorio cuando se envía menos de lo que piden. */
+  const [justificaciones, setJustificaciones] = useState<Map<number, string>>(new Map())
+  /** Lo que se escribe en el diálogo de cantidad menor, antes de guardarlo en la línea. */
+  const [motivoFaltante, setMotivoFaltante] = useState("")
   // Selecciones de lote alterno (modo simple): por item, una lista de
   // { alternoId, lote, location, cantidad, averias }.
   const [simpleAlterno, setSimpleAlterno] = useState<
@@ -752,15 +757,25 @@ const loadOrders = async () => {
   }
 
   // Ejecuta la verificación tras confirmar la cantidad menor en el diálogo.
+  // Gerencia (2026-10-04): "faltante = enviar menos de lo que me piden"; si la línea no sale
+  // completa debe haber una justificación. Este diálogo ya controlaba el despacho parcial, así
+  // que el motivo se pide AQUÍ y no en otro sitio. Queda en las observaciones del movimiento.
   const confirmLowQtyVerification = () => {
     if (!lowQtyConfirm) return
+    if (!justificacionValida(motivoFaltante)) return
     const { itemId, net, mode } = lowQtyConfirm
+    setJustificaciones((prev) => {
+      const m = new Map(prev)
+      m.set(itemId, motivoFaltante.trim())
+      return m
+    })
     if (mode === "qr") {
       handlePartialQRVerification(itemId, net)
     } else {
       handleSimpleVerification(itemId)
     }
     setLowQtyConfirm(null)
+    setMotivoFaltante("")
   }
 
   const handleConfirmPicking = async () => {
@@ -781,6 +796,9 @@ const loadOrders = async () => {
       const base = {
         id: item.id,
         cantidad: editedQuantities.get(item.id) ?? item.cantidad,
+        // Motivo del saldo cuando la línea no sale completa. El servidor lo exige y lo
+        // guarda en las observaciones del movimiento.
+        justificacion: justificaciones.get(item.id)?.trim() || null,
       }
 
       // Si la línea se verificó por QR, enviamos los QR escaneados (estiba +
@@ -914,7 +932,70 @@ const loadOrders = async () => {
     await loadOrders()
   }
 
+  // ─────────────── Despachar completo, y si queda saldo, con justificación ───────────────
+  // Gerencia (2026-10-04): "se debe controlar que se despache la cantidad correcta: nunca
+  // más, menos con explicación". La cantidad a despachar por lote viene automática de la
+  // asignación de lotes (item.cantidad), y es contra ESA que se compara, no contra lo que se
+  // escriba aquí. El QR usa el inventario identificado por estiba y el manual el que no lo
+  // está: al final es un solo inventario, dividido por cómo está almacenado, así que la
+  // comprobación es la misma en los dos modos.
+  //
+  // El BRUTO incluye lo que luego se reporta como avería: la avería ya queda documentada
+  // como entrada aparte, así que no es un saldo sin explicar.
+  // Se reutilizan las funciones que YA calculan el neto en cada modo, las mismas que usan
+  // requestSimpleVerification y el área de QR: getNetForItem (escaneado normal + alterno,
+  // menos averías) y getSimpleTotalNet (cantidad elegida + alterno, menos averías).
+  const getDespachadoForItem = (item: ExtendedPickingItem) =>
+    modoDeItem(item) === "qr"
+      ? getNetForItem(item.id)
+      : getSimpleTotalNet(item.id, editedQuantities.get(item.id) ?? item.cantidad)
+  const redondea = (v: number) => Math.round(v * 100) / 100
+  const getSaldoForItem = (item: ExtendedPickingItem) => redondea(Math.max(0, item.cantidad - getDespachadoForItem(item)))
+  const getExcesoForItem = (item: ExtendedPickingItem) => redondea(Math.max(0, getDespachadoForItem(item) - item.cantidad))
+
+  const lineasConSaldoSinMotivo = pickingItems.filter(
+    (item) => getSaldoForItem(item) > 0.01 && !justificacionValida(justificaciones.get(item.id)),
+  )
+  const lineasExcedidas = pickingItems.filter((item) => getExcesoForItem(item) > 0.01)
+
+  /**
+   * Resumen del FALTANTE de una línea. SOLO LECTURA: el motivo se escribe en el diálogo de
+   * "cantidad menor" que ya existía y que ya controla el despacho parcial, para no tener dos
+   * sitios donde pedir lo mismo.
+   */
+  const renderJustificacion = (item: ExtendedPickingItem) => {
+    const exceso = getExcesoForItem(item)
+    if (exceso > 0.01) {
+      return (
+        <div className="mt-2 rounded border border-red-300 bg-red-50 p-2 text-[11px] leading-tight text-red-800">
+          <b>No se puede despachar más de lo asignado.</b> La asignación dejó {item.cantidad} y van {getDespachadoForItem(item)}.
+          Quita {exceso} antes de confirmar.
+        </div>
+      )
+    }
+    const faltante = getSaldoForItem(item)
+    if (faltante <= 0.01) return null
+    const motivo = justificaciones.get(item.id) ?? ""
+    const falta = !justificacionValida(motivo)
+    return (
+      <div className={`mt-2 rounded border p-2 ${falta ? "border-amber-400 bg-amber-50" : "border-green-300 bg-green-50"}`}>
+        <p className="text-[11px] font-semibold leading-tight text-amber-900">
+          Faltante de {faltante} de {item.cantidad}.
+        </p>
+        {falta ? (
+          <p className="mt-0.5 text-[10px] leading-tight text-amber-800">
+            Falta el motivo. Vuelve a tocar "Despachar cantidad parcial" para escribirlo.
+          </p>
+        ) : (
+          <p className="mt-0.5 text-[10px] leading-tight text-green-800">Motivo: {motivo}</p>
+        )}
+      </div>
+    )
+  }
+
   const allItemsVerified = pickingItems.length > 0 && verifiedItems.size === pickingItems.length
+  /** Se puede confirmar cuando todo está verificado, nada excede y los saldos tienen motivo. */
+  const puedeConfirmar = allItemsVerified && lineasExcedidas.length === 0 && lineasConSaldoSinMotivo.length === 0
 
   // Tarjetas de estibas escaneadas con input de averías (normal o alterno).
   const renderScanCards = (itemId: number, scans: QRPalletInfo[], isAlterno: boolean) =>
@@ -1356,6 +1437,10 @@ const loadOrders = async () => {
                                     renderQRArea(item as any, currentQuantity, false)}
                                 </>
                               )}
+                              {/* El saldo y su motivo se ven igual antes y después de
+                                  verificar: si desaparecieran al verificar, el botón
+                                  quedaría bloqueado sin que se vea por qué. */}
+                              {renderJustificacion(item)}
                             </td>
                             <td className="p-3 text-center">
                               {isVerified ? (
@@ -1475,6 +1560,7 @@ const loadOrders = async () => {
                                 : renderQRArea(item as any, currentQuantity, false)}
                             </div>
                           )}
+                          {renderJustificacion(item)}
                         </div>
                       </Card>
                     )
@@ -1486,8 +1572,18 @@ const loadOrders = async () => {
         </Card>
 
         {/* Confirm button */}
-        <div className="flex justify-end gap-2">
-          <Button onClick={handleConfirmPicking} disabled={!allItemsVerified || confirmingPicking} size="lg">
+        <div className="flex flex-col items-end gap-2">
+          {lineasExcedidas.length > 0 && (
+            <p className="text-xs font-semibold text-red-700">
+              {lineasExcedidas.length === 1 ? "Una línea lleva" : `${lineasExcedidas.length} líneas llevan`} más de lo asignado. No se puede despachar de más.
+            </p>
+          )}
+          {lineasExcedidas.length === 0 && lineasConSaldoSinMotivo.length > 0 && (
+            <p className="text-xs font-semibold text-amber-800">
+              {lineasConSaldoSinMotivo.length === 1 ? "Falta el motivo de un saldo" : `Faltan los motivos de ${lineasConSaldoSinMotivo.length} saldos`}. El despacho debe ir completo; si no va completo, escribe por qué.
+            </p>
+          )}
+          <Button onClick={handleConfirmPicking} disabled={!puedeConfirmar || confirmingPicking} size="lg">
             {confirmingPicking ? "Confirmando..." : "Confirmar Picking"}
           </Button>
         </div>
@@ -1612,16 +1708,35 @@ const loadOrders = async () => {
                     Está verificando con <span className="font-semibold">{lowQtyConfirm.net}</span> unidades, una
                     cantidad menor a la solicitada en el pedido (
                     <span className="font-semibold">{lowQtyConfirm.required}</span>). La salida se registrará con la
-                    cantidad real verificada. ¿Desea continuar?
+                    cantidad real verificada.
                   </>
                 )}
               </DialogDescription>
             </DialogHeader>
+            {/* El faltante es válido pero nunca silencioso: el motivo queda guardado en el
+                movimiento de inventario y se ve en el ciclo de la orden. */}
+            <div className="space-y-1">
+              <Label htmlFor="motivo-faltante" className="text-xs font-semibold">
+                Motivo del faltante{lowQtyConfirm ? ` de ${Math.round((lowQtyConfirm.required - lowQtyConfirm.net) * 100) / 100} unidades` : ""}
+              </Label>
+              <Input
+                id="motivo-faltante"
+                value={motivoFaltante}
+                onChange={(e) => setMotivoFaltante(e.target.value)}
+                placeholder="Por qué se envía menos de lo que piden"
+                autoFocus
+              />
+              <p className="text-[11px] text-muted-foreground">Obligatorio, al menos {JUSTIFICACION_MINIMA} letras.</p>
+            </div>
             <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setLowQtyConfirm(null)}>
+              <Button variant="outline" onClick={() => { setLowQtyConfirm(null); setMotivoFaltante("") }}>
                 Cancelar
               </Button>
-              <Button className="bg-amber-600 hover:bg-amber-700" onClick={confirmLowQtyVerification}>
+              <Button
+                className="bg-amber-600 hover:bg-amber-700"
+                onClick={confirmLowQtyVerification}
+                disabled={!justificacionValida(motivoFaltante)}
+              >
                 <Check className="h-4 w-4 mr-1" />
                 Sí, verificar
               </Button>
@@ -1936,16 +2051,33 @@ const loadOrders = async () => {
                 <>
                   Está verificando con <span className="font-semibold">{lowQtyConfirm.net}</span> unidades, una cantidad
                   menor a la solicitada en el pedido (<span className="font-semibold">{lowQtyConfirm.required}</span>). La
-                  salida se registrará con la cantidad real verificada. ¿Desea continuar?
+                  salida se registrará con la cantidad real verificada.
                 </>
               )}
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-1">
+            <Label htmlFor="motivo-faltante-2" className="text-xs font-semibold">
+              Motivo del faltante{lowQtyConfirm ? ` de ${Math.round((lowQtyConfirm.required - lowQtyConfirm.net) * 100) / 100} unidades` : ""}
+            </Label>
+            <Input
+              id="motivo-faltante-2"
+              value={motivoFaltante}
+              onChange={(e) => setMotivoFaltante(e.target.value)}
+              placeholder="Por qué se envía menos de lo que piden"
+              autoFocus
+            />
+            <p className="text-[11px] text-muted-foreground">Obligatorio, al menos {JUSTIFICACION_MINIMA} letras.</p>
+          </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setLowQtyConfirm(null)}>
+            <Button variant="outline" onClick={() => { setLowQtyConfirm(null); setMotivoFaltante("") }}>
               Cancelar
             </Button>
-            <Button className="bg-amber-600 hover:bg-amber-700" onClick={confirmLowQtyVerification}>
+            <Button
+              className="bg-amber-600 hover:bg-amber-700"
+              onClick={confirmLowQtyVerification}
+              disabled={!justificacionValida(motivoFaltante)}
+            >
               <Check className="h-4 w-4 mr-1" />
               Sí, verificar
             </Button>

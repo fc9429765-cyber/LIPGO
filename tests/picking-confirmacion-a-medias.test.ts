@@ -14,7 +14,12 @@ import {
   itemsPorProcesar,
   textoReparos,
   textoYaVerificada,
+  evaluarDespacho,
+  justificacionValida,
+  textoDespachos,
   validarAntesDeEscribir,
+  validarDespachos,
+  type LineaDespacho,
   type FilaParaValidar,
   type FilaSalida,
 } from "@/lib/picking-estado"
@@ -189,5 +194,62 @@ describe("la validación previa no toca cantidades", () => {
   it("sin pasar la orden, no se revisa el dueño (compatibilidad)", () => {
     const filas: FilaParaValidar[] = [{ id: 1, status: "por descontar", location: "A6", ocargue: "MOL2" }]
     expect(validarAntesDeEscribir(filas, [1])).toEqual([])
+  })
+})
+
+// REGLA DE GERENCIA (2026-10-04): "se debe despachar completo, y si no va completo, como pocas
+// veces pasa, debe haber una justificación". El saldo es válido pero nunca silencioso.
+describe("despachar completo, y si queda saldo, con justificación", () => {
+  const L = (extra: Partial<LineaDespacho> = {}): LineaDespacho => ({ id: 1, asignado: 200, despachado: 200, producto: "PT LA NIEVE 25LB", lote: "20260930", ...extra })
+
+  it("la suma exacta de varios QR es un despacho completo", () => {
+    expect(evaluarDespacho(L({ despachado: 200 }))).toBe("completo")
+  })
+
+  it("si queda saldo y nadie lo explica, no se puede confirmar", () => {
+    expect(evaluarDespacho(L({ despachado: 160 }))).toBe("incompleto_sin_justificar")
+  })
+
+  it("con el motivo escrito, el saldo se acepta", () => {
+    expect(evaluarDespacho(L({ despachado: 160, justificacion: "El cliente recibio 160, no habia mas estiba completa" }))).toBe("incompleto_justificado")
+  })
+
+  it("una justificación vacía o de relleno no vale", () => {
+    expect(evaluarDespacho(L({ despachado: 160, justificacion: "   " }))).toBe("incompleto_sin_justificar")
+    expect(evaluarDespacho(L({ despachado: 160, justificacion: "ok" }))).toBe("incompleto_sin_justificar")
+    expect(justificacionValida("saldo")).toBe(true)
+  })
+
+  it("NUNCA se puede despachar más de lo asignado, ni con justificación", () => {
+    expect(evaluarDespacho(L({ despachado: 210 }))).toBe("excede")
+    expect(evaluarDespacho(L({ despachado: 210, justificacion: "el cliente pidio mas" }))).toBe("excede")
+  })
+
+  it("tolera centésimas de redondeo", () => {
+    expect(evaluarDespacho(L({ asignado: 83.5, despachado: 83.5 }))).toBe("completo")
+    expect(evaluarDespacho(L({ asignado: 100, despachado: 99.995 }))).toBe("completo")
+  })
+
+  it("resume una confirmación con varias líneas", () => {
+    const r = validarDespachos([
+      L({ id: 1, despachado: 200 }),
+      L({ id: 2, despachado: 150, producto: "PT CONCHAS" }),
+      L({ id: 3, despachado: 150, justificacion: "faltaron 50, se averio una estiba completa" }),
+      L({ id: 4, despachado: 250, producto: "PT FIDEO" }),
+    ])
+    expect(r.completas).toBe(1)
+    expect(r.sinJustificar.map((l) => l.id)).toEqual([2])
+    expect(r.justificadas.map((l) => l.id)).toEqual([3])
+    expect(r.excede.map((l) => l.id)).toEqual([4])
+    const t = textoDespachos(r)
+    expect(t).toContain("No se despachó nada")
+    expect(t).toContain("No se puede despachar MÁS")
+    expect(t).toContain("faltan 50 de 200")
+  })
+
+  it("una avería NO es un saldo: la salida se registra por el bruto escaneado", () => {
+    // 200 escaneados con 10 averías sigue siendo despacho completo; la avería ya quedó
+    // documentada como entrada aparte.
+    expect(evaluarDespacho(L({ asignado: 200, despachado: 200 }))).toBe("completo")
   })
 })
