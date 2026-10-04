@@ -19,6 +19,10 @@
     {
       "path": "/api/cron/informe-semanal",
       "schedule": "0 11 * * 1"
+    },
+    {
+      "path": "/api/cron/vigilancia-cuentas",
+      "schedule": "0 12 * * *"
     }
   ]
 }
