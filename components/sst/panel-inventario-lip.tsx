@@ -991,7 +991,7 @@ export function PanelInventarioLIP() {
           ) : loadingOrdSal ? (
             <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 animate-spin" style={{ color: SST_TOKENS.navy }} /></div>
           ) : !ordSal ? (
-            <Card className="p-8 text-center text-sm text-muted-foreground">Sin datos. Si la pantalla sigue vacía, falta correr <code>scripts/sig/48_orden_vs_salidas.sql</code>.</Card>
+            <Card className="p-8 text-center text-sm text-muted-foreground">Sin datos. Si la pantalla sigue vacía, falta correr <code>scripts/sig/63_orden_vs_salidas.sql</code>.</Card>
           ) : (
             <>
               <p className="text-[11px] text-muted-foreground">

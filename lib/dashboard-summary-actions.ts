@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase-client"
 import { getCurrentEmpresaId } from "@/lib/company-filter"
+import { FILTRO_ABIERTOS_POSTGREST } from "@/lib/pedidos-estado"
 
 // Helper function to get Colombia date string (YYYY-MM-DD)
 function getColombiaDateString(): string {
@@ -38,10 +39,13 @@ export async function getDailySummaryStats(selectedEmpresaId?: number) {
       .select("idpedido", { count: "exact", head: true })
       .eq("id_empresa", empresaId)
       .eq("fecha_programada", today)
-      .neq("estado", "entregado")
-      // Los depurados ("no entregado", SQL 215) tampoco cuentan. El resto de la
-      // condición se deja exactamente como estaba.
-      .neq("estado", "no entregado")
+      // "Pedidos Hoy" es lo que queda por atender hoy, así que un pedido YA CERRADO no
+      // cuenta, sea cual sea la forma en que se cerró. Antes solo se descartaban
+      // "entregado" y "no entregado", así que un pedido anulado o cerrado como
+      // "entrega parcial" seguía sumando. Gerencia (2026-10-04): un pedido depurado "no
+      // debe seguir afectando los indicadores, son pedidos que ya se gestionaron en su
+      // momento". El filtro central vive en lib/pedidos-estado.ts.
+      .or(FILTRO_ABIERTOS_POSTGREST)
 
     if (pedidosError) {
       console.error("[v0] Error fetching pedidos count:", pedidosError)

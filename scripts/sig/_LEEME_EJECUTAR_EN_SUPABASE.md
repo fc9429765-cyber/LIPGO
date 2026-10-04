@@ -92,3 +92,14 @@ update public.permisos_usuarios
 > `sig_matriz` abre el módulo (matriz integrada general). Cada `sig_iso*`
 > habilita la pestaña de esa norma (acceso por responsabilidad).
 > Tras el UPDATE: **recarga la página** (Ctrl+Shift+R) — el sidebar relee permisos al cargar.
+
+---
+
+## Pendiente de correr (al 2026-10-04)
+
+| # | Archivo | Qué hace | ¿Ejecutado? |
+|---|---------|----------|-------------|
+| 63 | `63_orden_vs_salidas.sql` | **Conciliación del DESPACHO.** Vista `v_orden_vs_salidas`: cruza lo que la **orden de cargue autorizó** (`detalleoc`, solo `tipooperacion = 'Cargue'`) contra lo que **salió del inventario** (`invtrans`, movimiento 601 aprobado). Estados `CUADRA` · `SALIO_MAS` · `FUERA_DE_LA_ORDEN` · `SALIO_MENOS` · `SIN_SALIDA`. Es la medición que pidió gerencia: puede salir menos (merma en el cargue, se muestra) pero **nunca más**. Excluye Tolva (es producción), Descargue, Distribución, proyección y el movimiento 702 (salida de material). La alimenta la pestaña **"Orden de cargue vs salidas"** de Almacenamiento › Exactitud. Es una VISTA: no tiene datos y no toca inventario. | ⬜ |
+
+> La numeración de esta carpeta tiene números repetidos de arrastre (44, 45, 46, 48, 51, 52).
+> El `48_cierre_firma_digital.sql` es otro script y no tiene relación con el 63.
