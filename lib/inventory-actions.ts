@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase-client"
 import { fetchAllRows } from "@/lib/fetch-all-rows"
+import { registrarErrorServidor } from "@/lib/errores-servidor"
 import { CODIGOS_REQUIEREN_APROBACION } from "@/lib/transacciones-codigo"
 import * as XLSX from "xlsx"
 import { generateAndUploadProductionEntryPDF } from "@/lib/pdf-actions"
@@ -616,6 +617,8 @@ export async function registerInventoryTransaction(transaction: InventoryTransac
     return { success: true, message: "Transacción registrada exitosamente" }
   } catch (error) {
     console.error("[v0] Unexpected error registering transaction:", error)
+    // Un movimiento de inventario que falla a medias tiene que verse el mismo día (registro SQL 217).
+    void registrarErrorServidor("inventario.registerInventoryTransaction", error)
     return { success: false, message: "Error inesperado al registrar la transacción" }
   }
 }
@@ -1309,6 +1312,7 @@ export async function deleteReproceso(id: number): Promise<{ success: boolean; m
     return { success: true, message: "Reproceso eliminado exitosamente" }
   } catch (error) {
     console.error("[v0] Unexpected error deleting reproceso:", error)
+    void registrarErrorServidor("inventario.deleteReproceso", error, { id })
     return { success: false, message: "Error inesperado al eliminar el reproceso" }
   }
 }
@@ -1348,6 +1352,7 @@ export async function processReproceso(data: ProcessReprocesoData): Promise<{ su
     return { success: true, message: "Reproceso procesado exitosamente" }
   } catch (error) {
     console.error("[v0] Unexpected error processing reproceso:", error)
+    void registrarErrorServidor("inventario.processReproceso", error)
     return { success: false, message: "Error inesperado al procesar el reproceso" }
   }
 }
@@ -1477,6 +1482,7 @@ const registerMultipleProductionEntries = async (
     }
   } catch (error) {
     console.error("[v0] Unexpected error registering production entries:", error)
+    void registrarErrorServidor("inventario.registerProductionEntries", error)
     return { success: false, message: "Error inesperado al registrar los ingresos de producción" }
   }
 }
@@ -1547,6 +1553,7 @@ export async function registerProductionEntry(entry: ProductionEntry) {
     return { success: true, message: "Ingreso de producción registrado exitosamente" }
   } catch (error) {
     console.error("[v0] Unexpected error registering production entry:", error)
+    void registrarErrorServidor("inventario.registerProductionEntry", error)
     return { success: false, message: "Error inesperado al registrar el ingreso de producción" }
   }
 }
@@ -1680,6 +1687,7 @@ export async function approveProductionEntry(
     }
   } catch (error) {
     console.error("[v0] Unexpected error approving production entry:", error)
+    void registrarErrorServidor("inventario.approveProductionEntry", error)
     return {
       success: false,
       message: "Error inesperado al aprobar el ingreso",
@@ -1700,6 +1708,7 @@ export async function rejectProductionEntry(id: number): Promise<{ success: bool
     return { success: true, message: "Ingreso rechazado exitosamente" }
   } catch (error) {
     console.error("[v0] Unexpected error rejecting production entry:", error)
+    void registrarErrorServidor("inventario.rejectProductionEntry", error)
     return { success: false, message: "Error inesperado al rechazar el ingreso" }
   }
 }
@@ -1834,6 +1843,7 @@ export async function deleteInventoryTransaction(id: number): Promise<{ success:
     return { success: true, message: "Transacción eliminada exitosamente" }
   } catch (error) {
     console.error("[v0] Unexpected error deleting inventory transaction:", error)
+    void registrarErrorServidor("inventario.deleteInventoryTransaction", error, { id })
     return { success: false, message: "Error inesperado al eliminar la transacción" }
   }
 }
@@ -1937,6 +1947,7 @@ export async function updateInventoryTransaction(
     return { success: true, message: "Transacción actualizada exitosamente" }
   } catch (error) {
     console.error("[v0] Unexpected error updating inventory transaction:", error)
+    void registrarErrorServidor("inventario.updateInventoryTransaction", error)
     return { success: false, message: "Error inesperado al actualizar la transacción" }
   }
 }
@@ -2397,6 +2408,7 @@ export async function registerProductTransfer(
     return { success: true, message: "Traslado registrado exitosamente" }
   } catch (error) {
     console.error("[v0] Unexpected error in registerProductTransfer:", error)
+    void registrarErrorServidor("inventario.registerProductTransfer", error)
     return { success: false, message: "Error inesperado al registrar el traslado" }
   }
 }

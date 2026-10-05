@@ -16,6 +16,7 @@ import { cediDeDestino, PLANTAS_ORIGEN, type CediDestino } from "@/lib/cedis-des
 import { esProductoPorUnidad } from "@/lib/facturacion-billed-party"
 import { reportarInterno } from "@/lib/reporte-interno-actions"
 import { FILTRO_ABIERTOS_POSTGREST, normalizarEstado } from "@/lib/pedidos-estado"
+import { registrarErrorServidor } from "@/lib/errores-servidor"
 import {
   cargadoPorOtrasOrdenes,
   cargadoTrasGuardar,
@@ -348,6 +349,7 @@ export async function deleteOrder(idpedido: number) {
     return { success: true }
   } catch (error) {
     console.error("Unexpected error:", error)
+    void registrarErrorServidor("orders.deleteOrder", error, { idpedido })
     return { success: false, message: "Error inesperado al eliminar pedido" }
   }
 }
@@ -524,6 +526,7 @@ export async function approveOrder(idpedido: number, approvalCode: string) {
     return { success: true, message: "Pedido aprobado correctamente" }
   } catch (error) {
     console.error("Unexpected error:", error)
+    void registrarErrorServidor("orders.approveOrder", error, { idpedido })
     return { success: false, message: "Error inesperado al aprobar pedido" }
   }
 }
@@ -1424,6 +1427,12 @@ export async function generateLoadOrder(orderData: {
     }
   } catch (error) {
     console.error("[v0] Unexpected error:", error)
+    // Una orden de cargue a medias deja pedidos y vehículo en estados cruzados: al registro.
+    void registrarErrorServidor("orders.generateLoadOrder", error, {
+      pedidos: orderData.selectedOrderIds,
+      vehiculo: orderData.vehiculo ?? null,
+      empresaId: orderData.idempresaSeleccionada ?? null,
+    })
     return { success: false, message: "Error inesperado al generar orden de cargue" }
   }
 }
@@ -2519,6 +2528,7 @@ export async function annulOrder(idpedido: number, password: string, observacion
     return { success: true, message: "Pedido anulado exitosamente" }
   } catch (error) {
     console.error("[v0] Unexpected error:", error)
+    void registrarErrorServidor("orders.annulOrder", error, { idpedido })
     return { success: false, message: "Error inesperado al anular pedido" }
   }
 }
@@ -2562,6 +2572,7 @@ export async function closePendingOrder(idpedido: number, password: string, obse
 
     return { success: true, message: "Pedido cerrado exitosamente" }
   } catch (error) {
+    void registrarErrorServidor("orders.closePendingOrder", error, { idpedido })
     return { success: false, message: "Error inesperado al cerrar pedido" }
   }
 }
@@ -2862,6 +2873,8 @@ export async function deleteLoadOrder(orderId: number) {
     return { success: true, message: "Orden de cargue eliminada exitosamente" }
   } catch (error) {
     console.error("[v0] Error deleting load order:", error)
+    // El reverso toca invtrans, pedidos, citas y el libro de órdenes: si se corta, hay que verlo.
+    void registrarErrorServidor("orders.deleteLoadOrder", error, { orderId })
     return { success: false, message: "Error inesperado al eliminar la orden de cargue" }
   }
 }
@@ -4276,6 +4289,7 @@ export async function closeOrderWithInvoice(
     }
   } catch (error) {
     console.error("[v0] Unexpected error:", error)
+    void registrarErrorServidor("orders.closeOrderWithInvoice", error, { idpedido, factura, lineas: unitsReceived.length })
     return {
       success: false,
       message: "Error inesperado al cerrar con factura",

@@ -15,6 +15,7 @@
 //   - Prima: desde 1-ene (si retiro en 1er semestre) o 1-jul (si 2do semestre).
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { registrarErrorServidor } from "@/lib/errores-servidor"
 import { clasificarDiaCotizacion } from "@/lib/parafiscales"
 
 // Corte de la reversión "nómina pendiente vuelve a pagarse por el plano"
@@ -743,6 +744,7 @@ export async function guardarParametrosPrestaciones(
     if (error) return { success: false, message: error.message }
     return { success: true }
   } catch (e: any) {
+    void registrarErrorServidor("nomina.guardarParametrosPrestaciones", e)
     return { success: false, message: e?.message || "Error al guardar parámetros." }
   }
 }
@@ -777,6 +779,7 @@ export async function guardarEstadoLiquidacion(payload: {
     if (error) return { success: false, message: error.message }
     return { success: true }
   } catch (e: any) {
+    void registrarErrorServidor("nomina.guardarEstadoLiquidacion", e)
     return { success: false, message: e?.message || "Error al guardar el estado." }
   }
 }
@@ -811,6 +814,7 @@ export async function guardarEstadoLiquidacionMasivo(
     if (error) return { success: false, message: error.message, actualizadas: 0 }
     return { success: true, actualizadas: filas.length }
   } catch (e: any) {
+    void registrarErrorServidor("nomina.guardarEstadoLiquidacionMasivo", e)
     return { success: false, message: e?.message || "Error al guardar el estado en lote.", actualizadas: 0 }
   }
 }
@@ -846,6 +850,7 @@ export async function guardarValoresRealesLiquidacion(payload: {
     if (error) return { success: false, message: error.message }
     return { success: true }
   } catch (e: any) {
+    void registrarErrorServidor("nomina.guardarValoresRealesLiquidacion", e)
     return { success: false, message: e?.message || "Error al guardar los valores reales." }
   }
 }
@@ -870,6 +875,7 @@ export async function guardarPagadoHasta(payload: {
     if (error) return { success: false, message: error.message }
     return { success: true }
   } catch (e: any) {
+    void registrarErrorServidor("nomina.guardarPagadoHasta", e)
     return { success: false, message: e?.message || "Error al guardar la fecha." }
   }
 }
@@ -890,6 +896,7 @@ export async function guardarMotivoRetiro(payload: {
     if (error) return { success: false, message: error.message }
     return { success: true }
   } catch (e: any) {
+    void registrarErrorServidor("nomina.guardarMotivoRetiro", e)
     return { success: false, message: e?.message || "Error al guardar el motivo de retiro." }
   }
 }
@@ -917,6 +924,7 @@ export async function agregarDeduccionLiquidacion(payload: {
     if (error) return { success: false, message: error.message }
     return { success: true }
   } catch (e: any) {
+    void registrarErrorServidor("nomina.guardarDeduccionLiquidacion", e)
     return { success: false, message: e?.message || "Error al guardar la deducción." }
   }
 }
@@ -929,6 +937,7 @@ export async function eliminarDeduccionLiquidacion(id: string): Promise<{ succes
     if (error) return { success: false, message: error.message }
     return { success: true }
   } catch (e: any) {
+    void registrarErrorServidor("nomina.eliminarDeduccionLiquidacion", e)
     return { success: false, message: e?.message || "Error al eliminar la deducción." }
   }
 }
@@ -967,6 +976,7 @@ export async function subirSoporteLiquidacion(
 
     return { success: true, url }
   } catch (e: any) {
+    void registrarErrorServidor("nomina.subirSoporteLiquidacion", e)
     return { success: false, message: e?.message || "Error al subir el soporte." }
   }
 }
