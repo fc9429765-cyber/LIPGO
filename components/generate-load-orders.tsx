@@ -161,7 +161,7 @@ function GenerateLoadOrdersComponent() {
     const loadFilterData = async () => {
       const [clientesData, filtersData, vehiclesData, bodegasData] = await Promise.all([
         getClientes(selectedEmpresaId ?? undefined),
-        getOrderFiltersData(),
+        getOrderFiltersData(selectedEmpresaId ?? undefined),
         getVehiclesFromCitas(selectedEmpresaId ?? undefined),
         getAccessibleEmpresesFromPermisos(),
       ])

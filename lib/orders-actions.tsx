@@ -548,7 +548,16 @@ export async function updateOrderPDFUrl(idpedido: number, pdfUrl: string) {
   }
 }
 
-export async function getOrderFiltersData() {
+/**
+ * Los valores de los desplegables de filtro: pedidos, órdenes de compra,
+ * ciudades y vendedores.
+ *
+ * `empresaId` es la empresa elegida en el selector superior. Sin ella, los
+ * desplegables se armaban con TODAS las empresas accesibles: quien tiene
+ * acceso a varios proyectos veía pedidos que no existen en el que está
+ * mirando, y al escogerlos la lista salía vacía sin explicar por qué.
+ */
+export async function getOrderFiltersData(empresaId?: number) {
   const supabase = await createClient()
   try {
     console.log("[v0] Fetching order filters data")
@@ -569,8 +578,19 @@ export async function getOrderFiltersData() {
         .eq("aprobado", "si")
         .order("pedido", { ascending: false })
         .order("idpedido", { ascending: false })
-      // Filter by accessible empresas
-      q = q.in("id_empresa", accessibleEmpresas)
+      /*
+       * La empresa elegida en el selector superior manda sobre la lista de
+       * accesibles.
+       *
+       * Se comprueba que esté entre las accesibles antes de usarla: el valor
+       * viene del navegador, y sin esa comprobación bastaría con cambiarlo
+       * para ver pedidos de un proyecto al que no se tiene acceso.
+       */
+      if (empresaId && accessibleEmpresas.includes(empresaId)) {
+        q = q.eq("id_empresa", empresaId)
+      } else {
+        q = q.in("id_empresa", accessibleEmpresas)
+      }
       // Filter by accessible owners in empresafactura field (if user has owner permissions)
       if (accessibleOwners.length > 0) q = q.in("empresafactura", accessibleOwners)
       return q
