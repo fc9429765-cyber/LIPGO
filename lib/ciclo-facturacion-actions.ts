@@ -28,6 +28,7 @@
  */
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { segundoFactorPendiente } from "@/lib/seguridad-servidor"
 import { getAccessibleEmpresesFromPermisos } from "@/lib/orders-actions"
 import {
   getPrefactura,
@@ -151,7 +152,9 @@ async function verificarPermisoCiclo(rol: "jefe" | "coordinador"): Promise<strin
   if (!tienePermiso) {
     return `No tienes el permiso de ${rol === "jefe" ? "Jefe de Facturación" : "Coordinador"} en Ciclo de Facturación -- este paso no te corresponde.`
   }
-  return null
+  // Segundo factor (2026-10-05): si la cuenta lo tiene activado, esta sesión debe haberlo
+  // verificado. Quien no lo tiene activado sigue igual que hoy; ningún permiso cambia.
+  return segundoFactorPendiente(`ciclo-facturacion:${rol}`)
 }
 
 const LABEL_ETAPA: Record<EtapaCorregible, string> = {
@@ -474,6 +477,9 @@ export async function registrarPago(
   prefacturaId: number,
   pago: { fecha: string; valor: number; observacion?: string; usuario: string },
 ): Promise<{ success: boolean; message?: string }> {
+  // Segundo factor (2026-10-05): solo detiene a quien lo tiene activado y no lo verificó.
+  const segundoFactor = await segundoFactorPendiente("ciclo-facturacion:registrarPago")
+  if (segundoFactor) return { success: false, message: segundoFactor }
   if (!(pago.valor > 0)) return { success: false, message: "El valor del pago debe ser mayor a 0." }
   try {
     const sb: any = await getSupabaseAdmin()
@@ -585,6 +591,8 @@ export async function actualizarCondicionEnvioAnexo(
   frecuencia: "diario" | "semanal",
   dia_semana: number | null,
 ): Promise<{ success: boolean; message?: string }> {
+  const segundoFactor = await segundoFactorPendiente("ciclo-facturacion:condicionEnvioAnexo")
+  if (segundoFactor) return { success: false, message: segundoFactor }
   if (!idempresa) return { success: false, message: "Falta el proyecto." }
   if (frecuencia === "semanal" && (dia_semana === null || dia_semana < 0 || dia_semana > 6)) {
     return { success: false, message: "Selecciona un día de la semana válido." }
@@ -665,6 +673,8 @@ export async function actualizarCondicionGeneracionPrefactura(
   fecha_inicio: string | null,
   dias_corte: number[] | null = null,
 ): Promise<{ success: boolean; message?: string }> {
+  const segundoFactor = await segundoFactorPendiente("ciclo-facturacion:condicionGeneracionPrefactura")
+  if (segundoFactor) return { success: false, message: segundoFactor }
   if (!idempresa) return { success: false, message: "Falta el proyecto." }
   if (frecuencia === "semanal" && (dia_semana === null || dia_semana < 0 || dia_semana > 6)) {
     return { success: false, message: "Selecciona un día de la semana válido." }
@@ -784,6 +794,9 @@ export async function generarPrefacturaAhora(
   usuario: string,
   rangoManual?: { desde: string; hasta: string },
 ): Promise<ResultadoGeneracionManual> {
+  // Segundo factor (2026-10-05): solo detiene a quien lo tiene activado y no lo verificó.
+  const segundoFactor = await segundoFactorPendiente("ciclo-facturacion:generarPrefacturaAhora")
+  if (segundoFactor) return { success: false, estado: "error", mensaje: segundoFactor, resultados: [] }
   try {
     if (rangoManual && rangoManual.desde > rangoManual.hasta) {
       return { success: false, estado: "error", mensaje: "La fecha 'Desde' no puede ser posterior a 'Hasta'.", resultados: [] }
@@ -1071,6 +1084,8 @@ export async function previsualizarPendienteGestion(idempresa: number): Promise<
 }
 
 export async function actualizarCondicionPagoOwner(owner: string, dias_plazo: number): Promise<{ success: boolean; message?: string }> {
+  const segundoFactor = await segundoFactorPendiente("ciclo-facturacion:condicionPagoOwner")
+  if (segundoFactor) return { success: false, message: segundoFactor }
   if (!owner?.trim()) return { success: false, message: "Falta el owner." }
   if (!(dias_plazo > 0)) return { success: false, message: "Los días de plazo deben ser mayores a 0." }
   try {

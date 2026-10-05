@@ -9,6 +9,7 @@
 // es el paso siguiente y NO se cruza aquí.
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { segundoFactorPendiente } from "@/lib/seguridad-servidor"
 import { esPlacaDistribucion, cargarPlacasDistribucion, ownerDeLinea, esVehiculoPropioAgrupable } from "@/lib/distribucion-placas"
 import { PLACAS_EXCLUIDAS_FACTURAS } from "@/lib/facturas-exclusiones"
 import { getConciliacionAvimol } from "@/lib/conciliacion-avimol-actions"
@@ -547,6 +548,9 @@ export async function guardarPrefactura(payload: {
   observacion?: string | null
   advertencias?: Advertencia[]
 }): Promise<{ success: boolean; id?: number; message?: string }> {
+  // Segundo factor (2026-10-05): solo detiene a quien lo tiene activado y no lo verificó.
+  const segundoFactor = await segundoFactorPendiente("facturacion:guardarPrefactura")
+  if (segundoFactor) return { success: false, message: segundoFactor }
   if (!payload?.idempresa) return { success: false, message: "Falta el proyecto." }
   if (!payload.lineas?.length) return { success: false, message: "La prefactura no tiene líneas seleccionadas." }
   try {
@@ -686,6 +690,9 @@ export async function cambiarEstadoPrefactura(
 }
 
 export async function eliminarPrefactura(id: number): Promise<{ success: boolean; message?: string }> {
+  // Segundo factor (2026-10-05): solo detiene a quien lo tiene activado y no lo verificó.
+  const segundoFactor = await segundoFactorPendiente("facturacion:eliminarPrefactura")
+  if (segundoFactor) return { success: false, message: segundoFactor }
   try {
     const sb: any = await getSupabaseAdmin()
     const { error } = await sb.from("prefacturas").delete().eq("id", id).eq("estado", "borrador")

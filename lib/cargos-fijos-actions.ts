@@ -21,6 +21,7 @@
  */
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { segundoFactorPendiente } from "@/lib/seguridad-servidor"
 
 const num = (v: any) => {
   const n = Number(String(v ?? "").replace(/,/g, ""))
@@ -119,6 +120,8 @@ export async function guardarMontacargasAlquiler(payload: {
   fechainicio: string
   fechafin: string
 }): Promise<{ success: boolean; message?: string }> {
+  const segundoFactor = await segundoFactorPendiente("cargos-fijos:guardarMontacargasAlquiler")
+  if (segundoFactor) return { success: false, message: segundoFactor }
   try {
     const sb: any = await getSupabaseAdmin()
     const row = {
@@ -197,6 +200,8 @@ export async function guardarCargoFijoProyecto(payload: {
   fechainicio: string
   fechafin: string
 }): Promise<{ success: boolean; message?: string }> {
+  const segundoFactor = await segundoFactorPendiente("cargos-fijos:guardarCargoFijoProyecto")
+  if (segundoFactor) return { success: false, message: segundoFactor }
   try {
     const sb: any = await getSupabaseAdmin()
     const row = {
@@ -232,6 +237,9 @@ export interface ResultadoGeneracion {
 export async function generarCargosDelMes(
   periodo: string,
 ): Promise<{ success: boolean; data?: ResultadoGeneracion; message?: string }> {
+  // Segundo factor (2026-10-05): solo detiene a quien lo tiene activado y no lo verificó.
+  const segundoFactor = await segundoFactorPendiente("cargos-fijos:generarCargosDelMes")
+  if (segundoFactor) return { success: false, message: segundoFactor }
   try {
     const mes = inicioMes(periodo)
     const sb: any = await getSupabaseAdmin()

@@ -16,6 +16,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentUser } from "@/lib/auth-actions"
 import { checkModulePermission } from "@/lib/permissions-actions"
+import { segundoFactorPendiente } from "@/lib/seguridad-servidor"
 import { updateUserPermissions } from "@/lib/permissions-actions"
 import { MODULE_PERMISSION_MAP, type UserPermissions } from "@/lib/permissions-map"
 import type { CrearUsuarioInput, AuthMetaUsuario } from "@/lib/user-admin-types"
@@ -23,7 +24,11 @@ import type { CrearUsuarioInput, AuthMetaUsuario } from "@/lib/user-admin-types"
 const MODULO_ADMIN = "Gestión de Usuarios"
 
 async function assertAdmin(): Promise<boolean> {
-  return await checkModulePermission(MODULO_ADMIN)
+  const esAdmin = await checkModulePermission(MODULO_ADMIN)
+  if (!esAdmin) return false
+  // Segundo factor (2026-10-05): si la cuenta lo tiene activado, esta sesión debe haberlo
+  // verificado. Quien no lo tiene activado sigue igual que hoy; ningún permiso cambia.
+  return (await segundoFactorPendiente("gestion-usuarios")) === null
 }
 
 // Todas las columnas de permiso en `false`. Se construye desde la unica fuente

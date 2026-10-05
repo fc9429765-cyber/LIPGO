@@ -27,6 +27,7 @@
  */
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { segundoFactorPendiente } from "@/lib/seguridad-servidor"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
 import { getConciliacionAvimol, type AlertaAvimol } from "@/lib/conciliacion-avimol-actions"
 import { getReversosPorIdempresa } from "@/lib/transacciones-codigo-actions"
@@ -816,6 +817,9 @@ export async function guardarPrefacturaProduccion(payload: {
    *  igual que ya se ve en los eventos del Ciclo de Facturación. */
   usuarioOverride?: string
 }): Promise<{ success: boolean; id?: number; message?: string }> {
+  // Segundo factor (2026-10-05): solo detiene a quien lo tiene activado y no lo verificó.
+  const segundoFactor = await segundoFactorPendiente("prefactura-produccion:guardar")
+  if (segundoFactor) return { success: false, message: segundoFactor }
   if (!payload?.idempresa) return { success: false, message: "Falta el proyecto." }
   if (!payload.periodo_desde || !payload.periodo_hasta)
     return { success: false, message: "El rango de fechas es obligatorio." }
@@ -908,6 +912,9 @@ export async function listarPrefacturasProduccion(
 /** Aprobar deja el documento en firme, REGISTRA QUIÉN lo aprobó, y arranca el Ciclo de Facturación. */
 export async function aprobarPrefacturaProduccion(id: number): Promise<{ success: boolean; message?: string }> {
   if (!id) return { success: false, message: "Prefactura inválida." }
+  // Segundo factor (2026-10-05): solo detiene a quien lo tiene activado y no lo verificó.
+  const segundoFactor = await segundoFactorPendiente("prefactura-produccion:aprobar")
+  if (segundoFactor) return { success: false, message: segundoFactor }
   try {
     const admin: any = await getSupabaseAdmin()
     const usuario = await getCurrentUsuarioForInsert()
@@ -964,6 +971,8 @@ export async function reabrirPrefacturaProduccion(id: number, forzar?: boolean):
 /** Solo se elimina un BORRADOR: una aprobada ya se le pasó al cliente. */
 export async function eliminarPrefacturaProduccion(id: number): Promise<{ success: boolean; message?: string }> {
   if (!id) return { success: false, message: "Prefactura inválida." }
+  const segundoFactor = await segundoFactorPendiente("prefactura-produccion:eliminar")
+  if (segundoFactor) return { success: false, message: segundoFactor }
   try {
     const admin: any = await getSupabaseAdmin()
     const { data, error } = await admin
