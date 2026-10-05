@@ -542,16 +542,28 @@ function FilaCiclo({
           pueden anidar, y además emitir una factura no debe compartir zona de
           clic con "ver el detalle".
 
-          Solo aparece con el anexo ya firmado --`pendiente_factura`-- que es
-          cuando el cliente validó lo que se le va a cobrar. */}
-      {p.estado_ciclo === "pendiente_factura" && (
+          Se ofrece en TODAS las etapas por decisión del negocio. Antes solo
+          aparecía con el anexo ya firmado, porque esa firma es la prueba de
+          que el cliente aceptó el monto; facturar antes significa que si él
+          objeta, corregir ya no es editar una prefactura sino emitir una nota
+          crédito. Por eso el aviso cambia de tono según la etapa: en las
+          anteriores a la firma dice que el cliente todavía no ha aceptado, en
+          vez de esconder el botón. Quien factura ve el riesgo y decide. */}
+      {p.estado_ciclo !== "cerrado" && (
         <div className="flex items-center justify-end gap-2 border-t px-3 py-1.5">
-          <span className="text-[10px] text-muted-foreground">Anexo firmado por el cliente</span>
+          <span
+            className={`text-[10px] ${IDX_ESTADO[p.estado_ciclo] >= IDX_ESTADO.pendiente_factura ? "text-muted-foreground" : "text-amber-700"}`}
+          >
+            {IDX_ESTADO[p.estado_ciclo] >= IDX_ESTADO.pendiente_factura
+              ? "Anexo firmado por el cliente"
+              : "El cliente aún no ha firmado el anexo"}
+          </span>
           <BotonFacturarSiigo
             prefacturaId={p.id}
             orden={`${p.owner || p.proyecto || "Prefactura"} · ${p.periodo_desde || "?"} a ${p.periodo_hasta || "?"}`}
             cliente={p.owner || null}
             valor={p.total}
+            facturaExistente={p.numero_factura_siigo}
             onEmitida={onCambio}
           />
         </div>

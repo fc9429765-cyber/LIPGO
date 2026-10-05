@@ -89,6 +89,8 @@ export interface PrefacturaCiclo {
   periodo_hasta: string | null
   total: number
   estado_ciclo: EstadoCiclo
+  /** Factura de Siigo ya emitida para esta prefactura. Vacio = todavia no se facturo. */
+  numero_factura_siigo: string | null
   ciclo_actualizado_en: string | null
   ultimoEvento: EventoCiclo | null
   // Cartera (solo tiene sentido una vez cerrado)
@@ -195,7 +197,7 @@ export async function listarCicloFacturacion(filtros?: {
     let query = sb
       .from("prefacturas")
       .select(
-        "id, origen, idempresa, proyecto, periodo_desde, periodo_hasta, total, lineas, estado_ciclo, ciclo_actualizado_en, estado_cobro, valor_pagado, dias_plazo, fecha_vencimiento, advertencias",
+        "id, origen, idempresa, proyecto, periodo_desde, periodo_hasta, total, lineas, estado_ciclo, ciclo_actualizado_en, estado_cobro, valor_pagado, dias_plazo, fecha_vencimiento, advertencias, numero_factura_siigo",
       )
       .eq("estado", "aprobada")
       .in("idempresa", idsAccesibles)
@@ -246,6 +248,7 @@ export async function listarCicloFacturacion(filtros?: {
         periodo_hasta: r.periodo_hasta,
         total,
         estado_ciclo: r.estado_ciclo,
+        numero_factura_siigo: r.numero_factura_siigo ?? null,
         ciclo_actualizado_en: r.ciclo_actualizado_en,
         ultimoEvento: ultimosPorPrefactura.get(r.id) || null,
         estado_cobro: r.estado_cobro,

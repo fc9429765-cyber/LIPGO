@@ -718,12 +718,14 @@ export async function getHistorialEmision(limite = 50): Promise<{
 /**
  * ¿Se puede facturar esta prefactura?
  *
- * La condición es que el ANEXO ESTÉ FIRMADO por el cliente. Las prefacturas no
- * pasan por Solicitar Facturas --son otra vía-- y la firma del anexo es la
- * aprobación real de ese flujo: el cliente ya validó lo que se le va a cobrar.
+ * Se puede en cualquier etapa del ciclo menos `cerrado`. Las prefacturas no
+ * pasan por Solicitar Facturas --son otra vía--, así que aquí no hay una
+ * aprobación previa que comprobar: quien factura decide, y la pantalla le
+ * advierte cuando el cliente todavía no ha firmado el anexo.
  *
- * Facturar antes significaría emitir un documento fiscal por un monto que el
- * cliente todavía podría objetar.
+ * Lo que esta función protege de verdad es emitir DOS VECES la misma
+ * prefactura, que es el error irreversible: una factura electrónica aceptada
+ * no se borra, se anula con nota crédito.
  */
 export async function puedeFacturarPrefactura(prefacturaId: number): Promise<Verificacion> {
   if (!(await permitido())) return { puede: false, motivo: "Sin permiso." }
@@ -739,22 +741,21 @@ export async function puedeFacturarPrefactura(prefacturaId: number): Promise<Ver
     if (!p) return { puede: false, motivo: "No se encontró la prefactura." }
 
     /*
-     * `pendiente_factura` es el estado JUSTO DESPUÉS de firmar el anexo. Los
-     * anteriores significan que el cliente aún no ha validado; los posteriores,
-     * que la factura ya se gestionó.
+     * Se puede facturar en CUALQUIER etapa menos `cerrado`, por decisión del
+     * negocio. Antes se exigía `pendiente_factura` --el estado justo después
+     * de firmar el anexo-- porque esa firma es la prueba de que el cliente
+     * aceptó el monto; facturar antes significa que si él objeta, corregir ya
+     * no es editar una prefactura sino emitir una nota crédito.
+     *
+     * `cerrado` sí se mantiene bloqueado: ahí el ciclo ya terminó y la
+     * facturación de ese período se gestionó por otra vía. Emitir encima
+     * duplicaría el cobro.
+     *
+     * Lo que impide facturar dos veces NO es la etapa, son los dos candados
+     * de abajo: `numero_factura_siigo` y la bitácora de emisión.
      */
-    if (p.estado_ciclo !== "pendiente_factura") {
-      const explicacion: Record<string, string> = {
-        pendiente_anexo: "todavía no se le ha enviado el anexo al cliente",
-        pendiente_firma_anexo: "el cliente aún no ha firmado el anexo",
-        pendiente_firma_factura: "la factura ya se envió",
-        pendiente_cierre: "la factura ya está firmada",
-        cerrado: "el ciclo ya está cerrado",
-      }
-      return {
-        puede: false,
-        motivo: `Solo se factura con el anexo firmado: ${explicacion[p.estado_ciclo] ?? p.estado_ciclo}.`,
-      }
+    if (p.estado_ciclo === "cerrado") {
+      return { puede: false, motivo: "El ciclo ya está cerrado." }
     }
 
     if (String(p.numero_factura_siigo ?? "").trim() !== "") {
