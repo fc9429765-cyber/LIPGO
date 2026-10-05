@@ -134,13 +134,15 @@ create table if not exists public.siigo_emision_config (
   /*
    * Si las facturas se envían a la DIAN al crearlas.
    *
-   * En true la factura sale firmada y oficial en el momento. En false queda en
-   * Draft dentro de Siigo y alguien la revisa antes.
+   * En TRUE --que es como arranca, por decisión del negocio-- la factura sale
+   * firmada y oficial en el momento, y ya NO se puede borrar: solo anular con
+   * una nota crédito, que es otro documento contable.
    *
-   * Arranca en FALSE a propósito: la primera factura de verdad conviene verla
-   * antes de que sea oficial.
+   * No hay paso intermedio de revisión. Lo que protege de emitir de más son
+   * las comprobaciones previas: que la factura corresponda, que no esté ya
+   * emitida, y la confirmación explícita antes de cada envío.
    */
-  enviar_dian boolean not null default false,
+  enviar_dian boolean not null default true,
 
   -- Si se le manda copia por correo al cliente.
   enviar_correo boolean not null default false,
@@ -151,7 +153,7 @@ create table if not exists public.siigo_emision_config (
 );
 
 comment on column public.siigo_emision_config.enviar_dian is
-  'true = la factura sale firmada y oficial al crearla, y ya NO se puede borrar (solo anular con nota credito). Arranca en false.';
+  'true = la factura sale firmada y oficial al crearla, y ya NO se puede borrar (solo anular con nota credito). Arranca en TRUE por decision del negocio.';
 
 insert into public.siigo_emision_config (id) values (1) on conflict (id) do nothing;
 
@@ -189,7 +191,7 @@ where table_schema = 'public'
   and table_name in ('siigo_facturas_emitidas', 'siigo_emision_config', 'siigo_owner_cliente')
 order by table_name;
 
--- 4b) La configuración arranca vacía y SIN envío a la DIAN.
+-- 4b) La configuración arranca vacía y CON envío a la DIAN encendido.
 select * from public.siigo_emision_config;
 
 -- 4c) Todavía no se ha emitido ninguna.

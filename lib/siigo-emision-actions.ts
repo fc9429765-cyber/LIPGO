@@ -710,3 +710,273 @@ export async function getHistorialEmision(limite = 50): Promise<{
     return { success: false, message: e?.message }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Emisión de una prefactura del Ciclo
+// ---------------------------------------------------------------------------
+
+/**
+ * ¿Se puede facturar esta prefactura?
+ *
+ * La condición es que el ANEXO ESTÉ FIRMADO por el cliente. Las prefacturas no
+ * pasan por Solicitar Facturas --son otra vía-- y la firma del anexo es la
+ * aprobación real de ese flujo: el cliente ya validó lo que se le va a cobrar.
+ *
+ * Facturar antes significaría emitir un documento fiscal por un monto que el
+ * cliente todavía podría objetar.
+ */
+export async function puedeFacturarPrefactura(prefacturaId: number): Promise<Verificacion> {
+  if (!(await permitido())) return { puede: false, motivo: "Sin permiso." }
+
+  try {
+    const sb: any = await getSupabaseAdmin()
+    const { data: p } = await sb
+      .from("prefacturas")
+      .select("id, estado_ciclo, total, owner, numero_factura_siigo, periodo_desde, periodo_hasta")
+      .eq("id", prefacturaId)
+      .maybeSingle()
+
+    if (!p) return { puede: false, motivo: "No se encontró la prefactura." }
+
+    /*
+     * `pendiente_factura` es el estado JUSTO DESPUÉS de firmar el anexo. Los
+     * anteriores significan que el cliente aún no ha validado; los posteriores,
+     * que la factura ya se gestionó.
+     */
+    if (p.estado_ciclo !== "pendiente_factura") {
+      const explicacion: Record<string, string> = {
+        pendiente_anexo: "todavía no se le ha enviado el anexo al cliente",
+        pendiente_firma_anexo: "el cliente aún no ha firmado el anexo",
+        pendiente_firma_factura: "la factura ya se envió",
+        pendiente_cierre: "la factura ya está firmada",
+        cerrado: "el ciclo ya está cerrado",
+      }
+      return {
+        puede: false,
+        motivo: `Solo se factura con el anexo firmado: ${explicacion[p.estado_ciclo] ?? p.estado_ciclo}.`,
+      }
+    }
+
+    if (String(p.numero_factura_siigo ?? "").trim() !== "") {
+      return { puede: false, motivo: `Ya tiene la factura ${p.numero_factura_siigo}.` }
+    }
+
+    // Ya se emitió desde aquí. Con esto, dos clics a la vez no emiten dos
+    // facturas: el segundo encuentra al primero.
+    const { data: emitida } = await sb
+      .from("siigo_facturas_emitidas")
+      .select("siigo_nombre")
+      .eq("prefactura_id", prefacturaId)
+      .eq("exitosa", true)
+      .maybeSingle()
+    if (emitida) {
+      return { puede: false, motivo: `Ya se emitió la factura ${emitida.siigo_nombre ?? ""}.` }
+    }
+
+    if (!p.total || Number(p.total) <= 0) {
+      return { puede: false, motivo: "La prefactura no tiene valor." }
+    }
+
+    if (!String(p.owner ?? "").trim()) {
+      return {
+        puede: false,
+        motivo: "La prefactura mezcla varios clientes y no se sabe a quién facturarle.",
+      }
+    }
+
+    return { puede: true }
+  } catch (e: any) {
+    return { puede: false, motivo: e?.message }
+  }
+}
+
+/**
+ * Emite la factura de una prefactura del Ciclo.
+ *
+ * Una factura por agrupación: la prefactura ya reúne el trabajo de un período.
+ *
+ * Las LÍNEAS de la prefactura se convierten en líneas de la factura --un
+ * renglón por servicio-- en vez de un único renglón con el total: el cliente
+ * recibe el mismo desglose que firmó en el anexo.
+ */
+export async function emitirFacturaPrefactura(
+  prefacturaId: number,
+  opciones?: { clienteIdentificacion?: string },
+): Promise<ResultadoEmision> {
+  if (!(await permitido())) return { success: false, message: "No tienes permiso para emitir." }
+
+  const sb: any = await getSupabaseAdmin()
+  const usuario = await getCurrentUsuarioForInsert().catch(() => null)
+
+  try {
+    const v = await puedeFacturarPrefactura(prefacturaId)
+    if (!v.puede) return { success: false, message: v.motivo }
+
+    const cfg = await getConfigEmision()
+    if (!cfg.success || !cfg.data) {
+      return { success: false, message: cfg.message ?? "Falta configurar la emisión." }
+    }
+    if (!cfg.data.completa) {
+      return { success: false, message: `Falta configurar: ${cfg.data.faltan.join(", ")}.` }
+    }
+
+    const { data: p } = await sb
+      .from("prefacturas")
+      .select("id, owner, proyecto, total, lineas, periodo_desde, periodo_hasta")
+      .eq("id", prefacturaId)
+      .maybeSingle()
+    if (!p) return { success: false, message: "No se encontró la prefactura." }
+
+    // --- A quién se le factura ---------------------------------------------
+    let identificacion = opciones?.clienteIdentificacion?.trim()
+    if (!identificacion) {
+      const { data: puente } = await sb
+        .from("siigo_owner_cliente")
+        .select("cliente_identificacion")
+        .eq("owner", String(p.owner ?? "").trim())
+        .eq("activo", true)
+        .maybeSingle()
+      identificacion = puente?.cliente_identificacion
+    }
+    if (!identificacion) {
+      return {
+        success: false,
+        message: `No se sabe a qué tercero de Siigo facturarle "${p.owner}". Configura la correspondencia o elígelo al facturar.`,
+      }
+    }
+
+    const { data: cliente } = await sb
+      .from("siigo_clientes")
+      .select("identificacion, nombre, activo")
+      .eq("identificacion", identificacion)
+      .maybeSingle()
+    if (!cliente) {
+      return { success: false, message: `El tercero ${identificacion} no está sincronizado.` }
+    }
+    if (cliente.activo === false) {
+      return { success: false, message: `El tercero ${identificacion} está inactivo en Siigo.` }
+    }
+
+    // --- Las líneas ---------------------------------------------------------
+    /*
+     * Un renglón por servicio, con el mismo desglose del anexo que el cliente
+     * firmó. Un solo renglón con el total sería más simple, pero el cliente
+     * recibiría una factura que no se parece a lo que aprobó.
+     *
+     * La cantidad va en 1 y el valor completo en el precio: las toneladas y la
+     * tarifa ya están multiplicadas en `total`, y volver a separarlas aquí
+     * arriesgaría diferencias de redondeo contra el anexo.
+     */
+    const lineas: any[] = Array.isArray(p.lineas) ? p.lineas : []
+    const items: ItemFactura[] = lineas.length
+      ? lineas.map((l) => ({
+          code: cfg.data!.productoCodigo!,
+          description: `${l.servicio ?? "Servicio logístico"}${l.toneladas ? ` · ${l.toneladas} ${l.unidad ?? "ton"}` : ""}`,
+          quantity: 1,
+          price: Number(l.total ?? 0),
+          ...(cfg.data!.impuestoId ? { taxes: [{ id: cfg.data!.impuestoId }] } : {}),
+        }))
+      : [
+          {
+            code: cfg.data.productoCodigo!,
+            description: `Servicio logístico · ${p.periodo_desde ?? ""} a ${p.periodo_hasta ?? ""}`,
+            quantity: 1,
+            price: Number(p.total ?? 0),
+            ...(cfg.data.impuestoId ? { taxes: [{ id: cfg.data.impuestoId }] } : {}),
+          },
+        ]
+
+    const total = items.reduce((a, i) => a + i.price, 0)
+    const hoy = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Bogota",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date())
+
+    // El intento se registra ANTES de llamar a Siigo.
+    const { data: bitacora } = await sb
+      .from("siigo_facturas_emitidas")
+      .insert({
+        prefactura_id: prefacturaId,
+        cliente_identificacion: identificacion,
+        cliente_nombre: cliente.nombre ?? null,
+        valor_total: total,
+        origen: "ciclo",
+        emitida_por: usuario ?? null,
+        exitosa: false,
+        error: "en curso",
+      })
+      .select("id")
+      .single()
+
+    const r = await crearFactura({
+      documentoId: cfg.data.documentoId!,
+      fecha: hoy,
+      clienteIdentificacion: identificacion,
+      vendedor: cfg.data.vendedorId!,
+      items,
+      pagos: [{ id: cfg.data.formaPagoId!, value: total }],
+      observaciones: `${p.proyecto ?? ""} · ${p.periodo_desde ?? ""} a ${p.periodo_hasta ?? ""}`.trim(),
+      ...(cfg.data.centroCosto ? { centroCosto: cfg.data.centroCosto } : {}),
+      enviarDian: cfg.data.enviarDian,
+      enviarCorreo: cfg.data.enviarCorreo,
+    })
+
+    if (!r.ok || !r.data) {
+      if (bitacora?.id) {
+        await sb
+          .from("siigo_facturas_emitidas")
+          .update({
+            exitosa: false,
+            error: r.error ?? "Error desconocido",
+            peticion: r.peticion ?? null,
+            respuesta: r.respuesta ?? null,
+          })
+          .eq("id", bitacora.id)
+      }
+      return { success: false, message: r.error }
+    }
+
+    const estadoDian = r.data.stamp?.status ?? (cfg.data.enviarDian ? "Accepted" : "Draft")
+
+    if (bitacora?.id) {
+      await sb
+        .from("siigo_facturas_emitidas")
+        .update({
+          siigo_id: r.data.id,
+          siigo_numero: r.data.number ?? null,
+          siigo_nombre: r.data.name ?? null,
+          cufe: r.data.cufe ?? null,
+          estado_dian: estadoDian,
+          exitosa: true,
+          error: null,
+          peticion: r.peticion ?? null,
+          respuesta: r.respuesta ?? null,
+        })
+        .eq("id", bitacora.id)
+    }
+
+    /*
+     * `numero_factura_siigo` existía en la tabla desde el script 165 y nunca se
+     * había usado. Es exactamente su propósito: la referencia a la factura real
+     * de Siigo a nivel de prefactura.
+     */
+    await sb
+      .from("prefacturas")
+      .update({ numero_factura_siigo: r.data.name ?? r.data.id })
+      .eq("id", prefacturaId)
+
+    return {
+      success: true,
+      siigoId: r.data.id,
+      numero: r.data.number,
+      nombre: r.data.name,
+      cufe: r.data.cufe,
+      estadoDian,
+    }
+  } catch (e: any) {
+    console.error("[v0] emitirFacturaPrefactura:", e?.message ?? e)
+    return { success: false, message: e?.message || "Falló la emisión." }
+  }
+}

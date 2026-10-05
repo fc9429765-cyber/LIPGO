@@ -23,6 +23,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/components/auth-provider"
 import { getUserPermissions } from "@/lib/permissions-actions"
 import BotonFacturarSiigo from "@/components/facturacion/boton-facturar-siigo"
+import { CORTE_CICLO_SIIGO } from "@/lib/ciclo-facturacion-shared"
 import {
   listarCicloFacturacion,
   getEventosCiclo,
@@ -537,6 +538,24 @@ function FilaCiclo({
           {abierto ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
         </div>
       </button>
+      {/* El botón de facturar va FUERA del botón que expande la fila: no se
+          pueden anidar, y además emitir una factura no debe compartir zona de
+          clic con "ver el detalle".
+
+          Solo aparece con el anexo ya firmado --`pendiente_factura`-- que es
+          cuando el cliente validó lo que se le va a cobrar. */}
+      {p.estado_ciclo === "pendiente_factura" && (
+        <div className="flex items-center justify-end gap-2 border-t px-3 py-1.5">
+          <span className="text-[10px] text-muted-foreground">Anexo firmado por el cliente</span>
+          <BotonFacturarSiigo
+            prefacturaId={p.id}
+            orden={`${p.owner || p.proyecto || "Prefactura"} · ${p.periodo_desde || "?"} a ${p.periodo_hasta || "?"}`}
+            cliente={p.owner || null}
+            valor={p.total}
+            onEmitida={onCambio}
+          />
+        </div>
+      )}
       {abierto && <DetalleCiclo prefactura={p} permisos={permisos} usuario={usuario} onCambio={onCambio} />}
     </div>
   )
@@ -1483,7 +1502,17 @@ function PagosContadoPanel({
         for (;;) {
           const params = new URLSearchParams({ medioPago: "Contado", pageSize: "500", page: String(page) })
           if (empresaId) params.set("empresaId", String(empresaId))
-          if (periodoDesde) params.set("fechaCargueDesde", periodoDesde)
+          /*
+           * El corte manda sobre el filtro de la pantalla.
+           *
+           * Se arranca de cero el 1 de octubre para emitir en Siigo desde este
+           * mes: lo anterior ya se facturó por fuera, y mostrarlo aquí
+           * invitaría a volver a facturarlo. Si alguien pide una fecha
+           * anterior, se usa la del corte.
+           */
+          const desde =
+            periodoDesde && periodoDesde > CORTE_CICLO_SIIGO ? periodoDesde : CORTE_CICLO_SIIGO
+          params.set("fechaCargueDesde", desde)
           if (periodoHasta) params.set("fechaCargueHasta", periodoHasta)
           const res = await fetch(`/api/gestion-facturas?${params.toString()}`)
           const json = await res.json()

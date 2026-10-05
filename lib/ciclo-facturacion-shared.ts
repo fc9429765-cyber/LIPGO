@@ -26,3 +26,24 @@ export function fechaAyerColombiaISO(): string {
   const d = String(colombia.getDate()).padStart(2, "0")
   return `${y}-${m}-${d}`
 }
+
+/**
+ * Desde cuándo muestra el Ciclo de Facturación.
+ *
+ * Se arranca de cero el 1 de octubre de 2026 para empezar a emitir facturas en
+ * Siigo desde ese mes. Lo anterior ya se facturó por fuera: mostrarlo aquí
+ * invitaría a volver a facturarlo, y una factura electrónica de más no se
+ * borra.
+ *
+ * El corte se aplica en el SERVIDOR y no en los filtros de la pantalla:
+ * aquellos se pueden limpiar con un botón, y entonces reaparecería el
+ * histórico entero.
+ *
+ * Vive aquí y no en `ciclo-facturacion-actions.ts` porque ese archivo es
+ * "use server" y ahí solo se pueden exportar funciones async: exportar una
+ * constante rompe el build, y el typecheck no lo detecta.
+ *
+ * Para levantarlo hay que cambiar esta constante a propósito, que es
+ * justamente la clase de decisión que no debe tomarse sin querer.
+ */
+export const CORTE_CICLO_SIIGO = "2026-10-01"

@@ -28,6 +28,7 @@
  */
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { CORTE_CICLO_SIIGO } from "@/lib/ciclo-facturacion-shared"
 import { segundoFactorPendiente } from "@/lib/seguridad-servidor"
 import { getAccessibleEmpresesFromPermisos } from "@/lib/orders-actions"
 import {
@@ -203,6 +204,13 @@ export async function listarCicloFacturacion(filtros?: {
     if (filtros?.idempresa) query = query.eq("idempresa", filtros.idempresa)
     if (filtros?.estado_ciclo) query = query.eq("estado_ciclo", filtros.estado_ciclo)
     if (filtros?.estado_cobro) query = query.eq("estado_cobro", filtros.estado_cobro)
+    /*
+     * El corte. Se aplica SIEMPRE, antes que los filtros de la pantalla: una
+     * prefactura cuyo período terminó antes del 1 de octubre no se muestra ni
+     * aunque se limpien los filtros.
+     */
+    query = query.gte("periodo_hasta", CORTE_CICLO_SIIGO)
+
     if (filtros?.periodo_desde) query = query.gte("periodo_hasta", filtros.periodo_desde)
     if (filtros?.periodo_hasta) query = query.lte("periodo_desde", filtros.periodo_hasta)
 

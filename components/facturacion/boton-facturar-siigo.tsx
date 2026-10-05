@@ -19,8 +19,10 @@ import { AlertTriangle, CheckCircle2, FileText, Loader2, Search } from "lucide-r
 import {
   buscarClientesSiigo,
   emitirFacturaOrden,
+  emitirFacturaPrefactura,
   getConfigEmision,
   puedeFacturarOrden,
+  puedeFacturarPrefactura,
 } from "@/lib/siigo-emision-actions"
 
 const money = (n: number) =>
@@ -32,13 +34,17 @@ const money = (n: number) =>
 
 export default function BotonFacturarSiigo({
   ordenId,
+  prefacturaId,
   orden,
   cliente,
   valor,
   facturaExistente,
   onEmitida,
 }: {
-  ordenId: number
+  /** Una orden suelta (Pagos de Contado). Excluyente con `prefacturaId`. */
+  ordenId?: number
+  /** Una agrupación del Ciclo. Excluyente con `ordenId`. */
+  prefacturaId?: number
   orden: string
   cliente: string | null
   valor: number
@@ -46,6 +52,9 @@ export default function BotonFacturarSiigo({
   facturaExistente?: string | null
   onEmitida?: () => void
 }) {
+  // Las dos formas comparten diálogo porque la decisión es la misma --qué se
+  // factura, a quién, por cuánto-- y solo cambia de dónde salen las líneas.
+  const esPrefactura = prefacturaId != null
   const { toast } = useToast()
   const [abierto, setAbierto] = useState(false)
   const [verificando, setVerificando] = useState(false)
@@ -63,7 +72,10 @@ export default function BotonFacturarSiigo({
   const abrir = useCallback(async () => {
     setAbierto(true)
     setVerificando(true)
-    const [v, c] = await Promise.all([puedeFacturarOrden(ordenId), getConfigEmision()])
+    const [v, c] = await Promise.all([
+      esPrefactura ? puedeFacturarPrefactura(prefacturaId!) : puedeFacturarOrden(ordenId!),
+      getConfigEmision(),
+    ])
     setVerificacion(v)
     setConfig(c.data ?? null)
     setVerificando(false)
@@ -74,7 +86,7 @@ export default function BotonFacturarSiigo({
       const r = await buscarClientesSiigo(cliente)
       if (r.success && r.data) setCandidatos(r.data)
     }
-  }, [ordenId, cliente])
+  }, [ordenId, prefacturaId, esPrefactura, cliente])
 
   async function buscar() {
     const r = await buscarClientesSiigo(busqueda)
@@ -94,9 +106,10 @@ export default function BotonFacturarSiigo({
     if (!ok) return
 
     setEmitiendo(true)
-    const r = await emitirFacturaOrden(ordenId, {
-      ...(elegido ? { clienteIdentificacion: elegido.identificacion } : {}),
-    })
+    const extra = elegido ? { clienteIdentificacion: elegido.identificacion } : {}
+    const r = esPrefactura
+      ? await emitirFacturaPrefactura(prefacturaId!, extra)
+      : await emitirFacturaOrden(ordenId!, extra)
     setEmitiendo(false)
 
     if (!r.success) {
@@ -145,7 +158,7 @@ export default function BotonFacturarSiigo({
           >
             <div className="border-b border-border px-5 py-4">
               <h3 className="text-base font-semibold">Emitir factura en Siigo</h3>
-              <p className="text-xs text-muted-foreground">Orden {orden}</p>
+              <p className="text-xs text-muted-foreground">{orden}</p>
             </div>
 
             <div className="space-y-4 p-5">
