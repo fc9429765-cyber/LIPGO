@@ -39,16 +39,20 @@ export async function leerErrores(desdeISO?: string): Promise<{ desde: string; r
   for (let from = 0; ; from += 1000) {
     const { data, error } = await sb
       .from("app_errores")
-      .select("id, creado, origen, mensaje, modulo, url, usuario, empresa_id, version, entorno")
-      .gte("creado", desde)
+      // OJO: la columna de fecha se llama `created_at` (SQL 217). El 2026-10-05 esta consulta
+      // decía `creado`, fallaba en silencio y el aviso diario leía "0 errores" mientras había 7
+      // reales. Un monitoreo que falla callado es peor que ninguno: por eso ahora, si la
+      // lectura falla, se registra como error del propio cron y no se da por "sin errores".
+      .select("id, created_at, origen, mensaje, modulo, url, usuario, empresa_id, version, entorno")
+      .gte("created_at", desde)
       .order("id", { ascending: true })
       .range(from, from + 999)
     if (error) {
-      // Sin la tabla (falta el SQL 217) no se avisa, pero tampoco se rompe el cron.
-      console.warn("[aviso-errores] no se pudo leer app_errores:", error.message)
-      break
+      // NUNCA tratar un fallo de lectura como "sin errores": se lanza, el cron lo registra
+      // en app_errores y responde 500, que sí se ve.
+      throw new Error(`No se pudo leer app_errores: ${error.message}`)
     }
-    filas.push(...((data ?? []) as ErrorRegistrado[]))
+    filas.push(...((data ?? []) as any[]).map((r) => ({ ...r, creado: r.created_at ?? null }) as ErrorRegistrado))
     if (!data || data.length < 1000) break
   }
   return { desde, resumen: agruparErrores(filas) }
