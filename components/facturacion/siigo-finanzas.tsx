@@ -12,11 +12,12 @@
 // difícil de seguir. Aquí la navegación es lo único que hay.
 
 import { useState } from "react"
-import { Database, FileText } from "lucide-react"
+import { Database, FileText, Settings2 } from "lucide-react"
 import ConsultaSiigo from "@/components/facturacion/consulta-siigo"
 import MaestrosSiigo from "@/components/facturacion/maestros-siigo"
+import EmisionSiigoConfig from "@/components/facturacion/emision-siigo-config"
 
-type Vista = "facturas" | "maestros"
+type Vista = "facturas" | "maestros" | "emision"
 
 export default function SiigoFinanzas() {
   const [vista, setVista] = useState<Vista>("facturas")
@@ -24,6 +25,7 @@ export default function SiigoFinanzas() {
   const pestanas: Array<{ id: Vista; nombre: string; Icono: typeof FileText }> = [
     { id: "facturas", nombre: "Facturas", Icono: FileText },
     { id: "maestros", nombre: "Maestros SIIGO", Icono: Database },
+    { id: "emision", nombre: "Emisión", Icono: Settings2 },
   ]
 
   return (
@@ -49,7 +51,13 @@ export default function SiigoFinanzas() {
       {/* Se monta solo la vista activa, no ambas ocultas: cada una consulta a
           Siigo al abrirse, y tenerlas montadas a la vez gastaría llamadas en
           algo que nadie está mirando. */}
-      {vista === "facturas" ? <ConsultaSiigo /> : <MaestrosSiigo />}
+      {vista === "facturas" ? (
+        <ConsultaSiigo />
+      ) : vista === "maestros" ? (
+        <MaestrosSiigo />
+      ) : (
+        <EmisionSiigoConfig />
+      )}
     </div>
   )
 }

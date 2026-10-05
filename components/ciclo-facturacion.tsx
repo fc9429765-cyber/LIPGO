@@ -22,6 +22,7 @@ import { DatePickerField } from "@/components/ui/date-picker-field"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/components/auth-provider"
 import { getUserPermissions } from "@/lib/permissions-actions"
+import BotonFacturarSiigo from "@/components/facturacion/boton-facturar-siigo"
 import {
   listarCicloFacturacion,
   getEventosCiclo,
@@ -1423,6 +1424,8 @@ interface OrdenContado {
   cuentatransferencia: string | null
   comprobante: string | null
   estadofactura: string | null
+  /** La API ya lo devolvía; faltaba declararlo para poder saber si ya se facturó. */
+  facturasiigo?: string | null
 }
 
 function comprobanteUrls(raw: string | null): string[] {
@@ -1456,6 +1459,15 @@ function PagosContadoPanel({
   const [cuentaFiltro, setCuentaFiltro] = useState("")
   const [viendoComprobante, setViendoComprobante] = useState<OrdenContado | null>(null)
   const [indiceImagen, setIndiceImagen] = useState(0)
+  /*
+   * Fuerza recargar la lista tras emitir una factura: la orden pasa a tener
+   * `facturasiigo` y debe dejar de ofrecer el botón.
+   *
+   * Es un contador y no sacar `cargar` del efecto porque aquel maneja
+   * cancelación con una bandera local; extraerlo obligaría a rehacer esa parte
+   * para ganar lo mismo.
+   */
+  const [recarga, setRecarga] = useState(0)
 
   useEffect(() => {
     let cancelado = false
@@ -1495,7 +1507,7 @@ function PagosContadoPanel({
     return () => {
       cancelado = true
     }
-  }, [empresaId, periodoDesde, periodoHasta, toast])
+  }, [empresaId, periodoDesde, periodoHasta, toast, recarga])
 
   const cuentas = useMemo(
     () => Array.from(new Set(ordenes.map((o) => o.cuentatransferencia).filter(Boolean))) as string[],
@@ -1563,6 +1575,7 @@ function PagosContadoPanel({
                 <th className="p-2 text-right">Valor</th>
                 <th className="p-2 text-center">Comprobante</th>
                 <th className="p-2 text-left">Estado</th>
+                <th className="p-2 text-center">Siigo</th>
               </tr>
             </thead>
             <tbody>
@@ -1592,6 +1605,16 @@ function PagosContadoPanel({
                     )}
                   </td>
                   <td className="p-2">{o.estadofactura || "-"}</td>
+                  <td className="p-2 text-center">
+                    <BotonFacturarSiigo
+                      ordenId={o.id}
+                      orden={o.ordendecargue}
+                      cliente={o.cliente}
+                      valor={Number(o.valorpago || 0)}
+                      facturaExistente={o.facturasiigo}
+                      onEmitida={() => setRecarga((n) => n + 1)}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

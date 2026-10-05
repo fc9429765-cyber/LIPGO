@@ -158,6 +158,107 @@ export async function guardarConfigEmision(payload: {
   }
 }
 
+/**
+ * Las listas para configurar la emisión: formas de pago, impuestos y
+ * productos.
+ *
+ * Salen de los maestros ya sincronizados, no de la API. Se exponen desde aquí
+ * --y no reusando `getCatalogos` de los maestros-- porque aquella comprueba el
+ * permiso del módulo de Siigo, y esta pantalla vive en Ciclo de Facturación:
+ * quien factura no necesariamente tiene acceso a aquel módulo.
+ */
+export async function getOpcionesEmision(): Promise<{
+  success: boolean
+  formasPago?: Array<{ id: number; nombre: string; vencimiento: boolean }>
+  impuestos?: Array<{ id: number; nombre: string; porcentaje: number | null }>
+  productos?: Array<{ codigo: string; nombre: string }>
+  message?: string
+}> {
+  if (!(await permitido())) return { success: false, message: "Sin permiso." }
+
+  try {
+    const sb: any = await getSupabaseAdmin()
+    const [fp, imp, prod] = await Promise.all([
+      sb.from("siigo_formas_pago").select("*").eq("activo", true).order("nombre"),
+      sb.from("siigo_impuestos").select("*").eq("activo", true).order("nombre"),
+      // Solo servicios: LIPgo factura logística, no mercancía. Traer los miles
+      // de productos haría la lista inservible.
+      sb
+        .from("siigo_productos")
+        .select("codigo, nombre, tipo")
+        .eq("activo", true)
+        .order("nombre")
+        .limit(500),
+    ])
+
+    if (fp.error && faltaTabla(fp.error.message)) {
+      return {
+        success: false,
+        message: "Faltan los maestros de Siigo. Tráelos desde Finanzas SIIGO → Maestros.",
+      }
+    }
+
+    return {
+      success: true,
+      formasPago: (fp.data ?? []).map((f: any) => ({
+        id: Number(f.id),
+        nombre: f.nombre ?? "",
+        vencimiento: f.maneja_vencimiento === true,
+      })),
+      impuestos: (imp.data ?? []).map((t: any) => ({
+        id: Number(t.id),
+        nombre: t.nombre ?? "",
+        porcentaje: t.porcentaje == null ? null : Number(t.porcentaje),
+      })),
+      productos: (prod.data ?? []).map((p: any) => ({
+        codigo: p.codigo ?? "",
+        nombre: p.nombre ?? "",
+      })),
+    }
+  } catch (e: any) {
+    return { success: false, message: e?.message }
+  }
+}
+
+/** Los clientes de Siigo, para elegir a quién facturarle. */
+export async function buscarClientesSiigo(texto: string): Promise<{
+  success: boolean
+  data?: Array<{ identificacion: string; nombre: string }>
+  message?: string
+}> {
+  if (!(await permitido())) return { success: false, message: "Sin permiso." }
+
+  try {
+    const sb: any = await getSupabaseAdmin()
+    let q = sb
+      .from("siigo_clientes")
+      .select("identificacion, nombre")
+      .eq("activo", true)
+      .order("nombre")
+      .limit(50)
+
+    const t = texto?.trim()
+    if (t) q = q.or(`nombre.ilike.%${t}%,identificacion.ilike.%${t}%`)
+
+    const { data, error } = await q
+    if (error) {
+      if (faltaTabla(error.message)) {
+        return { success: false, message: "Faltan los clientes de Siigo. Tráelos desde Maestros." }
+      }
+      return { success: false, message: error.message }
+    }
+    return {
+      success: true,
+      data: (data ?? []).map((c: any) => ({
+        identificacion: c.identificacion ?? "",
+        nombre: c.nombre ?? "",
+      })),
+    }
+  } catch (e: any) {
+    return { success: false, message: e?.message }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // El puente owner → cliente de Siigo
 // ---------------------------------------------------------------------------
