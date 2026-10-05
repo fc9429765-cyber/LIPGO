@@ -52,6 +52,15 @@ const t = (v: unknown) => String(v ?? "").trim()
 export function huellaMensaje(mensaje: unknown): string {
   return t(mensaje)
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "<id>")
+    // Desfase de despliegue (registros reales del 4 y 5 de octubre): el nombre del archivo JS,
+    // el id del despliegue y el id de la acción cambian en cada versión, pero el problema es
+    // uno solo. Sin esto, 7 errores salían como 6 "puntos distintos" en el aviso.
+    .replace(/\/_next\/static\/chunks\/\S+/g, "<archivo>")
+    .replace(/\bdpl_[A-Za-z0-9]+/g, "<despliegue>")
+    // Los ids de Server Action de Next tienen 42 hex (comprobado con los registros reales):
+    // se acepta un rango amplio para no depender de ese detalle.
+    .replace(/"[0-9a-f]{32,64}"/gi, "<accion>")
+    .replace(/from module \d+/g, "from module <n>")
     .replace(/\b\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?)?\b/g, "<fecha>")
     // Se borran los números de CUATRO cifras o más (ids de pedido, de orden, de fila).
     // Los de tres NO: son los códigos de movimiento del inventario (601 salida, 702 salida

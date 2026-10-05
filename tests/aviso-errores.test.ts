@@ -139,3 +139,38 @@ describe("el correo", () => {
     expect(htmlErrores(sinNada, "4 de octubre", "pie")).toContain("Errores de la app")
   })
 })
+
+// Desfase de despliegue (registros REALES del 4 y 5 de octubre de 2026): el nombre del archivo
+// JS, el id del despliegue y el id de la acción cambian en cada versión, pero el problema es
+// uno solo. Sin esto, 7 errores salían como 6 "puntos distintos" en el aviso.
+describe("los errores de pestaña vieja se agrupan como un solo problema", () => {
+  it("dos 'Failed to load chunk' de archivos distintos son el mismo punto", () => {
+    const a = huellaMensaje("Failed to load chunk /_next/static/chunks/0e~354u4l2wbq.js?dpl=dpl_56hXfcnVRGk9hKh5g4HCFbiMg3Xr from module 811402")
+    const b = huellaMensaje("Failed to load chunk /_next/static/chunks/0qvu4gz7dpbo9.js?dpl=dpl_9wxq9jvGEqsp4CUPbN4C8piapNuv from module 771363")
+    expect(a).toBe(b)
+  })
+
+  it("dos 'Server Action not found' con ids distintos son el mismo punto", () => {
+    const a = huellaMensaje('Server Action "409049ea8c89b2bbddd66a3d8646593c34729e5ad9" was not found on the server.')
+    const b = huellaMensaje('Server Action "0047f5c0b0e05c8f41bfec848c4534eb8247d3fb1b" was not found on the server.')
+    expect(a).toBe(b)
+  })
+
+  it("los 7 registros reales quedan en 3 problemas, no en 6", () => {
+    const r = agruparErrores([
+      E({ id: 2, origen: "promesa", modulo: null, mensaje: 'Server Action "409049ea8c89b2bbddd66a3d8646593c34729e5ad9" was not found on the server.' }),
+      E({ id: 3, origen: "promesa", modulo: "desp_porteria", mensaje: 'Server Action "0047f5c0b0e05c8f41bfec848c4534eb8247d3fb1b" was not found on the server.' }),
+      E({ id: 4, origen: "boundary", modulo: "desp_bascula", mensaje: "Failed to load chunk /_next/static/chunks/0e~354u4l2wbq.js?dpl=dpl_56hX from module 811402" }),
+      E({ id: 5, origen: "cliente", modulo: null, mensaje: "Uncaught " }),
+      E({ id: 6, origen: "boundary", modulo: "sst_equipos", mensaje: "Failed to load chunk /_next/static/chunks/0-z7kxa-jzp1f.js?dpl=dpl_2cCZ from module 596497" }),
+      E({ id: 7, origen: "promesa", modulo: null, mensaje: 'Server Action "409049ea8c89b2bbddd66a3d8646593c34729e5ad9" was not found on the server.' }),
+      E({ id: 8, origen: "boundary", modulo: "desp_bascula", mensaje: "Failed to load chunk /_next/static/chunks/0qvu4gz7dpbo9.js?dpl=dpl_9wxq from module 771363" }),
+    ])
+    // Se agrupa por módulo + huella: Server Action sin módulo (2), Server Action en portería (1),
+    // chunk en báscula (2), chunk en sst_equipos (1), Uncaught (1) = 5 grupos, nunca 7.
+    expect(r.total).toBe(7)
+    expect(r.grupos.length).toBeLessThanOrEqual(5)
+    const bascula = r.grupos.find((g) => g.modulo === "desp_bascula")
+    expect(bascula?.veces).toBe(2)
+  })
+})
