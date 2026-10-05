@@ -561,7 +561,11 @@ export default function HeadcountManagement({ initialSearch, onInitialSearchAppl
       {loading ? (
         <div className="text-center py-8">Cargando...</div>
       ) : (
-        <div className="border rounded-lg overflow-hidden bg-white">
+        <div className="border rounded-lg overflow-x-auto bg-white">
+          {/* `overflow-x-auto` y no `overflow-hidden`: las columnas de esta
+              tabla suman ~1430px (la de Documentos sola pide 700px), y con
+              `hidden` lo que no cabia en la pantalla no se podia alcanzar de
+              ninguna forma. Ahora se desplaza dentro de su propia caja. */}
           <Table>
             <TableHeader>
               <TableRow>

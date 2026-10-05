@@ -1117,8 +1117,15 @@ export function MainContent({
     )
   }
 
+  // `min-w-0` es lo que hace que la pantalla se ajuste al ancho del equipo.
+  // Sin el, un hijo flex NO puede encogerse por debajo del ancho de su
+  // contenido (`min-width:auto` es el valor inicial en CSS flex), asi que una
+  // tabla ancha empujaba este contenedor, se llevaba por delante el sidebar y
+  // aparecia el desplazamiento lateral de TODA la pagina. Con `min-w-0` el
+  // contenedor se ajusta al equipo y el ancho sobrante lo resuelve cada tabla
+  // con su propio scroll, que es donde debe estar.
   return (
-    <div className="flex-1 flex flex-col h-screen overflow-hidden relative z-10">
+    <div className="flex-1 min-w-0 flex flex-col h-screen overflow-hidden relative z-10">
       <TopBar />
 
       {(selectedModule || selectedGroup) && (

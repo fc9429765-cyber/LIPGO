@@ -34,6 +34,20 @@ const geistMono = localFont({
 
 export const viewport: Viewport = {
   themeColor: "#5bc0de",
+  /*
+   * Que la pagina se mida con el ancho REAL del equipo.
+   *
+   * Sin `width: "device-width"` el navegador movil asume una pantalla ancha
+   * (~980px) y encoge todo para que quepa: la letra queda diminuta y hay que
+   * desplazarse a los lados. Es el ajuste que hace que el diseno responsive
+   * --que ya existe en los `sm:`/`lg:` de toda la app-- se aplique de verdad.
+   *
+   * `initialScale: 1` arranca sin zoom. No se limita el zoom maximo ni se
+   * bloquea `userScalable`: quien necesite acercarse para leer debe poder
+   * hacerlo.
+   */
+  width: "device-width",
+  initialScale: 1,
 }
 
 export const metadata: Metadata = {
