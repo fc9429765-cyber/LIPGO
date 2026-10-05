@@ -11,7 +11,7 @@ import { ModuleCards } from "@/components/module-cards"
 import { ModulesView } from "@/components/modules-view"
 import { ModulePlaceholder } from "@/components/module-placeholder"
 import { configModules } from "@/lib/config-definitions"
-import ConsultaSiigo from "@/components/facturacion/consulta-siigo"
+import SiigoFinanzas from "@/components/facturacion/siigo-finanzas"
 // Producción: maestro de montacargas, QR y bitácora de mantenimiento.
 import { BotonesContextoModulo } from "@/components/contexto-modulo" // Indicadores del área + guía, en panel lateral
 import { ArrowLeft, Compass, Search, Sparkles, Zap } from "lucide-react"
@@ -991,7 +991,7 @@ export function MainContent({
                   --todas las ventas, a todos los clientes, con sus saldos-- no
                   solo lo que genera LIPgo. */}
               <ClaveFinancieraGuard>
-                <ConsultaSiigo />
+                <SiigoFinanzas />
               </ClaveFinancieraGuard>
             </PermissionGuard>
           ) : name === "Cuadro de Control Facturación" ? (

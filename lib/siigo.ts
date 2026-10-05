@@ -274,6 +274,182 @@ export async function getFacturaPdf(
   return { ok: true, base64, cufe: r.data?.cufe ?? null }
 }
 
+// ---------------------------------------------------------------------------
+// MAESTROS
+//
+// Los catálogos de Siigo: productos, clientes, formas de pago e impuestos.
+// Se consultan para poder cruzar lo que factura Siigo con lo que opera LIPgo
+// --un código de producto, un NIT-- sin tener que mirarlos a mano en el panel.
+// ---------------------------------------------------------------------------
+
+export interface SiigoProducto {
+  id: string
+  code?: string
+  name?: string
+  account_group?: { id?: number; name?: string }
+  type?: string
+  stock_control?: boolean
+  active?: boolean
+  tax_classification?: string
+  tax_included?: boolean
+  taxes?: Array<{ id?: number; name?: string; type?: string; percentage?: number }>
+  prices?: Array<{
+    currency_code?: string
+    price_list?: Array<{ position?: number; name?: string; value?: number }>
+  }>
+  unit?: { code?: string; name?: string }
+  unit_label?: string
+  reference?: string
+  description?: string
+  additional_fields?: { barcode?: string; brand?: string; tariff?: string; model?: string }
+  available_quantity?: number
+  warehouses?: Array<{ id?: number; name?: string; quantity?: number }>
+  metadata?: { created?: string; last_updated?: string; stock_updated?: string }
+}
+
+export interface SiigoCliente {
+  id: string
+  type?: string
+  person_type?: string
+  id_type?: { code?: string; name?: string }
+  identification?: string
+  branch_office?: number
+  check_digit?: string
+  /** Siigo lo manda partido: ["Nombre", "Apellido"] o ["Razón Social"]. */
+  name?: string[]
+  commercial_name?: string
+  active?: boolean
+  vat_responsible?: boolean
+  fiscal_responsibilities?: Array<{ code?: string; name?: string }>
+  address?: {
+    address?: string
+    city?: { country_name?: string; state_name?: string; city_name?: string }
+    postal_code?: string
+  }
+  phones?: Array<{ indicative?: string; number?: string; extension?: string }>
+  contacts?: Array<{
+    first_name?: string
+    last_name?: string
+    email?: string
+    phone?: { indicative?: string; number?: string; extension?: string }
+  }>
+  comments?: string
+  metadata?: { created?: string; last_updated?: string }
+}
+
+export interface SiigoFormaPago {
+  id: number
+  name?: string
+  type?: string
+  active?: boolean
+  due_date?: boolean
+}
+
+export interface SiigoImpuesto {
+  id: number
+  name?: string
+  type?: string
+  percentage?: number
+  active?: boolean
+}
+
+export interface PaginaMaestro<T> {
+  results: T[]
+  pagination?: { page?: number; page_size?: number; total_results?: number }
+}
+
+export interface FiltroMaestro {
+  page?: number
+  pageSize?: number
+  /** Solo los activos. Siigo devuelve activos por omisión. */
+  soloActivos?: boolean
+  /** Para traer solo lo modificado desde la última sincronización. */
+  actualizadoDesde?: string
+}
+
+/** Una página de productos. */
+export async function listarProductos(
+  f: FiltroMaestro = {},
+): Promise<{ ok: boolean; data?: PaginaMaestro<SiigoProducto>; error?: string }> {
+  const p = new URLSearchParams()
+  p.set("page", String(f.page ?? 1))
+  p.set("page_size", String(f.pageSize ?? PAGE_SIZE))
+  if (f.soloActivos !== false) p.set("active", "true")
+  if (f.actualizadoDesde) p.set("updated_start", f.actualizadoDesde)
+
+  const r = await llamar(`/products?${p.toString()}`)
+  if (!r.ok) return { ok: false, error: r.error }
+  return { ok: true, data: r.data as PaginaMaestro<SiigoProducto> }
+}
+
+/** Una página de clientes. */
+export async function listarClientes(
+  f: FiltroMaestro = {},
+): Promise<{ ok: boolean; data?: PaginaMaestro<SiigoCliente>; error?: string }> {
+  const p = new URLSearchParams()
+  p.set("page", String(f.page ?? 1))
+  p.set("page_size", String(f.pageSize ?? PAGE_SIZE))
+  if (f.soloActivos !== false) p.set("active", "true")
+  if (f.actualizadoDesde) p.set("updated_start", f.actualizadoDesde)
+
+  const r = await llamar(`/customers?${p.toString()}`)
+  if (!r.ok) return { ok: false, error: r.error }
+  return { ok: true, data: r.data as PaginaMaestro<SiigoCliente> }
+}
+
+/**
+ * Las formas de pago.
+ *
+ * OJO: devuelve un ARREGLO DIRECTO, no el `{results, pagination}` de productos
+ * y clientes. Es la convención de todo el grupo "Catálogos" de Siigo, y
+ * tratarlo como paginado daría una lista vacía sin ningún error.
+ *
+ * `document_type` filtra por tipo de comprobante: FV son las de venta, que es
+ * lo que usa LIPgo. Se manda siempre porque el ejemplo oficial lo lleva.
+ */
+export async function listarFormasPago(
+  documentType: "FV" | "FC" | "RC" | "NC" | "CC" = "FV",
+): Promise<{ ok: boolean; data?: SiigoFormaPago[]; error?: string }> {
+  const r = await llamar(`/payment-types?document_type=${documentType}`)
+  if (!r.ok) return { ok: false, error: r.error }
+  const lista = Array.isArray(r.data) ? r.data : (r.data?.results ?? [])
+  return { ok: true, data: lista as SiigoFormaPago[] }
+}
+
+/**
+ * Los impuestos.
+ *
+ * También arreglo directo, y sin parámetros: son unas pocas decenas y se traen
+ * todos de una vez.
+ */
+export async function listarImpuestos(): Promise<{
+  ok: boolean
+  data?: SiigoImpuesto[]
+  error?: string
+}> {
+  const r = await llamar("/taxes")
+  if (!r.ok) return { ok: false, error: r.error }
+  const lista = Array.isArray(r.data) ? r.data : (r.data?.results ?? [])
+  return { ok: true, data: lista as SiigoImpuesto[] }
+}
+
+/**
+ * El nombre del cliente, que Siigo manda partido en un arreglo.
+ *
+ * Para una persona son nombre y apellido; para una empresa, la razón social en
+ * un solo elemento. Unirlos con espacio funciona en ambos casos.
+ */
+export function nombreDeCliente(c: SiigoCliente): string {
+  if (Array.isArray(c.name)) return c.name.filter(Boolean).join(" ").trim()
+  return String(c.name ?? "").trim()
+}
+
+/** El precio de lista de un producto, si lo tiene. */
+export function precioDeLista(p: SiigoProducto): number | null {
+  const lista = p.prices?.[0]?.price_list?.[0]?.value
+  return typeof lista === "number" ? lista : null
+}
+
 /** El nombre del cliente, que Siigo manda a veces partido en un arreglo. */
 export function nombreCliente(f: SiigoFactura): string {
   const n = f.customer?.name
