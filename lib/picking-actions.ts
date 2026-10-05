@@ -12,7 +12,13 @@ import {
   esLoteAlterno,
   esPorDescontar,
   itemsPorProcesar,
+  textoReparos,
   textoYaVerificada,
+  validarAntesDeEscribir,
+  validarDespachos,
+  textoDespachos,
+  type FilaParaValidar,
+  type LineaDespacho,
   type FilaSalida,
 } from "@/lib/picking-estado"
 
@@ -1159,6 +1165,10 @@ export async function confirmPicking(
     averias?: number
     // Modo SIMPLE (sin QR): selecciones de lote alterno con su cantidad y averías.
     alternoSimple?: { alternoId: number; cantidad: number; averias?: number }[]
+    // Por qué esta línea no salió completa. Obligatoria cuando queda saldo
+    // (gerencia 2026-10-04: "se debe despachar completo y si no va completo debe haber
+    // una justificación"). Se guarda en las observaciones del movimiento.
+    justificacion?: string | null
   }[],
 ) {
   const supabase = await createClient()
@@ -1192,6 +1202,9 @@ export async function confirmPicking(
     for (const a of it.alternoScans ?? []) idsEnviados.add(Number(a.alternoId))
     for (const a of it.alternoSimple ?? []) idsEnviados.add(Number(a.alternoId))
   }
+
+  /** Justificación del saldo por línea, para dejarla en las observaciones del movimiento. */
+  const justificacionPorItem = new Map<number, string>()
 
   let reanudando = false
   let pendientesId = new Set<number>()
@@ -1251,6 +1264,121 @@ export async function confirmPicking(
     alternoScans: sinRepetir(item.alternoScans),
   }))
 
+  // ===================================================================================
+  // CANDADO 3 · TODO O NADA DE VERDAD: se revisa TODA la lista antes de escribir nada.
+  //
+  // Gerencia 2026-10-04: "al final del picking está el botón de confirmar verificación, que
+  // garantiza que se verifique todo y salga, salvo una diferencia por daño". Para que eso
+  // sea cierto, un problema en la línea 3 no puede encontrarse cuando las líneas 1 y 2 ya
+  // salieron. La revisión de CUARENTENA vivía dentro del bucle, así que pasaba exactamente
+  // eso: calidad puede bloquear un palé DESPUÉS de la asignación y ANTES del picking (344
+  // bloquear / 343 liberar), y la confirmación abortaba a medias. Ahora aborta antes de
+  // despachar la primera línea y el trabajador recibe un solo mensaje con todo lo que hay
+  // que arreglar. La revisión dentro del bucle se queda como segunda barrera.
+  // ===================================================================================
+  {
+    const idsRequeridos = [...new Set<number>(
+      items.flatMap((it) => [
+        Number(it.id),
+        ...(it.alternoScans ?? []).map((a) => Number(a.alternoId)),
+        ...(it.alternoSimple ?? []).map((a) => Number(a.alternoId)),
+      ]),
+    )]
+    if (idsRequeridos.length > 0) {
+      const { data: filas, error: errFilas } = await supabase
+        .from("invtrans")
+        .select("id, status, nombreproducto, lote, location, ocargue, cantidad")
+        .in("id", idsRequeridos)
+      if (errFilas) {
+        console.error("[picking] no se pudo revisar la lista antes de confirmar:", errFilas.message)
+        return { success: false, message: `No se pudo revisar la lista antes de confirmar: ${errFilas.message}. No se despachó nada.` }
+      }
+      const reparos = validarAntesDeEscribir((filas ?? []) as FilaParaValidar[], idsRequeridos, ordenCargue)
+      if (reparos.length > 0) {
+        console.warn(`[picking] ${ordenCargue}: confirmación detenida antes de escribir —`, JSON.stringify(reparos))
+        return { success: false, message: textoReparos(reparos) }
+      }
+
+      // ---------------------------------------------------------------------------------
+      // CANTIDAD CORRECTA. Gerencia (2026-10-04): "se debe controlar que se despache la
+      // cantidad correcta: nunca más, menos con explicación" y "cuando la línea no sale
+      // completa es un FALTANTE, no un saldo: faltante = enviar menos de lo que me piden".
+      //
+      // La cantidad a despachar por lote viene automática de la asignación de lotes, así que
+      // se compara contra ESA (la fila de invtrans), no contra lo que se escriba en pantalla.
+      //
+      // El QR usa el inventario identificado por estiba y el manual el que no lo está; al
+      // final es UN solo inventario, dividido por cómo está almacenado. Por eso la
+      // comprobación es la misma en los dos modos.
+      //
+      // Se compara el NETO (lo escaneado o elegido menos las averías), igual que la pantalla,
+      // porque la salida se registra por el bruto y la avería vuelve como entrada: lo que de
+      // verdad recibe el cliente es bruto menos averías.
+      // ---------------------------------------------------------------------------------
+      const porId = new Map<number, any>((filas ?? []).map((f: any) => [Number(f.id), f]))
+      const n = (v: unknown) => Number(v) || 0
+      const lineas: LineaDespacho[] = []
+      const alternosExcedidos: string[] = []
+
+      for (const it of items) {
+        const fila = porId.get(Number(it.id))
+        if (!fila) continue
+        // Una línea ya aprobada (reanudación) no se vuelve a medir.
+        if (String(fila.status ?? "").toLowerCase().startsWith("apr")) continue
+
+        // NETO = lo escaneado o elegido, menos las averías de esa misma estiba o línea.
+        const netoQR = (it.qrScans ?? []).reduce((s, x) => s + n(x.cantidad) - n(x.averias), 0)
+        const netoQRAlterno = (it.alternoScans ?? []).reduce((s, x) => s + n(x.cantidad) - n(x.averias), 0)
+        const netoAlternoSimple = (it.alternoSimple ?? []).reduce((s, x) => s + n(x.cantidad) - n(x.averias), 0)
+        const usoQR = (it.qrScans?.length ?? 0) > 0 || (it.alternoScans?.length ?? 0) > 0
+        const despachado = usoQR ? netoQR + netoQRAlterno : n(it.cantidad) - n(it.averias) + netoAlternoSimple
+
+        lineas.push({
+          id: Number(it.id),
+          producto: fila.nombreproducto,
+          lote: fila.lote,
+          asignado: n(fila.cantidad),
+          despachado,
+          justificacion: it.justificacion ?? null,
+        })
+
+        // De una estiba alterna tampoco se puede sacar más de lo que la asignación apartó.
+        const porAlterno = new Map<number, number>()
+        for (const a of it.alternoScans ?? []) porAlterno.set(Number(a.alternoId), (porAlterno.get(Number(a.alternoId)) ?? 0) + n(a.cantidad))
+        for (const a of it.alternoSimple ?? []) porAlterno.set(Number(a.alternoId), (porAlterno.get(Number(a.alternoId)) ?? 0) + n(a.cantidad))
+        for (const [altId, usado] of porAlterno) {
+          const fa = porId.get(altId)
+          if (!fa || String(fa.status ?? "").toLowerCase().startsWith("apr")) continue
+          if (usado > n(fa.cantidad) + 0.01) {
+            alternosExcedidos.push(`${fa.nombreproducto ?? "producto"}${fa.lote ? ` lote ${fa.lote}` : ""}: el lote alterno tiene ${n(fa.cantidad)} y se tomaron ${usado}`)
+          }
+        }
+      }
+
+      if (alternosExcedidos.length > 0) {
+        console.warn(`[picking] ${ordenCargue}: lote alterno excedido —`, JSON.stringify(alternosExcedidos))
+        return { success: false, message: `No se despachó nada. No se puede tomar más de lo que el lote alterno tiene apartado: ${alternosExcedidos.join(" · ")}.` }
+      }
+
+      const cant = validarDespachos(lineas)
+      if (cant.excede.length > 0 || cant.sinJustificar.length > 0) {
+        console.warn(
+          `[picking] ${ordenCargue}: cantidades detenidas — excede=${cant.excede.length} sinJustificar=${cant.sinJustificar.length}`,
+        )
+        return { success: false, message: textoDespachos(cant) }
+      }
+      if (cant.justificadas.length > 0) {
+        console.log(
+          `[picking] ${ordenCargue}: ${cant.justificadas.length} ${cant.justificadas.length === 1 ? "línea sale" : "líneas salen"} con saldo justificado.`,
+        )
+      }
+      // La justificación viaja con el movimiento: queda en las observaciones de invtrans.
+      for (const l of cant.justificadas) {
+        justificacionPorItem.set(l.id, `Saldo justificado (faltan ${Math.round((l.asignado - l.despachado) * 100) / 100} de ${l.asignado}): ${String(l.justificacion).trim()}`)
+      }
+    }
+  }
+
   // Helper: inserta una ENTRADA con status "Averia" copiando los datos de una
   // fila de invtrans existente, con la cantidad de averías indicada.
   // IDEMPOTENTE: si al reanudar esa avería ya se registró, no se duplica.
@@ -1293,6 +1421,7 @@ export async function confirmPicking(
   const splitRowByScans = async (
     rowId: number,
     scans: { idqr: number; cantidad: number; averias?: number }[],
+    justificacion?: string,
   ) => {
     const { data: originalRow, error: fetchError } = await supabase
       .from("invtrans")
@@ -1349,6 +1478,9 @@ export async function confirmPicking(
       qrestiba: scan.idqr,
       tipomov: "Salida",
       status: "aprobado",
+      // La justificación del saldo viaja con el movimiento, para que se vea en el ciclo de
+      // la orden y en cualquier auditoría, no solo en la pantalla del momento.
+      observaciones: justificacion ? [rest.observaciones, justificacion].filter(Boolean).join(" · ") : rest.observaciones,
     }))
 
     // Entradas por avería: una por cada estiba con averías > 0 (solo de las que se insertan).
@@ -1397,7 +1529,7 @@ export async function confirmPicking(
       if (hasNormal) {
         // VERIFICACIÓN POR QR: reemplazamos la línea original por una línea de
         // salida aprobada por cada QR escaneado (+ entradas por avería).
-        await splitRowByScans(item.id, item.qrScans!)
+        await splitRowByScans(item.id, item.qrScans!, justificacionPorItem.get(Number(item.id)))
       } else if (hasQRAlterno) {
         // Sólo se usó lote alterno por QR (sin estibas normales): la línea
         // original se cubre completamente con el alterno, por lo que se elimina.
@@ -1410,11 +1542,14 @@ export async function confirmPicking(
         // VERIFICACIÓN SIMPLE (sin QR): se aprueba la línea con la cantidad
         // escogida (salida) y, si hubo averías sobre el lote principal, se
         // registra una ENTRADA con status "Averia".
+        const justif = justificacionPorItem.get(Number(item.id))
         const { error: updateError } = await supabase
           .from("invtrans")
           .update({
             cantidad: item.cantidad,
             status: "aprobado",
+            // Si quedó saldo, el motivo viaja con el movimiento.
+            ...(justif ? { observaciones: justif } : {}),
           })
           .eq("id", item.id)
 
