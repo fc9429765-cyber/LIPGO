@@ -231,7 +231,7 @@ export function MainContent({
   // Identificación a preseleccionar al saltar desde "Ausentismo acumulado" (Visor de Asistencia) hasta Ausentismos.
   const [ausentismosInitialSearch, setAusentismosInitialSearch] = React.useState<string | null>(null)
   // Salto directo desde Ciclo de Facturación/Cuadro de Control ("N órdenes
-  // sin gestionar") hasta Gestión de Facturas, ya filtrado en el proyecto y
+  // sin gestionar") hasta Solicitar Facturas, ya filtrado en el proyecto y
   // período correctos -- para que el aviso sirva para ACTUAR, no solo para
   // informar (usuario 2026-09-14: "que no sea solo lectura que sirva para
   // gestionar").
@@ -331,7 +331,7 @@ export function MainContent({
         fechaDesde: customEvent.detail.fechaDesde,
         fechaHasta: customEvent.detail.fechaHasta,
       })
-      onSelectModule("Gestión de Facturas")
+      onSelectModule("Solicitar Facturas")
     }
 
     const handleAbrirRegistro = (event: Event) => {
@@ -1036,8 +1036,8 @@ export function MainContent({
                 <CicloFacturacion />
               </ClaveFinancieraGuard>
             </PermissionGuard>
-          ) : name === "Gestión de Facturas" ? (
-            <PermissionGuard moduleName="Gestión de Facturas">
+          ) : name === "Solicitar Facturas" ? (
+            <PermissionGuard moduleName="Solicitar Facturas">
               <GestionFacturas
                 onBack={onBack}
                 filtroInicial={gestionFacturasFiltroInicial}

@@ -18,7 +18,7 @@
  * sin el botón "Reintentar". Antes se lograba con un `key` que REMONTABA
  * MainContent entero en cada navegación; eso borraba el estado de los saltos
  * con dato (Gestión de Ordenes → Báscula con la orden, Visor → Ausentismos
- * con la persona, Ciclo → Gestión de Facturas filtrado, buscador → registro)
+ * con la persona, Ciclo → Solicitar Facturas filtrado, buscador → registro)
  * justo antes de que el módulo destino lo leyera.
  */
 

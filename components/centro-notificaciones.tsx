@@ -405,13 +405,13 @@ export function CentroNotificaciones({ empresaId, userId }: { empresaId: number 
       out.push({
         key: "facturas",
         titulo: "Órdenes por facturar",
-        descripcion: "Gestión de Facturas · pendientes por procesar",
+        descripcion: "Solicitar Facturas · pendientes por procesar",
         icono: DollarSign,
         hue: "green",
         nivel: "atencion",
         frente: "facturacion",
-        modulo: "Gestión de Facturas",
-        destino: "Gestión de Facturas",
+        modulo: "Solicitar Facturas",
+        destino: "Solicitar Facturas",
         cantidad: fact.count,
         items: fact.alerts.map((f) => ({
           key: String(f.id),
@@ -484,7 +484,7 @@ export function CentroNotificaciones({ empresaId, userId }: { empresaId: number 
     window.dispatchEvent(new CustomEvent("lipgo:navigate-module", { detail: modulo }))
   }
   // Abrir la pantalla donde se gestiona la sección. Donde existe un salto con
-  // filtro (Gestión de Facturas ya filtrada en "pendiente", mismo evento que usa
+  // filtro (Solicitar Facturas ya filtrada en "pendiente", mismo evento que usa
   // Ciclo de Facturación) se usa; si no, se abre el módulo.
   const abrirSeccion = (s: Seccion) => {
     if (s.key === "facturas") {

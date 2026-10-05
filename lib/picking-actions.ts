@@ -52,7 +52,7 @@ export interface PendingLoadOrder {
   /**
    * ¿Se factura este cargue? Se decide en Picking. Encendido por defecto
    * (`null`/`true`); se DESMARCA cuando el personal que carga NO es de LIP (el
-   * vehículo trae los suyos) → `false` = ese cargue no aparece en Gestión de Facturas.
+   * vehículo trae los suyos) → `false` = ese cargue no aparece en Solicitar Facturas.
    */
   facturar?: boolean | null
   /**

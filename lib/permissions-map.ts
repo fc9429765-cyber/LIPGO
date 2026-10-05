@@ -376,8 +376,8 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   // Indicador de facturación por proyectos (Gestión Financiera): comparte el
   // permiso de Facturación Proyectos (conserva accesos ya otorgados).
   "Indicador de Facturación por Proyectos": "facturacion_proyectos",
-  "Gestión de Facturas": "gestionfacturas",
-  // Pestaña "Cuadro de Control" dentro de Gestión de Facturas; permiso propio.
+  "Solicitar Facturas": "gestionfacturas",
+  // Pestaña "Cuadro de Control" dentro de Solicitar Facturas; permiso propio.
   "Cuadro de Control Facturación": "cuadro_facturacion",
   // Consulta por proyecto (solo lectura): comparte el permiso de Cuadro de
   // Control (misma audiencia, sin migración nueva).

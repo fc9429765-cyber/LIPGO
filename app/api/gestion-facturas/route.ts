@@ -286,7 +286,7 @@ export async function PATCH(request: NextRequest) {
       updateData.cuentatransferencia = cuentatransferencia
     }
     // Permite LIMPIAR la factura Siigo (facturasiigo: null) al eliminarla desde
-    // Gestión de Facturas (acción protegida por contraseña).
+    // Solicitar Facturas (acción protegida por contraseña).
     if (facturasiigo !== undefined) {
       updateData.facturasiigo = facturasiigo
     }

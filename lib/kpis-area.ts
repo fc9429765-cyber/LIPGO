@@ -141,7 +141,7 @@ export const SUBMODULO_KPIS: Record<string, string[]> = {
   "Registro de QR estibas": ["inv_exactitud"],
   "Lectura de QR estibas": ["inv_exactitud"],
   "Inventario por Estiba": ["inv_exactitud"],
-  "Gestión de Facturas": ["lip_facturacion"],
+  "Solicitar Facturas": ["lip_facturacion"],
   "Satisfacción y PQRSF": ["sat_cliente"],
   "Calificación del Conductor": ["sat_conductor"],
   "Registro de asistencia": ["gh_cobertura"],

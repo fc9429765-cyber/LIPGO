@@ -457,7 +457,7 @@ export const APRENDIZAJE_OPERACION_LIP: ContenidoAprendizaje[] = [
   // OPERACION LIP · Facturacion
   // ==========================================================================
   {
-    modulo: "Gestión de Facturas",
+    modulo: "Solicitar Facturas",
     resumen: "Gestiona el cobro de cada orden: pago de contado o solicitud de factura, hasta cerrarla.",
     proposito:
       "Aqui el coordinador convierte las operaciones terminadas en cobros. Cada orden pendiente se procesa por uno de dos caminos: SIN FACTURA (el cliente paga de contado y se registra el pago con sus comprobantes) o CON FACTURA (se solicita la factura, de contado o a credito, y pasa a la parte financiera). El modulo lleva el estado de cada orden hasta el cierre, permite montar la factura real de Siigo y amarrarla a todas las ordenes de un rango de fechas cuando una sola factura cubre varios dias.",

@@ -173,7 +173,7 @@ export async function getDistributionOrders(selectedEmpresaId?: number | null) {
 // Marca si una orden se factura o no. Lo deciden la operación:
 //   · CARGUE en Picking → se desmarca si el personal de carga NO es de LIP.
 //   · DISTRIBUCIÓN en Packing → se desmarca si el conductor va solo (sin auxiliares).
-// `false` → la orden no aparece en Gestión de Facturas (no se cobra).
+// `false` → la orden no aparece en Solicitar Facturas (no se cobra).
 // Deja RASTRO en `facturar_registro` (quién, cuándo, qué orden y por qué) para
 // análisis posterior — sobre todo de las desactivaciones.
 export async function setFacturarOrden(

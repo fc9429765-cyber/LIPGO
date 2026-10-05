@@ -1,5 +1,5 @@
 // Placas que LIP NO atiende en el cargue de ciertos proyectos y que, por tanto,
-// se EXCLUYEN por completo del submódulo de Gestión de Facturas (listado, conteo
+// se EXCLUYEN por completo del submódulo de Solicitar Facturas (listado, conteo
 // y export). La orden sí existe en `cabeceraoc` (la generó la operación), pero no
 // corresponde a LIP facturarla.
 //

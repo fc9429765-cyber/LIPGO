@@ -913,7 +913,7 @@ export async function generarPrefacturaAhora(
       // Bloque por grupo (owner|||operación|||unidad) -- necesario para saber,
       // línea por línea del detalle, si pertenece a un grupo "producción" (sin
       // validación por-orden, ej. Tolva) o "operación" (exige que el
-      // Coordinador ya haya validado esa orden en Gestión de Facturas).
+      // Coordinador ya haya validado esa orden en Solicitar Facturas).
       const bloquePorGrupo = new Map(pref.resumen.map((r) => [`${r.owner}|||${r.operacion}|||${r.unidad}`, r.bloque]))
       const soporte = [
         ...pref.origen
@@ -951,7 +951,7 @@ export async function generarPrefacturaAhora(
         for (const al of ctrlR.data.produccionAlertas || []) advertencias.push({ tipo: "produccion_alerta", detalle: al })
       }
       // Órdenes de este owner/período que el Coordinador AÚN no ha validado en
-      // Gestión de Facturas -- se generó igual (con lo que sí está validado),
+      // Solicitar Facturas -- se generó igual (con lo que sí está validado),
       // pero esto queda sin facturar hasta que se valide y entre en un
       // próximo corte. Solo bloque "operación" -- Tolva/producción no aplica.
       const sinGestionar = pref.resumen.filter((r) => r.owner === owner && r.bloque === "operacion" && r.valorPorFacturar > 0)
@@ -962,7 +962,7 @@ export async function generarPrefacturaAhora(
         ).size
         advertencias.push({
           tipo: "ordenes_sin_gestionar",
-          detalle: `$${valorSinGestionar.toLocaleString("es-CO")} en ${numOrdenes} orden(es) de este período siguen sin validar por el Coordinador (Gestión de Facturas) y quedaron FUERA de este anexo.`,
+          detalle: `$${valorSinGestionar.toLocaleString("es-CO")} en ${numOrdenes} orden(es) de este período siguen sin validar por el Coordinador (Solicitar Facturas) y quedaron FUERA de este anexo.`,
         })
       }
       if (rangoManual && desdeAutomatico && desdeOwner !== desdeAutomatico) {
@@ -1023,7 +1023,7 @@ export interface ResultadoPendienteGestion {
  * Solo-lectura -- NO guarda nada. Para el período que le tocaría generar a
  * este proyecto AHORA MISMO (mismo cálculo de `desde` que usa
  * `generarPrefacturaAhora`), cuánto valor de bloque "operación" sigue SIN
- * validar por el Coordinador en Gestión de Facturas -- o sea, lo que
+ * validar por el Coordinador en Solicitar Facturas -- o sea, lo que
  * quedaría FUERA del próximo anexo si se generara ya. Pensado para el
  * aviso proactivo en la UI, pedido por el usuario 2026-09-14: "que informe
  * si se está quedando alguna de estas órdenes por fuera del corte por no

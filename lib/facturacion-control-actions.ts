@@ -1,6 +1,6 @@
 "use server"
 
-// Cuadro de Mando de Facturación (pestaña dentro de Gestión de Facturas).
+// Cuadro de Mando de Facturación (pestaña dentro de Solicitar Facturas).
 // FUENTE DE VERDAD: las órdenes de servicio procesadas (cabeceraoc con fincargue
 // y facturar != false). Se cruzan con lo que YA se facturó (estadofactura) para
 // garantizar que todo lo procesado se facture — y detectar lo que quedó sin gestionar.
@@ -420,7 +420,7 @@ export interface PrefacturaResumen {
   tonFacturado: number
   valorFacturado: number // ya facturado — NO volver a facturar (rojo)
   /** Subconjunto de "en_proceso": el Coordinador YA validó la orden en
-   *  Gestión de Facturas (estadofactura="CF - Factura solicitada") Y es
+   *  Solicitar Facturas (estadofactura="CF - Factura solicitada") Y es
    *  Crédito real (no Contado por error de flujo). Esto -- NO
    *  `valorPorFacturar` -- es lo que Ciclo de Facturación debe usar para
    *  bloque "operación" (ver valorListoParaAnexo/tonListoParaAnexo):
@@ -1878,7 +1878,7 @@ export async function getMapaPlacasDistribucion(): Promise<Record<number, string
 /**
  * Valor NETO por orden (mismo cálculo del cuadro/prefactura: cada operación × tarifa por
  * owner/id_empresa/subcategoría; báscula prorrateada en plantas). LIGERO: solo calcula
- * las órdenes que se le pasan (la página visible de Gestión de Facturas). Base antes de
+ * las órdenes que se le pasan (la página visible de Solicitar Facturas). Base antes de
  * IVA/retefuente (la factura de Siigo suma esos). Devuelve { ordendecargue: valorNeto }.
  */
 export async function getValoresNetosOrden(

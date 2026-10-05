@@ -992,7 +992,7 @@ function FrecuenciaGeneracionPrefacturaPanel() {
   // Aviso proactivo: cuánto de cada proyecto sigue SIN validar por el
   // Coordinador (quedaría fuera del próximo corte) -- pedido explícito del
   // usuario 2026-09-14, "que sirva para gestionar" (no solo informar): el
-  // aviso trae un link directo a Gestión de Facturas, ya filtrado.
+  // aviso trae un link directo a Solicitar Facturas, ya filtrado.
   const [pendientes, setPendientes] = useState<Record<number, PendienteGestionOwner[]>>({})
 
   const cargarPendientes = async (lista: CondicionGeneracionPrefactura[]) => {
@@ -1105,7 +1105,7 @@ function FrecuenciaGeneracionPrefacturaPanel() {
           la corrida automática, pero al instante y con el resultado a la vista. En proyectos no diarios, el cuadro punteado <strong>"Rango manual
           (excepción)"</strong> permite generar un tramo puntual con fechas exactas en vez del período contiguo automático -- para cierres
           anticipados u otros casos fuera de lo normal. <strong>Las órdenes de Cargue/Descargue/Distribución solo entran en el anexo cuando el
-          Coordinador ya las validó en Gestión de Facturas</strong> ("CF - Factura solicitada", con el tiquete de báscula o la foto de la orden) --
+          Coordinador ya las validó en Solicitar Facturas</strong> ("CF - Factura solicitada", con el tiquete de báscula o la foto de la orden) --
           la Tolva/producción no necesita ese paso. Si algo sigue sin validar, aparece abajo con un link directo para ir a gestionarlo.
         </CardDescription>
       </CardHeader>
@@ -1402,12 +1402,12 @@ function CondicionesPagoPanel() {
 // ---------------------------------------------------------------------------
 // Pagos de Contado -- pestaña de RECONCILIACIÓN BANCARIA (2026-09-14, pedido
 // del usuario). Las órdenes de pago de contado (mediopago="Contado") se
-// gestionan hoy en Gestión de Facturas -- el Coordinador sube ahí la FOTO del
+// gestionan hoy en Solicitar Facturas -- el Coordinador sube ahí la FOTO del
 // comprobante (`cabeceraoc.comprobante`), pero antes de esto no existía
 // ninguna pantalla que agrupara esos comprobantes para cruzarlos contra el
 // extracto bancario: quedaban enterrados en cada orden, uno por uno. Esta
 // pestaña NO agrega ningún dato nuevo, solo hace consultable/filtrable lo que
-// ya se captura (misma fuente que Gestión de Facturas: `/api/gestion-facturas`,
+// ya se captura (misma fuente que Solicitar Facturas: `/api/gestion-facturas`,
 // filtrado por `medioPago=Contado`, reusa el Proyecto/Período de la barra de
 // arriba del módulo).
 // ---------------------------------------------------------------------------
@@ -1519,7 +1519,7 @@ function PagosContadoPanel({
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Órdenes marcadas como pago de <strong>Contado</strong> en Gestión de Facturas, con el comprobante que subió el
+        Órdenes marcadas como pago de <strong>Contado</strong> en Solicitar Facturas, con el comprobante que subió el
         Coordinador -- para cruzar contra el extracto bancario. Usa el filtro de Proyecto/Período de arriba de esta pantalla.
       </p>
       <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 p-2.5">

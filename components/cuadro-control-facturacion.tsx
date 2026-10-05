@@ -1,6 +1,6 @@
 "use client"
 
-// Cuadro de Control de Facturación (pestaña dentro de Gestión de Facturas).
+// Cuadro de Control de Facturación (pestaña dentro de Solicitar Facturas).
 // Cruza las ÓRDENES DE SERVICIO procesadas (fuente de verdad) con lo facturado,
 // por owner/proyecto, para garantizar que todo lo procesado se facture. En ROJO
 // lo "sin gestionar" (procesado sin facturar) y lo "sin tarifa". De aquí salen
@@ -1479,7 +1479,7 @@ export function CuadroControlFacturacion() {
                             <button
                               type="button"
                               className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800 hover:bg-amber-200 dark:bg-amber-950/50 dark:text-amber-300"
-                              title="Ir a Gestión de Facturas a validar las órdenes marcadas 'sin validar' abajo"
+                              title="Ir a Solicitar Facturas a validar las órdenes marcadas 'sin validar' abajo"
                               onClick={() =>
                                 window.dispatchEvent(
                                   new CustomEvent("lipgo:ir-a-gestionar-facturas", {
@@ -1522,7 +1522,7 @@ export function CuadroControlFacturacion() {
                                 {x.bloque === "operacion" && x.valorPorFacturar > 0 && (
                                   <span
                                     className="ml-1 rounded bg-amber-100 px-1 py-px text-[9px] font-semibold uppercase text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
-                                    title="El Coordinador aún no validó estas órdenes en Gestión de Facturas -- Ciclo de Facturación no las incluirá en el próximo anexo"
+                                    title="El Coordinador aún no validó estas órdenes en Solicitar Facturas -- Ciclo de Facturación no las incluirá en el próximo anexo"
                                   >
                                     sin validar
                                   </span>

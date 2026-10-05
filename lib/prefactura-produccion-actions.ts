@@ -23,7 +23,7 @@
  * idénticos; duplicar la tabla sería duplicar ese código.
  *
  * NO calcula IVA ni retenciones: igual que la prefactura existente, esto es
- * base neta. El IVA y el retefuente los suma Gestión de Facturas al emitir.
+ * base neta. El IVA y el retefuente los suma Solicitar Facturas al emitir.
  */
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
