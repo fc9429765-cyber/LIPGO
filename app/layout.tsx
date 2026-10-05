@@ -1,6 +1,6 @@
 import type React from "react"
 import type { Metadata, Viewport } from "next"
-import { IBM_Plex_Sans, Geist_Mono } from "next/font/google"
+import localFont from "next/font/local"
 import { Analytics } from "@vercel/analytics/next"
 import Script from "next/script"
 import { AuthProvider } from "@/components/auth-provider"
@@ -14,8 +14,23 @@ import "./globals.css"
 // Sistema visual LIPgo (2026-10-02): IBM Plex Sans en toda la app (industrial,
 // números tabulares limpios). Se expone como --font-plex y globals.css la usa
 // en --font-sans, así `font-sans` la aplica en todas partes sin tocar módulos.
-const plex = IBM_Plex_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-plex", display: "swap" })
-const _geistMono = Geist_Mono({ subsets: ["latin"] })
+// FUENTES LOCALES, no de Google (2026-10-05). Con `next/font/google` el build de Vercel fallaba
+// al azar con "next/font/google queries have exactly one entry": un defecto intermitente de
+// Turbopack al restaurar la caché del build, que pasó dos veces el 4 de octubre (commits 52c4c7e
+// y fee073a) y se "arreglaba" solo al volver a desplegar. Un build que falla al azar no es
+// aceptable, así que los archivos viven en el repo (app/fonts, licencia OFL) y el build no
+// depende de ningún servicio externo. Son las mismas fuentes y los mismos pesos: nada cambia
+// a la vista. Además la página ya no hace una ida y vuelta a Google para pintar texto.
+const plex = localFont({
+  src: [{ path: "./fonts/ibm-plex-sans-latin.woff2", weight: "400 700", style: "normal" }],
+  variable: "--font-plex",
+  display: "swap",
+})
+const geistMono = localFont({
+  src: [{ path: "./fonts/geist-mono-latin.woff2", weight: "100 900", style: "normal" }],
+  variable: "--font-geist-mono",
+  display: "swap",
+})
 
 export const viewport: Viewport = {
   themeColor: "#5bc0de",
@@ -64,7 +79,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body className={`${plex.variable} font-sans antialiased`}>
+      <body className={`${plex.variable} ${geistMono.variable} font-sans antialiased`}>
         {/* Captura temprana del evento de instalacion (puede dispararse antes
             de montar React); el banner PWA lo consume desde window.__lipgoBIP. */}
         <Script id="pwa-bip-capture" strategy="beforeInteractive">

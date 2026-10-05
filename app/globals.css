@@ -78,7 +78,8 @@
 
 @theme inline {
   --font-sans: var(--font-plex), 'Geist', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'Geist Mono', 'Geist Mono Fallback';
+  /* Geist Mono se sirve LOCAL desde app/fonts (ver app/layout.tsx): la variable la define next/font/local. */
+  --font-mono: var(--font-geist-mono), 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
