@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { setVisibleInterval } from "@/lib/polling"
 import { useAuth } from "@/components/auth-provider"
+import { PedidosDelDia } from "@/components/operacion/pedidos-del-dia"
 import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
 import { Esqueleto } from "@/components/ui/lipgo"
@@ -511,6 +512,8 @@ export default function CentroCoordinacion({ onNavigate }: CentroCoordinacionPro
       </div>
 
       <div className="space-y-3 p-3 md:space-y-4 md:p-6">
+        {/* Pedidos del día: la demanda real a cargar hoy, solo para quien tiene permiso de Generar OC (gerencia 2026-10-05). */}
+        <PedidosDelDia empresaId={selectedEmpresaId} />
         {loading && !data ? (
           <div className="flex flex-col gap-4" aria-busy aria-label="Cargando Centro de Coordinación">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">

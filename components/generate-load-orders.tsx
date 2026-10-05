@@ -36,6 +36,7 @@ import { useAuth } from "@/components/auth-provider"
 
 // Importing Accordion components for collapsible order details
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { PedidosDelDia } from "@/components/operacion/pedidos-del-dia"
 
 interface Cliente {
   id: number
@@ -819,6 +820,8 @@ function GenerateLoadOrdersComponent() {
   return (
     <div className="h-full flex flex-col bg-gray-50">
       <div className="p-2 lg:p-3 space-y-2">
+        {/* Pedidos del día: qué vence hoy, con panel lateral; solo con permiso de este módulo (gerencia 2026-10-05). */}
+        <PedidosDelDia empresaId={selectedEmpresaId} />
         {/* Top Row: Encabezado de la orden + Filtros de Pedidos + Capacidad Vehículo */}
         <div className="w-full flex gap-2 lg:gap-3">
           {/* Encabezado de la orden - Left side (smaller card) */}

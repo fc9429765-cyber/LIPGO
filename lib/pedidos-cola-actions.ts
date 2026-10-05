@@ -25,6 +25,9 @@ import { desdeDePeriodo, hoyBogotaISO, type PeriodoListado } from "@/lib/periodo
 import { accesoPedidos, limitarPorOwners, type AccesoPedidos } from "@/lib/acceso-empresa"
 import { sumarDiasISO, normalizarEstado, textoMotivo, ESTADO_ENTREGA_PARCIAL, ESTADO_NO_ENTREGADO, FILTRO_ABIERTOS_POSTGREST, MOTIVOS_DEPURACION, type MotivoDepuracion } from "@/lib/pedidos-estado"
 import { esDomingoISO, siguienteDiaOperativoISO } from "@/lib/pedidos-estado"
+import { checkModulePermission } from "@/lib/permissions-actions"
+import { getMetaDiaForEmpresa } from "@/lib/empresa-meta-dia"
+import { diasEntreISO, type PedidoDelDia, type PedidosDelDia } from "@/lib/pedidos-del-dia"
 import { MSG_SIN_ACCESO, aPedidoCola, cargarCola, n0, resumenLineas, resumir, txt, type ColaPedidos, type LineaPedido, type PedidoCola, type ResLineas, type ResumenCola } from "@/lib/pedidos-cola-core"
 import { registrarErrorServidor } from "@/lib/errores-servidor"
 import { ordenesDelPedido, totalCargado, type OrdenDePedido } from "@/lib/pedido-ordenes"
@@ -571,5 +574,91 @@ export async function getDemandaFecha(empresaId: number | null | undefined, fech
   } catch (e: any) {
     console.error("[pedidos-cola] getDemandaFecha:", e?.message ?? e)
     return { success: false, message: e?.message || "No se pudo cargar la demanda del día." }
+  }
+}
+
+// ---------------------------------------------------------------------------------------
+// PEDIDOS DEL DÍA — la demanda real a cargar hoy, por fecha de entrega prometida.
+//
+// Gerencia (2026-10-05): "una cosa es la proyección de vehículos y otra más acertada es la
+// de pedidos a cargar". La meta del día se arma con los pedidos prometidos para hoy; lo
+// que ya salió es el avance y lo que falta es lo que queda de la meta. Lo ve quien tiene
+// el permiso de "Generar Órdenes de Cargue" (compuerta de Gestión de Usuarios: los permisos
+// ordenan qué puede ver cada usuario), sin precios ni condiciones comerciales. Se muestra
+// en Centro de Coordinación y en Generar Órdenes de Cargue como una línea llamativa con
+// panel lateral (components/operacion/pedidos-del-dia.tsx). Reglas puras y tipos en
+// lib/pedidos-del-dia.ts.
+// ---------------------------------------------------------------------------------------
+export type RespPedidosDelDia = { success: true; data: PedidosDelDia } | { success: false; message: string; sinPermiso?: boolean }
+
+export async function getPedidosDelDia(empresaId: number | null | undefined): Promise<RespPedidosDelDia> {
+  if (!empresaId) return { success: false, message: "Selecciona un proyecto." }
+  try {
+    const permitido = await checkModulePermission("Generar Órdenes de Cargue")
+    if (!permitido) return { success: false, message: "Sin permiso de Generar Órdenes de Cargue.", sinPermiso: true }
+    const sb: any = await getSupabaseAdminAsSystem()
+    const acceso = await accesoPedidos(sb, empresaId)
+    if (!acceso) return { success: false, message: MSG_SIN_ACCESO, sinPermiso: true }
+    const hoy = hoyBogotaISO()
+    const manana = siguienteDiaOperativoISO(hoy)
+    const cola = await cargarCola(sb, acceso, empresaId, hoy)
+
+    const item = (p: PedidoCola): PedidoDelDia => ({
+      idpedido: p.idpedido,
+      pedido: p.pedido,
+      cliente: p.cliente,
+      destino: p.destino,
+      tipoDespacho: p.tipo_despacho,
+      kg: p.kg,
+      unidades: p.unidades,
+      lineas: p.lineas,
+      aprobado: normalizarEstado(p.aprobado) === "si",
+      carteraLista: Boolean(p.revisioncartera && String(p.revisioncartera).trim()),
+      fechaProgramada: p.fecha_programada,
+      registrado: p.fecha,
+      atrasoDias: p.fecha_programada ? Math.max(0, diasEntreISO(p.fecha_programada, hoy)) : 0,
+    })
+    const porPeso = (a: PedidoDelDia, b: PedidoDelDia) => b.kg - a.kg || a.idpedido - b.idpedido
+    const sumaKg = (xs: PedidoDelDia[]) => xs.reduce((s, p) => s + p.kg, 0)
+    // Sin orden de cargue = lo que falta. Cualquier estado abierto cuenta (también "nuevo" y por
+    // aprobar): el pedido vence igual aunque nadie lo haya aprobado todavía.
+    const vencen = cola.filter((p) => p.fecha_programada === hoy && !p.ocargue).map(item).sort(porPeso)
+    const paraManana = cola.filter((p) => p.fecha_programada === manana && !p.ocargue).map(item).sort(porPeso)
+    const atrasados = cola.filter((p) => p.fecha_programada && p.fecha_programada < hoy && !p.ocargue).map(item)
+    const recientes = atrasados.filter((p) => p.atrasoDias <= 3).sort((a, b) => a.atrasoDias - b.atrasoDias || b.kg - a.kg).slice(0, 6)
+
+    // Lo que ya salió (con orden de cargue o entregado) no está en la cola de abiertos: se lee aparte.
+    const salieron = async (fecha: string) => {
+      const { data, error } = await limitarPorOwners(
+        sb.from("pedidoscabecera").select("idpedido, estado, ocargue, fecha").eq("id_empresa", empresaId).eq("fecha_programada", fecha),
+        acceso,
+      ).limit(2000)
+      if (error) throw new Error(error.message)
+      const rows = (data ?? []).filter((c: any) => !/anulado|no entregado/i.test(String(c.estado ?? "")) && (c.ocargue || /entregado|parcial/i.test(String(c.estado ?? ""))))
+      const ids = rows.map((c: any) => Number(c.idpedido))
+      const lineas = await resumenLineas(sb, empresaId, ids)
+      let kg = 0
+      for (const id of ids) kg += n0(lineas.get(id)?.kg)
+      return { pedidos: ids.length, kg, registradosHoy: rows.filter((c: any) => c.fecha === fecha).length }
+    }
+    const [sHoy, sManana] = await Promise.all([salieron(hoy), salieron(manana)])
+
+    return {
+      success: true,
+      data: {
+        empresaId,
+        hoy,
+        manana,
+        metaAcuerdoT: getMetaDiaForEmpresa(empresaId),
+        demandaHoy: { pedidos: vencen.length + sHoy.pedidos, kg: sumaKg(vencen) + sHoy.kg, registradosHoy: vencen.filter((p) => p.registrado === hoy).length + sHoy.registradosHoy },
+        salieronHoy: { pedidos: sHoy.pedidos, kg: sHoy.kg },
+        vencenHoy: { pedidos: vencen.length, kg: sumaKg(vencen), porAprobar: vencen.filter((p) => !p.aprobado).length, lista: vencen },
+        atrasados: { pedidos: atrasados.length, kg: sumaKg(atrasados), recientes },
+        paraManana: { pedidos: paraManana.length, kg: sumaKg(paraManana), porAprobar: paraManana.filter((p) => !p.aprobado).length, lista: paraManana.slice(0, 8), salieron: { pedidos: sManana.pedidos, kg: sManana.kg } },
+      },
+    }
+  } catch (e: any) {
+    void registrarErrorServidor("pedidos.getPedidosDelDia", e, { empresaId })
+    return { success: false, message: e?.message || "No se pudieron leer los pedidos del día." }
   }
 }
