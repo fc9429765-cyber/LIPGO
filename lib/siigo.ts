@@ -196,7 +196,19 @@ async function llamar(
         return {
           ok: false,
           status: r.status,
-          error: j?.Errors?.[0]?.Message || j?.message || `Siigo respondió ${r.status}.`,
+          /*
+           * Siigo devuelve una LISTA de errores, y al crear una factura suelen
+           * ser varios a la vez --un código de producto que no existe, un
+           * cliente inactivo, una forma de pago mal puesta--. Mostrar solo el
+           * primero obliga a corregir de uno en uno, probando cada vez contra
+           * la API.
+           */
+          error:
+            (Array.isArray(j?.Errors) && j.Errors.length
+              ? j.Errors.map((e: any) => e?.Message ?? e?.message).filter(Boolean).join(" · ")
+              : null) ||
+            j?.message ||
+            `Siigo respondió ${r.status}.`,
         }
       }
 
@@ -272,6 +284,137 @@ export async function getFacturaPdf(
   const base64 = r.data?.base64
   if (!base64) return { ok: false, error: "Siigo no devolvió el PDF de esa factura." }
   return { ok: true, base64, cufe: r.data?.cufe ?? null }
+}
+
+// ---------------------------------------------------------------------------
+// EMISIÓN DE FACTURAS
+//
+// Lo único que ESCRIBE en Siigo. Todo lo demás de este archivo solo lee.
+//
+// UNA FACTURA ELECTRÓNICA ACEPTADA POR LA DIAN NO SE BORRA: se anula con una
+// nota crédito, que es otro documento contable con su propia numeración. No
+// hay "deshacer", y por eso quien llame a esto debe haber comprobado antes que
+// la factura corresponde.
+// ---------------------------------------------------------------------------
+
+export interface ItemFactura {
+  /** Código del producto o servicio en Siigo. Debe existir y estar activo. */
+  code: string
+  description?: string
+  quantity: number
+  price: number
+  taxes?: Array<{ id: number }>
+}
+
+export interface PagoFactura {
+  id: number
+  value: number
+  /** yyyy-MM-dd. Obligatorio si la forma de pago maneja vencimiento. */
+  due_date?: string
+}
+
+export interface CrearFacturaInput {
+  /** Tipo de comprobante (document.id). Se consulta en /document-types. */
+  documentoId: number
+  /** yyyy-MM-dd. Para facturas electrónicas NO puede ser anterior a hoy. */
+  fecha: string
+  /** NIT o cédula. Debe existir y estar activo en Siigo. */
+  clienteIdentificacion: string
+  clienteSucursal?: number
+  /** Id del vendedor. Se consulta en /users. */
+  vendedor: number
+  items: ItemFactura[]
+  pagos: PagoFactura[]
+  observaciones?: string
+  centroCosto?: number
+  /** true = se envía a la DIAN y queda oficial. */
+  enviarDian?: boolean
+  enviarCorreo?: boolean
+  /** Orden de compra, para que el cliente la reconozca. */
+  ordenCompra?: { prefix?: string; number: string }
+}
+
+export interface FacturaCreada {
+  id: string
+  number?: number
+  name?: string
+  /** El CUFE de la DIAN. Solo lo hay si se envió y fue aceptada. */
+  cufe?: string | null
+  /** Draft | Accepted | Rejected */
+  stamp?: { status?: string; cufe?: string | null }
+  total?: number
+}
+
+/**
+ * Crea una factura de venta en Siigo.
+ *
+ * `enviarDian` decide si sale oficial o queda en borrador. En false queda como
+ * Draft dentro de Siigo y alguien la revisa antes de enviarla; en true la DIAN
+ * la recibe en el momento y ya no se puede borrar.
+ *
+ * Los errores de Siigo aquí son casi siempre de datos --un código de producto
+ * que no existe, un cliente inactivo, una forma de pago mal puesta-- y vienen
+ * en una lista. Se juntan todos para no obligar a corregir de uno en uno.
+ */
+export async function crearFactura(
+  input: CrearFacturaInput,
+): Promise<{ ok: boolean; data?: FacturaCreada; error?: string; peticion?: any; respuesta?: any }> {
+  const cuerpo: any = {
+    document: { id: input.documentoId },
+    date: input.fecha,
+    customer: {
+      identification: input.clienteIdentificacion,
+      branch_office: input.clienteSucursal ?? 0,
+    },
+    seller: input.vendedor,
+    items: input.items.map((i) => ({
+      code: i.code,
+      ...(i.description ? { description: i.description } : {}),
+      quantity: i.quantity,
+      price: i.price,
+      ...(i.taxes?.length ? { taxes: i.taxes } : {}),
+    })),
+    payments: input.pagos.map((p) => ({
+      id: p.id,
+      value: p.value,
+      ...(p.due_date ? { due_date: p.due_date } : {}),
+    })),
+    ...(input.observaciones ? { observations: input.observaciones.slice(0, 4000) } : {}),
+    ...(input.centroCosto ? { cost_center: input.centroCosto } : {}),
+    stamp: { send: input.enviarDian === true },
+    mail: { send: input.enviarCorreo === true },
+    ...(input.ordenCompra
+      ? {
+          additional_fields: {
+            purchase_order: {
+              ...(input.ordenCompra.prefix ? { prefix: input.ordenCompra.prefix } : {}),
+              number: String(input.ordenCompra.number).slice(0, 20),
+            },
+          },
+        }
+      : {}),
+  }
+
+  const r = await llamar("/invoices", { metodo: "POST", cuerpo })
+
+  if (!r.ok) {
+    return { ok: false, error: r.error, peticion: cuerpo, respuesta: r.data }
+  }
+
+  const d = r.data ?? {}
+  return {
+    ok: true,
+    peticion: cuerpo,
+    respuesta: d,
+    data: {
+      id: String(d.id ?? ""),
+      number: d.number ?? undefined,
+      name: d.name ?? undefined,
+      cufe: d.stamp?.cufe ?? d.cufe ?? null,
+      stamp: d.stamp,
+      total: d.total,
+    },
+  }
 }
 
 // ---------------------------------------------------------------------------
