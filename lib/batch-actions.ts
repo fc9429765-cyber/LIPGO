@@ -7,6 +7,7 @@ import { getColombiaDate, getColombiaISO, getColombiaTime } from "@/lib/date-uti
 import { getCurrentUserContext } from "@/lib/company-filter"
 import { generarDistribucionAutomatica, autoGenerarDescarguesCedi } from "@/lib/orders-actions"
 import { reportarInterno } from "@/lib/reporte-interno-actions"
+import { registrarErrorServidor } from "@/lib/errores-servidor"
 
 export interface LoadOrder {
   id: number
@@ -497,6 +498,11 @@ export async function approveBatchAllocation(data: BatchApprovalData, selectedEm
     }
   } catch (error) {
     console.error("[v0] Error in approveBatchAllocation:", error)
+    // La asignación de lotes reserva inventario: si falla, hay que saberlo el mismo día.
+    void registrarErrorServidor("batch.approveBatchAllocation", error, {
+      ordendecargue: (data as any)?.ordendecargue ?? null,
+      empresaId: selectedEmpresaId ?? null,
+    })
     throw error
   }
 }
