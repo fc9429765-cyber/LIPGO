@@ -13,6 +13,7 @@ import {
   faltantePorDespachar,
   lineaTrasReverso,
   ordenesDelPedido,
+  pedidosDeLaOrden,
   totalCargado,
 } from "@/lib/pedido-ordenes"
 
@@ -142,5 +143,33 @@ describe("qué orden se llevó qué parte del pedido", () => {
   it("sin datos de la orden no falla", () => {
     const r = ordenesDelPedido([{ transid: 1, ocargue: "OC9", unidades: 7 }], new Map())
     expect(r[0]).toMatchObject({ ocargue: "OC9", unidades: 7, fecha: null })
+  })
+})
+
+// Vista 360 de la orden: qué pedidos atendió. Gerencia (2026-10-05): "toda orden tiene su
+// pedido; hoy revisé el ciclo de una orden y me sale sin pedido ligado". Cuando un pedido sale
+// en dos órdenes, la línea y la cabecera solo recuerdan UNA (`ocargue` es un solo campo); la
+// otra orden vive solo en el libro. Medido: 7 órdenes de los últimos 14 días (2 ID1, 5 ID2).
+describe("qué pedidos atendió una orden", () => {
+  it("la orden que solo está en el libro sí muestra su pedido, con lo que ella se llevó", () => {
+    const r = pedidosDeLaOrden([{ idpedido: 8742, unidades: 50 }], [], [])
+    expect(r).toEqual([{ idpedido: 8742, unidades: 50, fuente: "libro" }])
+  })
+
+  it("si el pedido está en el libro y en la línea, manda el libro: 50 de esta orden, no los 200 de la línea", () => {
+    const r = pedidosDeLaOrden([{ idpedido: 8742, unidades: 50 }], [{ idpedido: 8742, unidades: 200 }], [8742])
+    expect(r).toEqual([{ idpedido: 8742, unidades: 50, fuente: "libro" }])
+  })
+
+  it("sin libro usa las líneas (sumadas); solo cabecera queda con 0 unidades", () => {
+    const r = pedidosDeLaOrden([], [{ idpedido: 10, unidades: 30 }, { idpedido: 10, unidades: 20 }], [11, 10])
+    expect(r).toEqual([
+      { idpedido: 10, unidades: 50, fuente: "linea" },
+      { idpedido: 11, unidades: 0, fuente: "cabecera" },
+    ])
+  })
+
+  it("una fila del libro cuya línea ya no existe no inventa un pedido", () => {
+    expect(pedidosDeLaOrden([{ idpedido: 0, unidades: 9 }], [], [])).toEqual([])
   })
 })

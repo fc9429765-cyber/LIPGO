@@ -20,6 +20,7 @@
 
 import { getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 import { accesoPedidos, limitarPorOwners } from "@/lib/acceso-empresa"
+import { pedidosDeLaOrden } from "@/lib/pedido-ordenes"
 
 const norm = (s: unknown) => String(s ?? "").trim().toUpperCase()
 const n0 = (v: unknown) => Number(v) || 0
@@ -110,36 +111,43 @@ export async function getOrden360(ordendecargue: string, empresaId: number | nul
 
     // --- Pedidos ligados -----------------------------------------------------------------
     //
-    // El vínculo vive en `pedidosdetalle.ocargue`: al armar la orden se toman pedidos (enteros
-    // o parciales) y se montan a un vehículo, así que una orden SIEMPRE está ligada a por lo
-    // menos un pedido (gerencia 2026-10-04).
+    // Al armar la orden se toman pedidos (enteros o parciales) y se montan a un vehículo, así
+    // que una orden SIEMPRE está ligada a por lo menos un pedido (gerencia 2026-10-04). El
+    // vínculo puede vivir en TRES sitios y hay que mirar los tres (`pedidosDeLaOrden`):
+    //   · el libro `pedidodetalle_ocargue` (SQL 226): cuando un pedido sale en varias órdenes,
+    //     la línea solo recuerda una; la otra orden salía aquí como "Sin pedido ligado"
+    //     (7 órdenes de los últimos 14 días, 2 de ID1 y 5 de ID2; gerencia lo vio el 2026-10-05);
+    //   · las líneas (`pedidosdetalle.ocargue`), el caso normal antes del libro;
+    //   · la cabecera (`pedidoscabecera.ocargue`): en ID3 hay 41 órdenes de los últimos dos
+    //     meses ligadas solo por cabecera (detectado 2026-10-04).
     //
     // OJO: el filtro por owner (`limitarPorOwners`) se aplica a la CABECERA, que es donde vive
     // `empresafactura`. Aplicarlo al detalle lo dejaba sin resultados —la columna no existe
     // allí— y la orden aparecía "sin pedido ligado" (error detectado con MOL202610039820).
-    //
-    // El vínculo puede quedar en DOS sitios y hay que mirar los dos: en las LÍNEAS
-    // (`pedidosdetalle.ocargue`, el caso normal) y en la CABECERA del pedido
-    // (`pedidoscabecera.ocargue`). En ID3 hay 41 órdenes de los últimos dos meses ligadas solo
-    // por cabecera: mirando una sola fuente aparecían "sin pedido" (detectado 2026-10-04).
-    const [{ data: pdet }, { data: pcabPorOc }] = await Promise.all([
-      sb.from("pedidosdetalle").select("idpedido, producto, unidades, unidadescargadas").eq("ocargue", oc),
+    const [{ data: libro }, { data: pdet }, { data: pcabPorOc }] = await Promise.all([
+      sb.from("pedidodetalle_ocargue").select("transid, unidades").eq("ocargue", oc),
+      sb.from("pedidosdetalle").select("idpedido, unidades").eq("ocargue", oc),
       sb.from("pedidoscabecera").select("idpedido").eq("ocargue", oc),
     ])
-    const idsPedido = [
-      ...new Set([
-        ...(pdet ?? []).map((p: any) => Number(p.idpedido)),
-        ...(pcabPorOc ?? []).map((p: any) => Number(p.idpedido)),
-      ].filter(Boolean)),
-    ]
+    // El libro guarda la línea (transid); el pedido se toma de esa línea.
+    const transids = [...new Set((libro ?? []).map((f: any) => Number(f.transid)).filter(Boolean))]
+    const pedidoDeLinea = new Map<number, number>()
+    if (transids.length) {
+      const { data: lineasLibro } = await sb.from("pedidosdetalle").select("transid, idpedido").in("transid", transids)
+      for (const l of lineasLibro ?? []) pedidoDeLinea.set(Number(l.transid), Number(l.idpedido))
+    }
+    const ligados = pedidosDeLaOrden(
+      (libro ?? []).map((f: any) => ({ idpedido: pedidoDeLinea.get(Number(f.transid)) ?? 0, unidades: n0(f.unidades) })),
+      (pdet ?? []).map((p: any) => ({ idpedido: Number(p.idpedido), unidades: n0(p.unidades) })),
+      (pcabPorOc ?? []).map((p: any) => Number(p.idpedido)),
+    )
     let pedidos: Pedido360[] = []
-    if (idsPedido.length) {
+    if (ligados.length) {
       const { data: pcab } = await limitarPorOwners(
-        sb.from("pedidoscabecera").select("idpedido, cliente, fecha, fecha_programada, estado").in("idpedido", idsPedido),
+        sb.from("pedidoscabecera").select("idpedido, cliente, fecha, fecha_programada, estado").in("idpedido", ligados.map((l) => l.idpedido)),
         acceso,
       )
-      const unidadesDe = new Map<number, number>()
-      for (const p of pdet ?? []) unidadesDe.set(Number(p.idpedido), (unidadesDe.get(Number(p.idpedido)) ?? 0) + n0(p.unidades))
+      const unidadesDe = new Map<number, number>(ligados.map((l) => [l.idpedido, l.unidades]))
       pedidos = (pcab ?? [])
         .map((c: any) => ({
           idpedido: Number(c.idpedido),
