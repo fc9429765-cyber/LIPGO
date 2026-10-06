@@ -1,0 +1,779 @@
+[
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260927",
+    "location": "AV",
+    "fisico": 280,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260927",
+    "location": "Caracol",
+    "fisico": 1295,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260930",
+    "location": "Caracol",
+    "fisico": 600,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260929",
+    "location": "A1",
+    "fisico": 160,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260922",
+    "location": "A1",
+    "fisico": 930,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260922",
+    "location": "A2",
+    "fisico": 130,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260621",
+    "location": "A3",
+    "fisico": 540,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260921",
+    "location": "A3",
+    "fisico": 29,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260918",
+    "location": "AV",
+    "fisico": 2,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260921",
+    "location": "AV",
+    "fisico": 12,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260611",
+    "location": "AV",
+    "fisico": 2,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260925",
+    "location": "AV",
+    "fisico": 41,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260913",
+    "location": "AV",
+    "fisico": 17,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260920",
+    "location": "AV",
+    "fisico": 15,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260923",
+    "location": "A7",
+    "fisico": 12,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260924",
+    "location": "A7",
+    "fisico": 980,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260923",
+    "location": "A8",
+    "fisico": 930,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260923",
+    "location": "A9",
+    "fisico": 930,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260924",
+    "location": "C7",
+    "fisico": 280,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260920",
+    "location": "C6",
+    "fisico": 280,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260920",
+    "location": "C5",
+    "fisico": 385,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260925",
+    "location": "C3",
+    "fisico": 393,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260929",
+    "location": "C11",
+    "fisico": 105,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260928",
+    "location": "AV",
+    "fisico": 35,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260923",
+    "location": "A21",
+    "fisico": 595,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260922",
+    "location": "A21",
+    "fisico": 105,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260923",
+    "location": "AV",
+    "fisico": 17,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260928",
+    "location": "A22",
+    "fisico": 840,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260920",
+    "location": "B3",
+    "fisico": 870,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260920",
+    "location": "B4",
+    "fisico": 460,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260919",
+    "location": "B4",
+    "fisico": 80,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260919",
+    "location": "B5",
+    "fisico": 540,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260930",
+    "location": "B6",
+    "fisico": 540,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260928",
+    "location": "B9",
+    "fisico": 540,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260928",
+    "location": "B10",
+    "fisico": 540,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260928",
+    "location": "B12",
+    "fisico": 540,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260928",
+    "location": "B13",
+    "fisico": 540,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260927",
+    "location": "B13",
+    "fisico": 540,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260924",
+    "location": "B16",
+    "fisico": 1320,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260925",
+    "location": "B16",
+    "fisico": 180,
+    "nota": null
+  },
+  {
+    "producto": "PT LA INSUPERABLE REPOSTERIA 50KG",
+    "lote": "20260811",
+    "location": "AV",
+    "fisico": 11,
+    "nota": null
+  },
+  {
+    "producto": "PT LA INSUPERABLE REPOSTERIA 50KG",
+    "lote": "20260827",
+    "location": "AV",
+    "fisico": 106,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 50 Kg.",
+    "lote": "20260925",
+    "location": "A27",
+    "fisico": 1120,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260925",
+    "location": "A12",
+    "fisico": 75,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260926",
+    "location": "AV",
+    "fisico": 6,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260918",
+    "location": "AV",
+    "fisico": 7,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260909",
+    "location": "AV",
+    "fisico": 3,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260926",
+    "location": "A6",
+    "fisico": 930,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260927",
+    "location": "C2",
+    "fisico": 245,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260904",
+    "location": "AV",
+    "fisico": 4,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260911",
+    "location": "AV",
+    "fisico": 11,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260927",
+    "location": "A15",
+    "fisico": 135,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260930",
+    "location": "A16",
+    "fisico": 70,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260930",
+    "location": "A17",
+    "fisico": 116,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260929",
+    "location": "A23",
+    "fisico": 840,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260917",
+    "location": "A25",
+    "fisico": 435,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260918",
+    "location": "A25",
+    "fisico": 140,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260914",
+    "location": "B1",
+    "fisico": 392,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260915",
+    "location": "B1",
+    "fisico": 358,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260915",
+    "location": "B2",
+    "fisico": 234,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260930",
+    "location": "B2",
+    "fisico": 306,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260929",
+    "location": "B6",
+    "fisico": 557,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260930",
+    "location": "B6",
+    "fisico": 403,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260926",
+    "location": "B14",
+    "fisico": 540,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260925",
+    "location": "B15",
+    "fisico": 457,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 50 Kg.",
+    "lote": "20260926",
+    "location": "B15",
+    "fisico": 1043,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 12.5 Kg.",
+    "lote": "20260912",
+    "location": "Caracol",
+    "fisico": 280,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 12.5 Kg.",
+    "lote": "20260612",
+    "location": "AV",
+    "fisico": 1,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 12.5 Kg.",
+    "lote": "20260928",
+    "location": "AV",
+    "fisico": 13,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Premium 12,5 Kg.",
+    "lote": "20260925",
+    "location": "AV",
+    "fisico": 75,
+    "nota": null
+  },
+  {
+    "producto": "PT LA INSUPERABLE POLI PANADERIA 50 KG BOGOTA",
+    "lote": "20260821",
+    "location": "A14",
+    "fisico": 37,
+    "nota": null
+  },
+  {
+    "producto": "PT LA INSUPERABLE POLI PANADERIA 50 KG BOGOTA",
+    "lote": "20260821",
+    "location": "AV",
+    "fisico": 2,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE PAPEL PANADERIA 25KG",
+    "lote": "20260916",
+    "location": "AV",
+    "fisico": 6,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE PAPEL PANADERIA 25KG",
+    "lote": "20260922",
+    "location": "C7",
+    "fisico": 252,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE PAPEL PANADERIA 25KG",
+    "lote": "20260922",
+    "location": "C6",
+    "fisico": 285,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 25 Kg.",
+    "lote": "20260829",
+    "location": "AV",
+    "fisico": 6,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Especial 25 Kg.",
+    "lote": "20260925",
+    "location": "AV",
+    "fisico": 2,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE PAPEL PANADERIA 50KG",
+    "lote": "20260916",
+    "location": "C4",
+    "fisico": 280,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE PAPEL PANADERIA 50KG",
+    "lote": "20260831",
+    "location": "C4",
+    "fisico": 27,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Premium 50 Kg.",
+    "lote": "20260923",
+    "location": "C4",
+    "fisico": 90,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Premium 50 Kg.",
+    "lote": "20260831",
+    "location": "AV",
+    "fisico": 22,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Premium 50 Kg.",
+    "lote": "20260917",
+    "location": "AV",
+    "fisico": 4,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Premium 50 Kg.",
+    "lote": "20260928",
+    "location": "AV",
+    "fisico": 1,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Premium 50 Kg.",
+    "lote": "20260829",
+    "location": "AV",
+    "fisico": 51,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 25 Kg.",
+    "lote": "20260928",
+    "location": "AV",
+    "fisico": 1,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 25 Kg.",
+    "lote": "20260919",
+    "location": "A13",
+    "fisico": 108,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Panificacion 25 Kg.",
+    "lote": "20260924",
+    "location": "AV",
+    "fisico": 1,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Integral 50 Kg.",
+    "lote": "20260917",
+    "location": "AV",
+    "fisico": 21,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Integral 50 Kg.",
+    "lote": "20260827",
+    "location": "AV",
+    "fisico": 21,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Integral 50 Kg.",
+    "lote": "20260828",
+    "location": "AV",
+    "fisico": 68,
+    "nota": null
+  },
+  {
+    "producto": "Indupan Integral 50 Kg.",
+    "lote": "20260829",
+    "location": "AV",
+    "fisico": 105,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE 25LB",
+    "lote": "20260916",
+    "location": "AV",
+    "fisico": 3,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE 25LB",
+    "lote": "20260919",
+    "location": "AV",
+    "fisico": 7,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE 25LB",
+    "lote": "20260915",
+    "location": "AV",
+    "fisico": 3,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE 25LB",
+    "lote": "20260917",
+    "location": "AV",
+    "fisico": 4,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE 25LB",
+    "lote": "20260914",
+    "location": "AV",
+    "fisico": 1,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE 25LB",
+    "lote": "20260929",
+    "location": "AV",
+    "fisico": 3,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE 25LB",
+    "lote": "20260930",
+    "location": "AV",
+    "fisico": 1292,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE 25LB",
+    "lote": "20260909",
+    "location": "P",
+    "fisico": 3192,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE 25LB",
+    "lote": "20260910",
+    "location": "P",
+    "fisico": 798,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE 25LB",
+    "lote": "20260914",
+    "location": "P",
+    "fisico": 1784,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE 25LB",
+    "lote": "20260929",
+    "location": "P",
+    "fisico": 3600,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE 25LB",
+    "lote": "20260930",
+    "location": "P",
+    "fisico": 1330,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE 25LB",
+    "lote": "20260921",
+    "location": "P",
+    "fisico": 34,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE 25LB",
+    "lote": "20260918",
+    "location": "P",
+    "fisico": 2793,
+    "nota": null
+  },
+  {
+    "producto": "PT LA NIEVE 25LB",
+    "lote": "20260919",
+    "location": "P",
+    "fisico": 2101,
+    "nota": null
+  },
+  {
+    "producto": "Harina la Nieve 1000 Gr. X 20 Und.",
+    "lote": "20260916",
+    "location": "P",
+    "fisico": 15,
+    "nota": null
+  },
+  {
+    "producto": "Harina la Nieve 1000 Gr. X 20 Und.",
+    "lote": "20260925",
+    "location": "P",
+    "fisico": 101,
+    "nota": null
+  },
+  {
+    "producto": "indupan panificacion 1000Kg x20",
+    "lote": "20260910",
+    "location": "AV",
+    "fisico": 1,
+    "nota": null
+  },
+  {
+    "producto": "indupan panificacion 1000Kg x20",
+    "lote": "20260911",
+    "location": "AV",
+    "fisico": 1,
+    "nota": null
+  },
+  {
+    "producto": "indupan panificacion 1000Kg x20",
+    "lote": "20260925",
+    "location": "A20",
+    "fisico": 1246,
+    "nota": null
+  }
+]
