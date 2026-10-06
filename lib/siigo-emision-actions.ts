@@ -27,6 +27,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { checkModulePermission } from "@/lib/permissions-actions"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
 import { crearFactura, type ItemFactura } from "@/lib/siigo"
+import { getValoresNetosOrden } from "@/lib/facturacion-control-actions"
 
 const MODULO = "Ciclo de Facturación"
 
@@ -390,6 +391,42 @@ export interface Verificacion {
 }
 
 /**
+ * El valor que se le factura a una orden.
+ *
+ * `valorpago` SOLO se llena cuando alguien confirma la factura en Solicitar
+ * Facturas. Antes de eso vale 0, y facturar por ese numero emitiria un
+ * documento fiscal en cero -- irreversible.
+ *
+ * Asi que cuando no hay `valorpago` se usa el valor NETO calculado (operacion
+ * x tarifa), que es el mismo numero que Solicitar Facturas y el Ciclo ya
+ * muestran. Al reves no: si hay `valorpago` manda ese, porque es el valor ya
+ * acordado con IVA y retefuente aplicados, y pisarlo con una estimacion
+ * cambiaria lo que se le cobra al cliente.
+ *
+ * Devuelve 0 cuando no se puede calcular; quien llama decide si eso bloquea.
+ */
+async function valorAFacturar(orden: {
+  ordendecargue?: string | null
+  valorpago?: number | null
+  idempresa?: number | null
+}): Promise<number> {
+  const pagado = Number(orden.valorpago ?? 0)
+  if (pagado > 0) return pagado
+
+  const num = String(orden.ordendecargue ?? "").trim()
+  if (!num || !orden.idempresa) return 0
+
+  try {
+    const r = await getValoresNetosOrden(Number(orden.idempresa), [num])
+    return r.success ? Number(r.data?.[num] ?? 0) : 0
+  } catch {
+    // Que falle el calculo no debe tumbar la verificacion: devuelve 0 y el
+    // llamador reporta "sin valor", que es lo correcto y seguro.
+    return 0
+  }
+}
+
+/**
  * ¿Se puede facturar esta orden?
  *
  * La misma comprobación que hace la emisión, expuesta aparte para que la
@@ -403,7 +440,7 @@ export async function puedeFacturarOrden(ordenId: number): Promise<Verificacion>
     const sb: any = await getSupabaseAdmin()
     const { data: orden } = await sb
       .from("cabeceraoc")
-      .select("id, ordendecargue, estadofactura, facturasiigo, valorpago, cliente")
+      .select("id, ordendecargue, estadofactura, facturasiigo, valorpago, cliente, idempresa")
       .eq("id", ordenId)
       .maybeSingle()
 
@@ -437,7 +474,7 @@ export async function puedeFacturarOrden(ordenId: number): Promise<Verificacion>
       }
     }
 
-    if (!orden.valorpago || Number(orden.valorpago) <= 0) {
+    if ((await valorAFacturar(orden)) <= 0) {
       return { puede: false, motivo: "La orden no tiene valor a facturar." }
     }
 
@@ -534,7 +571,16 @@ export async function emitirFacturaOrden(
     }
 
     // --- 5) La factura ------------------------------------------------------
-    const valor = Number(orden.valorpago ?? 0)
+    const valor = await valorAFacturar(orden)
+    /*
+     * `puedeFacturarOrden` ya comprobo el valor, pero aqui se vuelve a
+     * calcular y entre los dos momentos pudo cambiar. Una factura en cero sale
+     * firmada ante la DIAN igual que cualquier otra y despues hay que anularla
+     * con nota credito, asi que se comprueba otra vez justo antes de enviar.
+     */
+    if (valor <= 0) {
+      return { success: false, message: "La orden no tiene valor a facturar." }
+    }
     const hoy = new Intl.DateTimeFormat("en-CA", {
       timeZone: "America/Bogota",
       year: "numeric",

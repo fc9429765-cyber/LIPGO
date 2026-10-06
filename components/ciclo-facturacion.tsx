@@ -24,6 +24,7 @@ import { useAuth } from "@/components/auth-provider"
 import { getUserPermissions } from "@/lib/permissions-actions"
 import BotonFacturarSiigo from "@/components/facturacion/boton-facturar-siigo"
 import { CORTE_CICLO_SIIGO } from "@/lib/ciclo-facturacion-shared"
+import { getValoresNetosOrden } from "@/lib/facturacion-control-actions"
 import {
   listarCicloFacturacion,
   getEventosCiclo,
@@ -1499,6 +1500,16 @@ function PagosContadoPanel({
    * para ganar lo mismo.
    */
   const [recarga, setRecarga] = useState(0)
+  /*
+   * Valor NETO por orden -- operación x tarifa, el mismo cálculo del cuadro y
+   * de la prefactura.
+   *
+   * `valorpago` SOLO se llena cuando alguien confirma la factura en Solicitar
+   * Facturas, asi que antes de eso llega en cero y la pantalla mostraba $0 en
+   * todo. Solicitar Facturas ya resolvia esto calculando el neto aparte; aqui
+   * faltaba, y sin el no se puede facturar sin pasar antes por alla.
+   */
+  const [valoresNetos, setValoresNetos] = useState<Record<string, number>>({})
 
   useEffect(() => {
     let cancelado = false
@@ -1550,6 +1561,45 @@ function PagosContadoPanel({
     }
   }, [empresaId, periodoDesde, periodoHasta, toast, recarga])
 
+  /*
+   * El valor neto se pide DESPUES de tener las ordenes, igual que en Solicitar
+   * Facturas: solo el de las ordenes ya cargadas, no el del historial entero.
+   *
+   * Necesita `empresaId` porque la tarifa depende de la empresa. Sin empresa
+   * seleccionada no se puede calcular, y la pantalla cae de vuelta a
+   * `valorpago`.
+   */
+  useEffect(() => {
+    if (!empresaId || ordenes.length === 0) {
+      setValoresNetos({})
+      return
+    }
+    let cancelado = false
+    const nums = ordenes.map((o) => o.ordendecargue).filter(Boolean)
+    getValoresNetosOrden(empresaId, nums)
+      .then((r) => {
+        if (!cancelado && r.success) setValoresNetos(r.data)
+      })
+      .catch(() => {})
+    return () => {
+      cancelado = true
+    }
+  }, [empresaId, ordenes])
+
+  /*
+   * Lo que se muestra y lo que se factura.
+   *
+   * Se prefiere `valorpago` cuando existe --es el valor ya confirmado, con IVA
+   * y retefuente aplicados-- y se cae al neto calculado cuando todavia no se
+   * ha confirmado la factura. Al reves se pisaria un valor acordado con una
+   * estimacion.
+   */
+  const valorDe = (o: OrdenContado) => {
+    const pagado = Number(o.valorpago || 0)
+    if (pagado > 0) return pagado
+    return Number(valoresNetos[o.ordendecargue] || 0)
+  }
+
   const cuentas = useMemo(
     () => Array.from(new Set(ordenes.map((o) => o.cuentatransferencia).filter(Boolean))) as string[],
     [ordenes],
@@ -1565,7 +1615,7 @@ function PagosContadoPanel({
     [ordenes, soloSinComprobante, cuentaFiltro],
   )
 
-  const total = filtradas.reduce((s, o) => s + Number(o.valorpago || 0), 0)
+  const total = filtradas.reduce((s, o) => s + valorDe(o), 0)
   const sinComprobante = filtradas.filter((o) => !o.comprobante).length
   const urls = viendoComprobante ? comprobanteUrls(viendoComprobante.comprobante) : []
 
@@ -1627,7 +1677,7 @@ function PagosContadoPanel({
                   <td className="p-2">{o.placa}</td>
                   <td className="p-2">{o.cliente || "-"}</td>
                   <td className="p-2">{o.cuentatransferencia || "-"}</td>
-                  <td className="p-2 text-right">{money(Number(o.valorpago || 0))}</td>
+                  <td className="p-2 text-right">{money(valorDe(o))}</td>
                   <td className="p-2 text-center">
                     {o.comprobante ? (
                       <Button
@@ -1651,7 +1701,7 @@ function PagosContadoPanel({
                       ordenId={o.id}
                       orden={o.ordendecargue}
                       cliente={o.cliente}
-                      valor={Number(o.valorpago || 0)}
+                      valor={valorDe(o)}
                       facturaExistente={o.facturasiigo}
                       onEmitida={() => setRecarga((n) => n + 1)}
                     />
