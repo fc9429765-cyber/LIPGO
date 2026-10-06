@@ -985,22 +985,6 @@ function GenerateLoadOrdersComponent() {
                 </div>
               </>
             )}
-            {sinVehiculo && (
-              <>
-                <div className="space-y-1">
-                  <Label htmlFor="fechaOrdenCargue" className="text-xs">Fecha orden de cargue</Label>
-                  <DatePickerField id="fechaOrdenCargue" value={fechaOrdenCargue} onChange={setFechaOrdenCargue} className={campo("fechaCargue")} />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="fechaEntrega" className="text-xs">Fecha entrega</Label>
-                  <DatePickerField id="fechaEntrega" value={fechaEntrega} onChange={setFechaEntrega} className={campo("fechaEntrega")} />
-                </div>
-                <div className="space-y-1 sm:col-span-2">
-                  <Label htmlFor="observaciones" className="text-xs">Observaciones</Label>
-                  <Textarea id="observaciones" value={observaciones} onChange={(e) => setObservaciones(e.target.value)} className="min-h-[56px] bg-background text-sm" placeholder="Agregar observaciones..." />
-                </div>
-              </>
-            )}
           </div>
         </section>
 
