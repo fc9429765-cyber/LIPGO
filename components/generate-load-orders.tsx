@@ -37,6 +37,10 @@ import { useAuth } from "@/components/auth-provider"
 // Importing Accordion components for collapsible order details
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { PedidosDelDia } from "@/components/operacion/pedidos-del-dia"
+import { Chip, Esqueleto, EstadoVacio, Eyebrow, Progreso, TEXTO_TONO, type Tono } from "@/components/ui/lipgo"
+import { AlertTriangle, Search, SlidersHorizontal, Truck } from "lucide-react"
+import { hoyBogotaISO } from "@/lib/periodo-listados"
+import { diasEntreISO } from "@/lib/pedidos-del-dia"
 
 interface Cliente {
   id: number
@@ -60,6 +64,7 @@ interface Order {
   aprobado: string
   orden_de_compra?: string
   estado?: string
+  fecha_programada?: string | null
 }
 
 interface OrderDetail {
@@ -85,6 +90,10 @@ interface Vehicle {
 
 function GenerateLoadOrdersComponent() {
   const { selectedEmpresaId } = useAuth()
+  // Solo presentación: búsqueda, vista rápida y filtros plegados (no cambian la consulta ni los filtros).
+  const [busqueda, setBusqueda] = useState("")
+  const [vista, setVista] = useState<"todos" | "hoy" | "atrasados" | "parciales">("todos")
+  const [mostrarFiltros, setMostrarFiltros] = useState(false)
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [bodegas, setBodegas] = useState<Bodega[]>([])
   const [selectedBodega, setSelectedBodega] = useState<string>("all")
@@ -816,213 +825,137 @@ function GenerateLoadOrdersComponent() {
 
   // Extract just the names for the cliente filter dropdown
   const clienteOptions = clientes.map((cliente) => cliente.nombre)
+  // ---- Solo presentación (gerencia 2026-10-05: "esa lógica está perfecta, ojo con dañar algo ahí") ----
+  // Búsqueda y vista rápida sobre los pedidos YA cargados por loadOrders: no cambian la consulta ni los
+  // filtros de siempre (que siguen abajo, en "Más filtros"). La promesa viene de pedidoscabecera (select *).
+  const hoyISO = hoyBogotaISO()
+  const promesaDe = (o: Order) => (o.fecha_programada ? String(o.fecha_programada).slice(0, 10) : null)
+  const diasAtraso = (o: Order) => {
+    const p = promesaDe(o)
+    return p ? diasEntreISO(p, hoyISO) : 0
+  }
+  const esParcial = (o: Order) => String(o.estado ?? "").toLowerCase().trim() === "parcial"
+  const coincide = (o: Order) => {
+    const q = busqueda.trim().toLowerCase()
+    if (!q) return true
+    return [o.cliente, o.pedido, o.orden_de_compra, String(o.idpedido), o.destino].some((v) => String(v ?? "").toLowerCase().includes(q))
+  }
+  const enVista = (o: Order) =>
+    vista === "todos" ? true : vista === "hoy" ? promesaDe(o) === hoyISO : vista === "atrasados" ? diasAtraso(o) > 0 : esParcial(o)
+  const ordenesVisibles = orders
+    .filter((o) => coincide(o) && enVista(o))
+    .sort((a, b) => (promesaDe(a) ?? "9999-12-31").localeCompare(promesaDe(b) ?? "9999-12-31") || b.idpedido - a.idpedido)
+  const nHoy = orders.filter((o) => promesaDe(o) === hoyISO).length
+  const nAtrasados = orders.filter((o) => diasAtraso(o) > 0).length
+  const nParciales = orders.filter(esParcial).length
+  const resumen = getProductsSummary()
+  const totalUnidades = resumen.reduce((s, i) => s + i.totalUnidadesDespachadas, 0)
+  const tonoCapacidad: Tono = capacityPercentage >= 100 ? "critico" : capacityPercentage >= 80 ? "atencion" : capacityPercentage >= 60 ? "info" : "ok"
+  const fechaCorta = (iso: string) => {
+    const [y, m, d] = iso.split("-").map(Number)
+    return new Intl.DateTimeFormat("es-CO", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)))
+  }
+  const chipPromesa = (o: Order) => {
+    const p = promesaDe(o)
+    if (!p) return <Chip tono="neutro">Sin promesa</Chip>
+    const d = diasAtraso(o)
+    if (d > 0) return <Chip tono="atencion">Atrasado {d} d</Chip>
+    if (p === hoyISO) return <Chip tono="critico">Vence hoy</Chip>
+    return <Chip tono="info">{fechaCorta(p)}</Chip>
+  }
+  const campo = (id: string) => cn("h-9 bg-background text-sm", missingFields.has(id) && "border-2 border-critico-bd")
+  const botonGenerar = (
+    <Button onClick={handleGenerateLoadOrder} disabled={selectedOrders.length === 0 || isGenerating} className="gap-1.5">
+      {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
+      {isGenerating ? "Generando…" : selectedOrders.length > 0 ? `Generar orden · ${selectedOrders.length} ${selectedOrders.length === 1 ? "pedido" : "pedidos"} · ${totalWeightTons.toFixed(1)} t` : "Generar orden de cargue"}
+    </Button>
+  )
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
-      <div className="p-2 lg:p-3 space-y-2">
-        {/* Pedidos del día: qué vence hoy, con panel lateral; solo con permiso de este módulo (gerencia 2026-10-05). */}
-        <PedidosDelDia empresaId={selectedEmpresaId} />
-        {/* Top Row: Encabezado de la orden + Filtros de Pedidos + Capacidad Vehículo */}
-        <div className="w-full flex gap-2 lg:gap-3">
-          {/* Encabezado de la orden - Left side (smaller card) */}
-          <Card className="w-80 flex-shrink-0">
-            <CardHeader className="pb-1 py-1.5">
-              <CardTitle className="text-xs lg:text-sm">Encabezado de la orden</CardTitle>
-            </CardHeader>
+    <div className="flex flex-col gap-4 p-3 sm:p-4">
+      {/* Cabecera */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <Eyebrow>Recepción y Despacho · Órdenes · Cargue</Eyebrow>
+          <h1 className="text-xl font-bold leading-tight sm:text-2xl">Generar orden de cargue</h1>
+          <p className="lg-num text-sm text-muted-foreground">
+            {orders.length} {orders.length === 1 ? "pedido aprobado" : "pedidos aprobados"} sin orden · {vehicles.length} {vehicles.length === 1 ? "vehículo" : "vehículos"} en cita
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            disabled={loading}
+            onClick={() => {
+              loadOrders()
+              loadVehicles()
+              toast({ title: "Actualizando datos", description: "Recargando pedidos desde la base de datos..." })
+            }}
+          >
+            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            Actualizar
+          </Button>
+          <div className="hidden sm:block">{botonGenerar}</div>
+        </div>
+      </div>
 
-            <CardContent className="space-y-2 overflow-y-auto flex-1 px-2 py-1.5 max-h-[200px]">
-              <div className="flex items-center space-x-1.5">
-                <Checkbox
-                  id="sin-vehiculo"
-                  checked={sinVehiculo}
-                  onCheckedChange={(checked) => {
-                    setSinVehiculo(checked as boolean)
-                    if (checked as boolean) {
-                      setVehiculo("")
-                      setNombreConductor("")
-                      setTipoTransporte("")
-                    }
-                  }}
-                  className="h-3 w-3 rounded border-gray-300"
-                />
-                <Label htmlFor="sin-vehiculo" className="text-[10px] lg:text-xs font-medium cursor-pointer">
-                  Sin vehículo
-                </Label>
+      {/* Pedidos del día: qué vence hoy, con panel lateral; solo con permiso de este módulo (gerencia 2026-10-05). */}
+      <PedidosDelDia empresaId={selectedEmpresaId} />
+
+      <div className="grid gap-4 lg:grid-cols-12">
+        {/* PASO 1 · Elige los pedidos */}
+        <section className="lg-card flex flex-col lg:col-span-7" aria-label="Paso 1: elige los pedidos">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4 pb-2">
+            <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+              <span className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">1</span>
+              Elige los pedidos
+            </h2>
+            <span className="text-xs text-muted-foreground">solo aprobados y sin orden · los atrasados y los de hoy van primero</span>
+          </div>
+
+          <div className="flex flex-col gap-2 px-4 pb-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative w-full sm:w-72">
+                <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden />
+                <Input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Cliente, N° de pedido u OC" aria-label="Buscar pedido" className="h-9 bg-background pl-8 text-sm" />
               </div>
+              <button type="button" onClick={() => setVista("todos")} className={cn("lg-num inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium", vista === "todos" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background")}>Todos {orders.length}</button>
+              <button type="button" onClick={() => setVista("hoy")} className={cn("lg-num inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium", vista === "hoy" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background")}><span className="inline-block h-2 w-2 rounded-full bg-red-700" aria-hidden />Vencen hoy {nHoy}</button>
+              <button type="button" onClick={() => setVista("atrasados")} className={cn("lg-num inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium", vista === "atrasados" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background")}><span className="inline-block h-2 w-2 rounded-full bg-amber-600" aria-hidden />Atrasados {nAtrasados}</button>
+              <button type="button" onClick={() => setVista("parciales")} className={cn("lg-num inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium", vista === "parciales" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background")}>Parciales {nParciales}</button>
+              <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setMostrarFiltros((v) => !v)} aria-expanded={mostrarFiltros}>
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                {mostrarFiltros ? "Menos filtros" : "Más filtros"}
+              </Button>
+            </div>
 
-              {!sinVehiculo && (
-                <>
-                  <div className="space-y-0.5">
-                    <Label htmlFor="vehiculo" className="text-[10px] lg:text-xs">
-                      Vehículo
-                    </Label>
-                    <Select value={vehiculo} onValueChange={handleVehicleChange}>
-                      <SelectTrigger id="vehiculo" className="bg-white h-6 lg:h-7 text-[10px] lg:text-xs">
-                        <SelectValue placeholder="Seleccione un vehículo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {vehicles.map((vehicle) => (
-                          <SelectItem key={vehicle.placa} value={vehicle.placa}>
-                            {vehicle.placa}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-0.5">
-                    <Label htmlFor="conductor" className="text-[10px] lg:text-xs">
-                      Nombre Conductor
-                    </Label>
-                    <Input
-                      id="conductor"
-                      value={nombreConductor}
-                      disabled
-                      className="bg-muted h-6 lg:h-7 text-[10px] lg:text-xs"
-                    />
-                  </div>
-
-                  <div className="space-y-0.5">
-                    <Label htmlFor="tipoTransporte" className="text-[10px] lg:text-xs">
-                      Tipo Transporte
-                    </Label>
-                    <Select value={tipoTransporte} onValueChange={setTipoTransporte}>
-                      <SelectTrigger id="tipoTransporte" className="bg-white h-6 lg:h-7 text-[10px] lg:text-xs">
-                        <SelectValue placeholder="Seleccione tipo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {transportes.map((t) => (
-                          <SelectItem key={t.nombretransporte} value={t.nombretransporte}>
-                            {t.nombretransporte}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-0.5">
-                    <Label htmlFor="fechaOrdenCargue" className="text-[10px] lg:text-xs">
-                      Fecha Orden de Cargue
-                    </Label>
-                    <DatePickerField
-                      id="fechaOrdenCargue"
-                      value={fechaOrdenCargue}
-                      onChange={setFechaOrdenCargue}
-                      className={`bg-white h-6 lg:h-7 text-[10px] lg:text-xs ${
-                        missingFields.has("fechaCargue") ? "border-red-500 border-2" : ""
-                      }`}
-                    />
-                  </div>
-
-                  <div className="space-y-0.5">
-                    <Label htmlFor="fechaEntrega" className="text-[10px] lg:text-xs">
-                      Fecha Entrega
-                    </Label>
-                    <DatePickerField
-                      id="fechaEntrega"
-                      value={fechaEntrega}
-                      onChange={setFechaEntrega}
-                      className={`bg-white h-6 lg:h-7 text-[10px] lg:text-xs ${
-                        missingFields.has("fechaEntrega") ? "border-red-500 border-2" : ""
-                      }`}
-                    />
-                  </div>
-
-                  <div className="space-y-0.5">
-                    <Label htmlFor="observaciones" className="text-[10px] lg:text-xs">
-                      Observaciones
-                    </Label>
-                    <Textarea
-                      id="observaciones"
-                      value={observaciones}
-                      onChange={(e) => setObservaciones(e.target.value)}
-                      className="bg-white text-[10px] lg:text-xs min-h-12 max-h-20 p-1.5 resize-none"
-                      placeholder="Agregar observaciones..."
-                    />
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Filtros de Pedidos - Middle (flex-1) */}
-          <Card className="flex-1">
-            <CardHeader className="pb-1 py-1.5">
-              {/* CHANGE: Added refresh button next to title */}
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs lg:text-sm">Filtros de Pedidos</CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    loadOrders()
-                    toast({
-                      title: "Actualizando datos",
-                      description: "Recargando pedidos desde la base de datos...",
-                    })
-                  }}
-                  disabled={loading}
-                  className="h-6 px-2 text-[10px] lg:text-xs"
-                >
-                  {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                  <span className="ml-1 hidden sm:inline">Actualizar</span>
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="pb-1.5 pt-1 space-y-2">
-              {/* First Row: Bodega, Fecha, Estado, Ciudad (4 columns) */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5 lg:gap-2">
-                <div className="space-y-0.5">
-                  <Label htmlFor="bodega-filter" className="text-[10px] lg:text-xs font-semibold">
-                    Bodega
-                  </Label>
+            {mostrarFiltros && (
+              <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-muted/40 p-3 sm:grid-cols-3 lg:grid-cols-4">
+                <div className="space-y-1">
+                  <Label htmlFor="bodega-filter" className="text-xs">Bodega</Label>
                   <Select value={selectedBodega} onValueChange={setSelectedBodega}>
-                    <SelectTrigger id="bodega-filter" className="bg-white h-6 lg:h-7 text-[10px] lg:text-xs">
-                      <SelectValue placeholder="Todas" />
-                    </SelectTrigger>
+                    <SelectTrigger id="bodega-filter" className="h-9 bg-background text-sm"><SelectValue placeholder="Todas" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todas</SelectItem>
                       {bodegas.map((bodega) => (
-                        <SelectItem key={bodega.id} value={bodega.id.toString()}>
-                          {bodega.nombre}
-                        </SelectItem>
+                        <SelectItem key={bodega.id} value={bodega.id.toString()}>{bodega.nombre}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-
-                <div className="space-y-0.5">
-                  <Label htmlFor="fecha-filter" className="text-[10px] lg:text-xs">
-                    Fecha
-                  </Label>
-                  <div className="space-y-0.5">
-                    <DatePickerField
-                      id="fecha-filter"
-                      value={selectedFecha}
-                      onChange={setSelectedFecha}
-                      className="bg-white h-6 lg:h-7 text-[10px] lg:text-xs"
-                    />
-                    {selectedFecha && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSelectedFecha("")}
-                        className="h-5 px-1.5 text-[10px] w-full"
-                      >
-                        Limpiar
-                      </Button>
-                    )}
-                  </div>
+                <div className="space-y-1">
+                  <Label htmlFor="fecha-filter" className="text-xs">Fecha del pedido</Label>
+                  <DatePickerField id="fecha-filter" value={selectedFecha} onChange={setSelectedFecha} className="h-9 bg-background text-sm" />
+                  {selectedFecha && (
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedFecha("")} className="h-6 px-1.5 text-xs">Limpiar</Button>
+                  )}
                 </div>
-
-                <div className="space-y-0.5">
-                  <Label htmlFor="estado-filter" className="text-[10px] lg:text-xs">
-                    Estado
-                  </Label>
+                <div className="space-y-1">
+                  <Label htmlFor="estado-filter" className="text-xs">Estado</Label>
                   <Select value={selectedEstado} onValueChange={setSelectedEstado}>
-                    <SelectTrigger id="estado-filter" className="bg-white h-6 lg:h-7 text-[10px] lg:text-xs">
-                      <SelectValue placeholder="Todos" />
-                    </SelectTrigger>
+                    <SelectTrigger id="estado-filter" className="h-9 bg-background text-sm"><SelectValue placeholder="Todos" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
                       <SelectItem value="parcial">Parcial</SelectItem>
@@ -1030,55 +963,37 @@ function GenerateLoadOrdersComponent() {
                     </SelectContent>
                   </Select>
                 </div>
-
-                <div className="space-y-0.5">
-                  <Label htmlFor="ciudad-filter" className="text-[10px] lg:text-xs">
-                    Ciudad
-                  </Label>
+                <div className="space-y-1">
+                  <Label htmlFor="ciudad-filter" className="text-xs">Ciudad</Label>
                   <Select value={selectedCiudad} onValueChange={setSelectedCiudad}>
-                    <SelectTrigger id="ciudad-filter" className="bg-white h-6 lg:h-7 text-[10px] lg:text-xs">
-                      <SelectValue placeholder="Todas" />
-                    </SelectTrigger>
+                    <SelectTrigger id="ciudad-filter" className="h-9 bg-background text-sm"><SelectValue placeholder="Todas" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todas</SelectItem>
                       {ciudadOptions.map((ciudad) => (
-                        <SelectItem key={ciudad} value={ciudad}>
-                          {ciudad}
-                        </SelectItem>
+                        <SelectItem key={ciudad} value={ciudad}>{ciudad}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-
-              {/* Second Row: Cliente, Vendedor, OC, Empty (4 columns to match first row) */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5 lg:gap-2">
-                <div className="space-y-0.5">
-                  <Label htmlFor="cliente-filter" className="text-[10px] lg:text-xs">
-                    Cliente
-                  </Label>
+                <div className="space-y-1">
+                  <Label htmlFor="cliente-filter" className="text-xs">Cliente</Label>
                   <Popover open={openClienteCombobox} onOpenChange={setOpenClienteCombobox}>
                     <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={openClienteCombobox}
-                        className="bg-white h-6 lg:h-7 text-[10px] lg:text-xs w-full justify-between"
-                      >
-                        {selectedCliente && selectedCliente !== "all" ? selectedCliente : "Todos"}
+                      <Button id="cliente-filter" variant="outline" role="combobox" aria-expanded={openClienteCombobox} className="h-9 w-full justify-between bg-background text-sm font-normal">
+                        <span className="truncate">{selectedCliente && selectedCliente !== "all" ? selectedCliente : "Todos"}</span>
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[200px] p-0">
+                    <PopoverContent className="w-[260px] p-0">
                       <Command>
-                        <CommandInput placeholder="Buscar cliente..." className="h-8 text-[10px] lg:text-xs" />
+                        <CommandInput placeholder="Buscar cliente..." className="h-9 text-sm" />
                         <CommandEmpty>No se encontró cliente.</CommandEmpty>
                         <CommandGroup>
                           <CommandList>
                             <CommandItem
                               value="all"
-                              onSelect={(currentValue) => {
-                                setSelectedCliente(currentValue === selectedCliente ? "all" : "all")
+                              onSelect={() => {
+                                setSelectedCliente("all")
                                 setOpenClienteCombobox(false)
                               }}
                             >
@@ -1094,9 +1009,7 @@ function GenerateLoadOrdersComponent() {
                                   setOpenClienteCombobox(false)
                                 }}
                               >
-                                <Check
-                                  className={cn("mr-2 h-4 w-4", selectedCliente === cliente ? "opacity-100" : "opacity-0")}
-                                />
+                                <Check className={cn("mr-2 h-4 w-4", selectedCliente === cliente ? "opacity-100" : "opacity-0")} />
                                 {cliente}
                               </CommandItem>
                             ))}
@@ -1106,398 +1019,343 @@ function GenerateLoadOrdersComponent() {
                     </PopoverContent>
                   </Popover>
                 </div>
-
-                <div className="space-y-0.5">
-                  <Label htmlFor="vendedor-filter" className="text-[10px] lg:text-xs">
-                    Vendedor
-                  </Label>
+                <div className="space-y-1">
+                  <Label htmlFor="vendedor-filter" className="text-xs">Vendedor</Label>
                   <Select value={selectedVendedor} onValueChange={setSelectedVendedor}>
-                    <SelectTrigger id="vendedor-filter" className="bg-white h-6 lg:h-7 text-[10px] lg:text-xs">
-                      <SelectValue placeholder="Todos" />
-                    </SelectTrigger>
+                    <SelectTrigger id="vendedor-filter" className="h-9 bg-background text-sm"><SelectValue placeholder="Todos" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
                       {vendedorOptions.map((vendedor) => (
-                        <SelectItem key={vendedor} value={vendedor}>
-                          {vendedor}
-                        </SelectItem>
+                        <SelectItem key={vendedor} value={vendedor}>{vendedor}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-
-                {/* Update starts here */}
-                <div className="space-y-0.5">
-                  <Label htmlFor="oc-filter" className="text-[10px] lg:text-xs">
-                    OC
-                  </Label>
-                  <MultiSelect
-                    options={ocOptions}
-                    selected={selectedOCs}
-                    onChange={setSelectedOCs}
-                    placeholder="Todas"
-                    className="bg-white h-6 lg:h-7 text-[10px] lg:text-xs"
-                  />
+                <div className="space-y-1">
+                  <Label htmlFor="oc-filter" className="text-xs">Orden de compra</Label>
+                  <MultiSelect options={ocOptions} selected={selectedOCs} onChange={setSelectedOCs} placeholder="Todas" className="h-9 bg-background text-sm" />
                 </div>
-                {/* Update ends here */}
-
-                {/* Empty column to align with first row (4 columns total) */}
-                <div />
               </div>
-              {/* End of Second Row */}
-            </CardContent>
-          </Card>
+            )}
+          </div>
 
-          {/* Capacidad Vehículo - Right side */}
-          {vehiculo && vehicleCapacity > 0 && (
-            <Card className="w-64 flex-shrink-0">
-              <CardHeader className="pb-1 py-1.5">
-                <CardTitle className="text-xs lg:text-sm">Capacidad Vehículo</CardTitle>
-              </CardHeader>
-              <CardContent className="pb-1.5 pt-1">
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-[10px]">
-                    <span className="text-muted-foreground">Peso Cargado:</span>
-                    <span className="font-semibold">{totalWeightTons.toFixed(3)} ton</span>
-                  </div>
-                  <div className="flex justify-between text-[10px]">
-                    <span className="text-muted-foreground">Capacidad:</span>
-                    <span className="font-semibold">{vehicleCapacity.toFixed(3)} ton</span>
-                  </div>
-                  <div className="space-y-0.5">
-                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                      <div
-                        className={`h-3 transition-all duration-300 ${getCapacityColor()}`}
-                        style={{ width: `${Math.min(capacityPercentage, 100)}%` }}
-                      />
+          <div className="overflow-x-auto border-t border-border">
+            {loading ? (
+              <div className="p-4"><Esqueleto lineas={6} /></div>
+            ) : ordenesVisibles.length === 0 ? (
+              <div className="p-4">
+                <EstadoVacio titulo={orders.length === 0 ? "No hay pedidos aprobados sin orden con esos filtros" : "Ningún pedido coincide con la búsqueda"} />
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10"><span className="sr-only">Seleccionar</span></TableHead>
+                    <TableHead>Pedido</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead className="hidden md:table-cell">Destino</TableHead>
+                    <TableHead>Promesa</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ordenesVisibles.map((order) => {
+                    const sel = selectedOrders.includes(order.idpedido)
+                    return (
+                      <TableRow key={order.idpedido} className={cn("cursor-pointer", sel && "bg-ok-bg/60")} onClick={() => handleOrderSelection(order.idpedido, !sel)}>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox id={`order-${order.idpedido}`} checked={sel} onCheckedChange={(checked) => handleOrderSelection(order.idpedido, checked as boolean)} aria-label={`Seleccionar el pedido ${order.pedido || order.idpedido}`} />
+                        </TableCell>
+                        <TableCell>
+                          <div className="lg-num font-semibold">#{order.idpedido}</div>
+                          <div className="lg-num text-xs text-muted-foreground">
+                            {order.pedido && order.pedido !== String(order.idpedido) ? `N° ${order.pedido}` : ""}
+                            {order.orden_de_compra ? `${order.pedido && order.pedido !== String(order.idpedido) ? " · " : ""}OC ${order.orden_de_compra}` : ""}
+                            {!order.orden_de_compra && (!order.pedido || order.pedido === String(order.idpedido)) ? (order.vendedor || "") : ""}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="max-w-[260px] truncate font-medium">{order.cliente}</div>
+                          <div className="text-xs text-muted-foreground md:hidden">{order.destino || "—"}</div>
+                        </TableCell>
+                        <TableCell className="hidden text-muted-foreground md:table-cell">{order.destino || "—"}</TableCell>
+                        <TableCell>{chipPromesa(order)}</TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+          {!loading && ordenesVisibles.length > 0 && ordenesVisibles.length !== orders.length && (
+            <p className="px-4 py-2 text-xs text-muted-foreground">{ordenesVisibles.length} de {orders.length} pedidos.</p>
+          )}
+        </section>
+
+        <div className="flex flex-col gap-4 lg:col-span-5">
+          {/* PASO 2 · Lo que va en la orden */}
+          <section className="lg-card" aria-label="Paso 2: lo que va en la orden">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4 pb-2">
+              <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+                <span className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">2</span>
+                Lo que va en la orden
+              </h2>
+              {selectedOrders.length > 0 && (
+                <Chip tono="info">{selectedOrders.length} {selectedOrders.length === 1 ? "pedido" : "pedidos"} · {totalUnidades} und · {totalWeightTons.toFixed(1)} t</Chip>
+              )}
+            </div>
+
+            {selectedOrders.length === 0 ? (
+              <div className="px-4 pb-4">
+                <EstadoVacio titulo="Todavía no has elegido pedidos" texto="Marca uno o varios en la lista; aquí verás sus líneas y podrás ajustar cuánto va en esta orden." />
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col gap-2.5 px-4 pb-3">
+                  {selectedOrdersData.map((orderData) => (
+                    <div key={orderData.idpedido} className="overflow-hidden rounded-xl border border-border">
+                      <div className="flex items-center justify-between gap-2 bg-muted/50 px-3 py-2 text-sm">
+                        <span className="min-w-0 truncate">
+                          <b className="lg-num">#{orderData.idpedido}</b> · {orderData.cliente}
+                          {orderData.destino ? <span className="text-muted-foreground"> · {orderData.destino}</span> : null}
+                          {orderData.orden_de_compra ? <span className="text-muted-foreground"> · OC {orderData.orden_de_compra}</span> : null}
+                        </span>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 shrink-0 p-0" onClick={() => handleOrderSelection(orderData.idpedido, false)} aria-label={`Quitar el pedido ${orderData.idpedido} de la orden`}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <Table>
+                        <TableBody>
+                          {orderDetails[orderData.idpedido]?.map((detail) => {
+                            const lineKey = `${orderData.idpedido}-${detail.transid}` // Use transid for unique line key
+                            const maxToLoad = detail.unidadespendientes
+                            const unitsToLoad = unitsToLoadMap[lineKey] ?? maxToLoad
+                            const pesoUnitarioKg = detail.peso_unitkg || 0
+                            const pesoTotalKg = pesoUnitarioKg * unitsToLoad
+                            return (
+                              <TableRow key={detail.transid}>
+                                <TableCell className="whitespace-normal py-2">
+                                  <div className="text-sm font-medium leading-tight">{detail.producto}</div>
+                                  <div className="lg-num text-xs text-muted-foreground">pendientes {maxToLoad} · {pesoUnitarioKg.toLocaleString("es-CO", { maximumFractionDigits: 2 })} kg c/u</div>
+                                </TableCell>
+                                <TableCell className="w-24 py-2 text-right">
+                                  <Label htmlFor={`und-${lineKey}`} className="sr-only">Unidades a cargar</Label>
+                                  <Input
+                                    id={`und-${lineKey}`}
+                                    type="number"
+                                    min={0}
+                                    max={maxToLoad}
+                                    value={unitsToLoad}
+                                    onChange={(e) => {
+                                      const inputValue = e.target.value
+                                      if (inputValue === "") {
+                                        handleUnitsToLoadChange(lineKey, 0, maxToLoad)
+                                      } else {
+                                        const value = Number.parseInt(inputValue, 10)
+                                        if (!isNaN(value)) {
+                                          handleUnitsToLoadChange(lineKey, value, maxToLoad)
+                                        }
+                                      }
+                                    }}
+                                    className={cn("lg-num h-8 w-20 text-right text-sm", unitsToLoad < maxToLoad && "border-atencion-bd bg-atencion-bg")}
+                                  />
+                                </TableCell>
+                                <TableCell className="lg-num w-24 py-2 text-right text-xs text-muted-foreground">{Math.round(pesoTotalKg).toLocaleString("es-CO")} kg</TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
                     </div>
-                    <div className="text-center text-[10px] font-medium">{capacityPercentage.toFixed(1)}%</div>
+                  ))}
+                </div>
+
+                <div className="px-4 pb-4">
+                  <p className="lg-eyebrow mb-1.5">Resumen por producto · contra el inventario disponible</p>
+                  <div className="overflow-x-auto rounded-xl border border-border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Producto</TableHead>
+                          <TableHead className="text-right">A cargar</TableHead>
+                          <TableHead className="text-right">Disponible</TableHead>
+                          <TableHead className="text-right">Queda</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {resumen.map((item, index) => {
+                          const diferencia = item.invDisp - item.totalUnidadesDespachadas
+                          const hasIssue = diferencia < 0
+                          return (
+                            <TableRow key={index} className={hasIssue ? "bg-critico-bg/60" : undefined}>
+                              <TableCell className="whitespace-normal text-sm">{item.producto}</TableCell>
+                              <TableCell className="lg-num text-right font-semibold">{item.totalUnidadesDespachadas}</TableCell>
+                              <TableCell className="lg-num text-right">{item.invDisp}</TableCell>
+                              <TableCell className="text-right"><Chip tono={hasIssue ? "critico" : "ok"}>{diferencia}</Chip></TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {hasInventoryIssues() && (
+                    <div className="mt-2 flex items-start gap-2 rounded-xl border border-critico-bd bg-critico-bg p-3 text-sm text-critico-fg">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                      <div>
+                        <p className="font-semibold">Alerta de inventario</p>
+                        <p className="text-xs">Algunos productos tienen cantidades solicitadas mayores al inventario disponible. La orden no se puede generar hasta ajustarlas.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </section>
+
+          {/* PASO 3 · Vehículo y entrega */}
+          <section className="lg-card" aria-label="Paso 3: vehículo y entrega">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4 pb-2">
+              <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+                <span className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">3</span>
+                Vehículo y entrega
+              </h2>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="sin-vehiculo"
+                  checked={sinVehiculo}
+                  onCheckedChange={(checked) => {
+                    setSinVehiculo(checked as boolean)
+                    if (checked as boolean) {
+                      setVehiculo("")
+                      setNombreConductor("")
+                      setTipoTransporte("")
+                    }
+                  }}
+                />
+                <Label htmlFor="sin-vehiculo" className="cursor-pointer text-xs font-medium">Sin vehículo</Label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 px-4 pb-4 sm:grid-cols-2">
+              {!sinVehiculo && (
+                <>
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label htmlFor="vehiculo" className="text-xs">Vehículo · de las citas en portería</Label>
+                    <Select value={vehiculo} onValueChange={handleVehicleChange}>
+                      <SelectTrigger id="vehiculo" className={campo("vehiculo")}>
+                        <SelectValue placeholder={vehicles.length === 0 ? "No hay vehículos en cita para este proyecto" : "Seleccione un vehículo"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {vehicles.map((vehicle) => (
+                          <SelectItem key={vehicle.placa} value={vehicle.placa}>
+                            <span className="lg-num">{vehicle.placa}</span>
+                            {vehicle.capacidad ? ` · ${vehicle.capacidad} t` : ""}
+                            {vehicle.transporte ? ` · ${vehicle.transporte}` : ""}
+                            {vehicle.nombreconductor ? ` · ${vehicle.nombreconductor}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="conductor" className="text-xs">Conductor</Label>
+                    <Input id="conductor" value={nombreConductor} disabled className={cn(campo("conductor"), "bg-muted")} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="tipoTransporte" className="text-xs">Transportadora</Label>
+                    <Select value={tipoTransporte} onValueChange={setTipoTransporte}>
+                      <SelectTrigger id="tipoTransporte" className={campo("transporte")}><SelectValue placeholder="Seleccione" /></SelectTrigger>
+                      <SelectContent>
+                        {transportes.map((t) => (
+                          <SelectItem key={t.nombretransporte} value={t.nombretransporte}>{t.nombretransporte}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+              <div className="space-y-1">
+                <Label htmlFor="fechaOrdenCargue" className="text-xs">Fecha de la orden</Label>
+                <DatePickerField id="fechaOrdenCargue" value={fechaOrdenCargue} onChange={setFechaOrdenCargue} className={campo("fechaCargue")} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="fechaEntrega" className="text-xs">Fecha de entrega</Label>
+                <DatePickerField id="fechaEntrega" value={fechaEntrega} onChange={setFechaEntrega} className={campo("fechaEntrega")} />
+                {missingFields.has("fechaEntrega") && <p className="text-xs text-critico-fg">obligatoria</p>}
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label htmlFor="observaciones" className="text-xs">Observaciones</Label>
+                <Textarea id="observaciones" value={observaciones} onChange={(e) => setObservaciones(e.target.value)} className="min-h-[60px] bg-background text-sm" placeholder="Agregar observaciones..." />
+              </div>
+
+              {vehiculo && vehicleCapacity > 0 && (
+                <div className="flex flex-col gap-1.5 border-t border-border pt-3 sm:col-span-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span><b>Capacidad del vehículo</b> <span className="lg-num text-muted-foreground">· {vehiculo}</span></span>
+                    <span className="lg-num"><b>{totalWeightTons.toFixed(1)} t</b> de {vehicleCapacity.toFixed(1)} t{!isOverCapacity ? ` · quedan ${(vehicleCapacity - totalWeightTons).toFixed(1)} t` : ""}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Progreso pct={Math.min(capacityPercentage, 100)} tono={tonoCapacidad} className="flex-1" />
+                    <span className={cn("lg-num w-12 text-right text-xs font-semibold", TEXTO_TONO[tonoCapacidad])}>{capacityPercentage.toFixed(0)} %</span>
                   </div>
                   {isOverCapacity && (
-                    <div className="bg-red-50 border border-red-200 rounded-md p-1">
-                      <p className="text-[9px] lg:text-[10px] text-red-800 font-medium">⚠️ Capacidad superada</p>
-                    </div>
+                    <p className="flex items-center gap-1.5 text-xs font-medium text-critico-fg"><AlertTriangle className="h-3.5 w-3.5" aria-hidden />Capacidad superada</p>
                   )}
                 </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        <div className="grid grid-cols-5 gap-2 lg:gap-3 h-[calc(100vh-13rem)] lg:h-[calc(100vh-14rem)] overflow-hidden">
-          {/* Column 1-2: Listado de pedidos (2 column width) */}
-          <Card className="flex flex-col overflow-hidden col-span-2">
-            <CardHeader className="pb-1.5 pt-2 flex-shrink-0">
-              <CardTitle className="text-xs lg:text-sm">Listado de Pedidos</CardTitle>
-            </CardHeader>
-
-            <CardContent className="space-y-1.5 overflow-y-auto flex-1 p-1.5">
-              {loading && (
-                <div className="flex justify-center items-center h-full">
-                  <Loader2 className="h-6 w-6 lg:h-8 lg:w-8 animate-spin text-muted-foreground" />
-                </div>
               )}
 
-              {!loading && orders.length === 0 && (
-                <div className="flex justify-center items-center h-full text-muted-foreground text-[10px] lg:text-xs">
-                  <p>No hay pedidos disponibles con los filtros seleccionados</p>
-                </div>
-              )}
-
-              {!loading && orders.length > 0 && (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                        <TableHead className="w-8 text-[9px] lg:text-[10px] p-1">Sel.</TableHead>
-                        <TableHead className="font-semibold text-[9px] lg:text-[10px] p-1">Pedido</TableHead>
-                        <TableHead className="font-semibold text-[9px] lg:text-[10px] p-1">Cliente</TableHead>
-                        <TableHead className="font-semibold text-[9px] lg:text-[10px] p-1">Destino</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {orders.map((order) => (
-                        <TableRow key={order.idpedido}>
-                          <TableCell className="p-1">
-                            <Checkbox
-                              id={`order-${order.idpedido}`}
-                              checked={selectedOrders.includes(order.idpedido)}
-                              onCheckedChange={(checked) => handleOrderSelection(order.idpedido, checked as boolean)}
-                              className="h-3 w-3"
-                            />
-                          </TableCell>
-                          <TableCell className="text-[9px] lg:text-[10px] p-1">
-                            {order.pedido || order.idpedido}
-                            {order.orden_de_compra && ` / ${order.orden_de_compra}`}
-                          </TableCell>
-                          <TableCell className="text-[9px] lg:text-[10px] p-1">{order.cliente}</TableCell>
-                          <TableCell className="text-[9px] lg:text-[10px] p-1">{order.destino}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Column 3-5: Pedidos seleccionados (3 columns width) */}
-          <Card className="flex flex-col overflow-hidden col-span-3">
-            <CardHeader className="pb-1.5 pt-2 space-y-1 flex-shrink-0">
-              <div className="flex flex-col gap-1.5">
-                <CardTitle className="text-xs lg:text-sm">Pedidos Seleccionados</CardTitle>
-                <Button
-                  onClick={handleGenerateLoadOrder}
-                  disabled={selectedOrders.length === 0 || isGenerating}
-                  className="bg-cyan-500 hover:bg-cyan-600 h-6 lg:h-7 text-[10px] lg:text-xs w-full"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                      Generando...
-                    </>
-                  ) : (
-                    "Generar Orden"
-                  )}
-                </Button>
-              </div>
-            </CardHeader>
-
-            <CardContent className="space-y-2 overflow-y-auto flex-1 p-1.5">
-              {selectedOrders.length === 0 ? (
-                <div className="text-center py-4 text-muted-foreground text-[10px] lg:text-xs">
-                  No hay pedidos seleccionados
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="space-y-1.5">
-                    <h3 className="text-[10px] lg:text-xs font-semibold text-muted-foreground px-1">
-                      Detalle de Pedidos
-                    </h3>
-                    <Accordion type="multiple" className="space-y-1.5">
-                      {selectedOrdersData.map((orderData) => (
-                        <AccordionItem
-                          key={orderData.idpedido}
-                          value={`order-${orderData.idpedido}`}
-                          className="border border-muted rounded-md"
-                        >
-                          <Card className="border-0">
-                            <CardHeader className="pb-1 pt-1.5 px-2">
-                              <div className="flex items-center justify-between gap-2">
-                                <AccordionTrigger className="flex-1 hover:no-underline py-2 px-3 hover:bg-blue-600 text-white transition-colors [&[data-state=open]>svg]:rotate-180 [&>svg]:text-white bg-cyan-500 rounded-sm">
-                                  <div className="flex flex-col items-start gap-1 flex-1">
-                                    <div className="text-xs lg:text-sm font-semibold">
-                                      Pedido: {orderData.pedido || orderData.idpedido}
-                                    </div>
-                                    <div className="space-y-0.5 text-[10px] lg:text-xs text-blue-100 text-left">
-                                      <p>
-                                        Cliente: {orderData.cliente} | Destino: {orderData.destino}
-                                      </p>
-                                      {orderData.orden_de_compra && <p>OC: {orderData.orden_de_compra}</p>}
-                                    </div>
-                                  </div>
-                                </AccordionTrigger>
-                                {/* </CHANGE> */}
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleOrderSelection(orderData.idpedido, false)
-                                  }}
-                                  className="h-5 w-5 p-0 hover:bg-destructive/10"
-                                >
-                                  <X className="h-3 w-3 text-destructive" />
-                                </Button>
-                              </div>
-                            </CardHeader>
-                            <AccordionContent>
-                              <CardContent className="pt-1.5 px-2 pb-2">
-                                <div className="space-y-1">
-                                  {orderDetails[orderData.idpedido]?.map((detail, idx) => {
-                                    const lineKey = `${orderData.idpedido}-${detail.transid}` // Use transid for unique line key
-                                    const maxToLoad = detail.unidadespendientes
-                                    const unitsToLoad = unitsToLoadMap[lineKey] ?? maxToLoad
-                                    const pesoUnitarioKg = detail.peso_unitkg || 0
-                                    const pesoTotalKg = pesoUnitarioKg * unitsToLoad
-                                    const pesoTotalTons = pesoTotalKg / 1000
-
-                                    return (
-                                      <div key={detail.transid} className="border-t pt-1 space-y-0.5">
-                                        <div className="flex items-center justify-between gap-1">
-                                          <div className="flex-1 min-w-0">
-                                            <p className="font-medium text-[9px] lg:text-[10px] truncate">
-                                              {detail.producto}
-                                            </p>
-                                            <p className="text-[8px] lg:text-[9px] text-muted-foreground">
-                                              Pendientes: {maxToLoad} | Peso: {pesoUnitarioKg.toFixed(3)} kg/und
-                                            </p>
-                                          </div>
-                                          {/* CHANGED: Removed +/- buttons, only input field for direct editing */}
-                                          <div className="flex items-center gap-1">
-                                            <Input
-                                              type="number"
-                                              min={0}
-                                              max={maxToLoad}
-                                              value={unitsToLoad}
-                                              onChange={(e) => {
-                                                const inputValue = e.target.value
-                                                if (inputValue === "") {
-                                                  handleUnitsToLoadChange(lineKey, 0, maxToLoad)
-                                                } else {
-                                                  const value = Number.parseInt(inputValue, 10)
-                                                  if (!isNaN(value)) {
-                                                    handleUnitsToLoadChange(lineKey, value, maxToLoad)
-                                                  }
-                                                }
-                                              }}
-                                              className="w-14 h-6 text-center text-[9px] px-1"
-                                            />
-                                          </div>
-                                        </div>
-                                        {unitsToLoad > 0 && (
-                                          <p className="text-[8px] lg:text-[9px] text-cyan-600 font-medium">
-                                            Peso total: {pesoTotalTons.toFixed(3)} ton
-                                          </p>
-                                        )}
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              </CardContent>
-                            </AccordionContent>
-                          </Card>
-                        </AccordionItem>
-                      ))}
-                    </Accordion>
-                  </div>
-
-                  <div className="border-t-2 pt-2">
-                    <h3 className="text-[10px] lg:text-xs font-semibold text-muted-foreground px-1 mb-1.5">
-                      Resumen por Producto
-                    </h3>
-                    <Card className="border-2 border-cyan-500/30 bg-cyan-50/30">
-                      <CardContent className="p-2">
-                        <div className="overflow-x-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow className="bg-cyan-100/50">
-                                <TableHead className="text-[9px] lg:text-[10px] font-semibold p-1 flex-1">Producto</TableHead>
-                                <TableHead className="text-[8px] lg:text-[9px] font-semibold p-0.5 text-right w-16">
-                                  Total Unds
-                                </TableHead>
-                                <TableHead className="text-[8px] lg:text-[9px] font-semibold p-0.5 text-right w-16">
-                                  Inv. Disp.
-                                </TableHead>
-                                <TableHead className="text-[8px] lg:text-[9px] font-semibold p-0.5 text-right w-16">
-                                  Diferencia
-                                </TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {getProductsSummary().map((item, index) => {
-                                const diferencia = item.invDisp - item.totalUnidadesDespachadas
-                                const hasIssue = diferencia < 0
-
-                                return (
-                                  <TableRow
-                                    key={index}
-                                    className={hasIssue ? "bg-red-50" : index % 2 === 0 ? "bg-white" : "bg-gray-50"}
-                                  >
-                                    <TableCell className="text-[9px] lg:text-[10px] p-1 flex-1">{item.producto}</TableCell>
-                                    <TableCell className="text-[8px] lg:text-[9px] p-0.5 text-right font-medium w-16">
-                                      {item.totalUnidadesDespachadas}
-                                    </TableCell>
-                                    <TableCell className="text-[8px] lg:text-[9px] p-0.5 text-right w-16">
-                                      {item.invDisp}
-                                    </TableCell>
-                                    <TableCell
-                                      className={`text-[8px] lg:text-[9px] p-0.5 text-right font-semibold w-16 ${
-                                        hasIssue ? "text-red-600" : "text-green-600"
-                                      }`}
-                                    >
-                                      {diferencia}
-                                      {hasIssue && " ⚠️"}
-                                    </TableCell>
-                                  </TableRow>
-                                )
-                              })}
-                            </TableBody>
-                          </Table>
-                        </div>
-                        {hasInventoryIssues() && (
-                          <div className="mt-2 p-1.5 bg-red-100 border border-red-300 rounded text-[9px] lg:text-[10px] text-red-800">
-                            <p className="font-semibold">⚠️ Alerta de Inventario</p>
-                            <p>Algunos productos tienen cantidades solicitadas mayores al inventario disponible.</p>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              <div className="flex justify-end sm:col-span-2">{botonGenerar}</div>
+            </div>
+          </section>
         </div>
       </div>
 
       {/* Line Closure Dialog */}
       <Dialog open={showLineClosureDialog} onOpenChange={setShowLineClosureDialog}>
-        <DialogContent className="max-w-[95vw] md:max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] md:max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-base md:text-lg">Decisión sobre líneas parciales</DialogTitle>
-            <DialogDescription className="text-xs md:text-sm">
-              Las siguientes líneas tienen cantidades menores a las solicitadas. ¿Desea cerrar estas líneas o
-              mantenerlas abiertas para futuros despachos?
+            <DialogTitle>Decisión sobre líneas parciales</DialogTitle>
+            <DialogDescription>
+              Estas líneas van con menos de lo pendiente. Marca <b>cerrar</b> si el pedido queda entregado con lo que va; déjala sin marcar para que lo que falta siga pendiente para otra orden.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            <div className="overflow-x-auto -mx-2 md:mx-0">
-              <div className="min-w-[500px] md:min-w-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-xs">Pedido</TableHead>
-                      <TableHead className="text-xs">Producto</TableHead>
-                      <TableHead className="text-right text-xs">Cant. Pedida</TableHead>
-                      <TableHead className="text-right text-xs">Cant. a Despachar</TableHead>
-                      <TableHead className="text-center text-xs">¿Cerrar línea?</TableHead>
+          <div className="overflow-x-auto rounded-xl border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Pedido</TableHead>
+                  <TableHead>Producto</TableHead>
+                  <TableHead className="text-right">Pendiente</TableHead>
+                  <TableHead className="text-right">Va en esta orden</TableHead>
+                  <TableHead className="text-center">¿Cerrar línea?</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pendingLineClosures.map((line) => {
+                  const lineKey = `${line.idpedido}-${line.transid}`
+                  const isClosed = lineClosureDecisions[lineKey] ?? false
+                  return (
+                    <TableRow key={line.transid}>
+                      <TableCell className="lg-num font-semibold">#{line.idpedido}</TableCell>
+                      <TableCell className="whitespace-normal text-sm">{line.producto}</TableCell>
+                      <TableCell className="lg-num text-right">{line.cantPedida}</TableCell>
+                      <TableCell className="lg-num text-right">
+                        <span className="font-semibold">{line.cantDesp}</span> <Chip tono="atencion" className="ml-1">faltan {line.cantPedida - line.cantDesp}</Chip>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Checkbox id={`close-${lineKey}`} checked={isClosed} onCheckedChange={() => toggleLineClosureDecision(lineKey)} aria-label={`Cerrar la línea ${line.producto} del pedido ${line.idpedido}`} />
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pendingLineClosures.map((line) => {
-                      const lineKey = `${line.idpedido}-${line.transid}`
-                      const isClosed = lineClosureDecisions[lineKey] ?? false
-
-                      return (
-                        <TableRow key={line.transid}>
-                          <TableCell className="text-xs">{line.idpedido}</TableCell>
-                          <TableCell className="text-xs">{line.producto}</TableCell>
-                          <TableCell className="text-right text-xs">{line.cantPedida}</TableCell>
-                          <TableCell className="text-right text-xs">{line.cantDesp}</TableCell>
-                          <TableCell className="text-center">
-                            <Checkbox
-                              id={`close-${lineKey}`}
-                              checked={isClosed}
-                              onCheckedChange={() => toggleLineClosureDecision(lineKey)}
-                              className="h-4 w-4"
-                            />
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
+                  )
+                })}
+              </TableBody>
+            </Table>
           </div>
+          <p className="text-xs text-muted-foreground">Nunca puede salir más de lo pendiente; menos sí, y queda registrado aquí.</p>
 
           <DialogFooter>
-            <Button variant="outline" onClick={handleCancelLineClosures}>
-              Cancelar
-            </Button>
-            <Button onClick={handleConfirmLineClosures}>Confirmar</Button>
+            <Button variant="outline" onClick={handleCancelLineClosures}>Volver</Button>
+            <Button onClick={handleConfirmLineClosures}>Confirmar y generar la orden</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
