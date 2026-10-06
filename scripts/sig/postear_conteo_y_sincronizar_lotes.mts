@@ -104,16 +104,19 @@ async function main() {
   if (omitirSet.size) {
     console.log(`  se OMITEN ${omitidas.length} correcciones de ${omitirSet.size} códigos (${omitir.join(", ")}): las retira el SQL previo, y el SQL generado exige que ya no existan.`)
   }
-  if (pendientes.length === 0) {
-    console.log("No hay nada que postear.")
-    return
+  const yaContabilizado = pendientes.length === 0
+  if (yaContabilizado) {
+    console.log(`  Las correcciones ya están contabilizadas: no se genera SQL de posteo.`)
+    console.log(`  La reclasificación se calcula contra el stock VIVO de ahora (no simulado).`)
   }
   const sob = pendientes.filter((a: any) => Number(a.cantidad) > 0)
   const fal = pendientes.filter((a: any) => Number(a.cantidad) < 0)
-  console.log(`  sobrante (701/ingreso): ${sob.length} · +${fmt(sob.reduce((s: number, a: any) => s + Number(a.cantidad), 0))} und`)
-  console.log(`  faltante (702/salida):  ${fal.length} · ${fmt(fal.reduce((s: number, a: any) => s + Number(a.cantidad), 0))} und`)
-  const fechas = Array.from(new Set(pendientes.map((a: any) => String(a.fecha))))
-  console.log(`  fecha(s) de las correcciones: ${fechas.join(", ")} (los movimientos se fechan ese día a las 15:00Z)`)
+  if (!yaContabilizado) {
+    console.log(`  sobrante (701/ingreso): ${sob.length} · +${fmt(sob.reduce((s: number, a: any) => s + Number(a.cantidad), 0))} und`)
+    console.log(`  faltante (702/salida):  ${fal.length} · ${fmt(fal.reduce((s: number, a: any) => s + Number(a.cantidad), 0))} und`)
+  }
+  const fechas = Array.from(new Set((pendientes.length ? pendientes : (ajustes ?? [])).map((a: any) => String(a.fecha))))
+  if (!yaContabilizado) console.log(`  fecha(s) de las correcciones: ${fechas.join(", ")} (los movimientos se fechan ese día a las 15:00Z)`)
 
   // ---------- Stock vivo y simulación ----------
   const vivo = new Map<string, number>()
@@ -130,7 +133,11 @@ async function main() {
         .order("location")
         .range(from, from + 999)
       for (const r of data ?? []) {
-        const k = `${r.codproducto}||${r.lote ?? ""}||${r.location ?? ""}`
+        // La clave incluye el NOMBRE porque la vista `saldoinvdetalle` agrupa también
+        // por nombreproducto: el mismo código con dos nombres (PT000059 "POLI" y
+        // "PAPEL", PT000016 con tres variantes) aparece en filas separadas. Si la
+        // entrada de la reclasificación lleva otro nombre, NO cancela la fila negativa.
+        const k = `${r.codproducto}||${r.nombreproducto ?? ""}||${r.lote ?? ""}||${r.location ?? ""}`
         vivo.set(k, (vivo.get(k) ?? 0) + (Number(r.stock_actual) || 0))
         if (r.nombreproducto && !nombrePorCod.has(r.codproducto)) nombrePorCod.set(r.codproducto, r.nombreproducto)
       }
@@ -138,33 +145,45 @@ async function main() {
       from += 1000
     }
   }
+  // El nombre que manda es el del CATÁLOGO: en `saldoinvdetalle` un mismo código
+  // arrastra variantes históricas equivocadas (PT000016 aparece también como
+  // "Harina de Tercera Kg.") y ese nombre terminaría escrito en el movimiento.
+  {
+    const cods = Array.from(new Set(Array.from(vivo.keys()).map((k) => k.split("||")[0])))
+    for (let i = 0; i < cods.length; i += 200) {
+      const { data } = await supabase.from("productos").select("codigo,nombre").in("codigo", cods.slice(i, i + 200))
+      for (const p of data ?? []) if (p.codigo && p.nombre) nombrePorCod.set(p.codigo, p.nombre)
+    }
+  }
   const despues = new Map(vivo)
   for (const a of pendientes) {
-    const k = `${a.codproducto}||${a.lote ?? ""}||${a.location ?? ""}`
+    // `postCorreccionInvtrans` escribe nombreproducto = ajuste.producto, así que la
+    // corrección cae en la fila de la vista que lleva ESE nombre.
+    const k = `${a.codproducto}||${a.producto ?? ""}||${a.lote ?? ""}||${a.location ?? ""}`
     despues.set(k, n2((despues.get(k) ?? 0) + (Number(a.cantidad) || 0)))
-    if (a.producto && !nombrePorCod.has(a.codproducto)) nombrePorCod.set(a.codproducto, a.producto)
   }
   const negativos = Array.from(despues.entries()).filter(([, v]) => v < -0.009).sort((a, b) => a[1] - b[1])
-  console.log(`\nLotes negativos después del posteo: ${negativos.length} (${fmt(negativos.reduce((s, [, v]) => s + v, 0))} und)`)
+  console.log(`\nFilas de saldo negativas después del posteo: ${negativos.length} (${fmt(negativos.reduce((s, [, v]) => s + v, 0))} und)`)
 
   // ---------- Asignación de las reclasificaciones 309 ----------
-  type Par = { cod: string; producto: string; loteDestino: string; locDestino: string; loteOrigen: string; locOrigen: string; cantidad: number; mismaUbicacion: boolean; dias: number }
+  type Par = { cod: string; nombreDestino: string; nombreOrigen: string; loteDestino: string; locDestino: string; loteOrigen: string; locOrigen: string; cantidad: number; mismaUbicacion: boolean; dias: number }
   const pares: Par[] = []
   const sinCubrir: string[] = []
   const saldo = new Map(despues) // se va consumiendo al asignar
   for (const [keyNeg, valNeg] of negativos) {
-    const [cod, loteNeg, locNeg] = keyNeg.split("||")
+    const [cod, nombreNeg, loteNeg, locNeg] = keyNeg.split("||")
     let falta = n2(-valNeg)
     const diaNeg = diaDeLote(loteNeg)
-    // Donantes: mismo producto, saldo > 0. Regla de gerencia: el LOTE MÁS PRÓXIMO
-    // (menor diferencia de días); desempate por la misma ubicación y mayor saldo.
+    // Donantes: mismo CÓDIGO (aunque la fila lleve otro nombre), saldo > 0. Regla de
+    // gerencia: el LOTE MÁS PRÓXIMO (menor diferencia de días); desempate por la misma
+    // ubicación y luego mayor saldo.
     const donantes = Array.from(saldo.entries())
       .filter(([k, v]) => k.startsWith(`${cod}||`) && v > 0.009 && k !== keyNeg)
       .map(([k, v]) => {
-        const [, lote, loc] = k.split("||")
+        const [, nombre, lote, loc] = k.split("||")
         const diaDon = diaDeLote(lote)
         const dias = diaNeg === null || diaDon === null ? Number.POSITIVE_INFINITY : Math.abs(diaDon - diaNeg)
-        return { k, lote, loc, v, misma: loc === locNeg, dias }
+        return { k, nombre, lote, loc, v, misma: loc === locNeg, dias }
       })
       .sort((a, b) => (a.dias !== b.dias ? a.dias - b.dias : a.misma !== b.misma ? (a.misma ? -1 : 1) : b.v - a.v))
     for (const d of donantes) {
@@ -172,7 +191,10 @@ async function main() {
       const toma = Math.min(falta, d.v)
       pares.push({
         cod,
-        producto: nombrePorCod.get(cod) ?? cod,
+        // El nombre de cada movimiento es el de SU fila: así la salida descuenta la
+        // fila del donante y la entrada cancela exactamente la fila negativa.
+        nombreDestino: nombreNeg || nombrePorCod.get(cod) || cod,
+        nombreOrigen: d.nombre || nombrePorCod.get(cod) || cod,
         loteDestino: loteNeg,
         locDestino: locNeg,
         loteOrigen: d.lote,
@@ -206,7 +228,7 @@ async function main() {
   console.log(`\nmax(invtrans.id) hoy: ${maxRow?.id}`)
 
   // =================== SQL 1: POSTEO ===================
-  if (sqlPosteo) {
+  if (sqlPosteo && !yaContabilizado) {
     const L: string[] = []
     const mes = String(cuadre.fecha).slice(0, 7)
     L.push(`-- =====================================================================`)
@@ -398,13 +420,13 @@ async function main() {
     L.push(`  select coalesce(max(id), 0) into v_base from invtrans;`)
     L.push(``)
     L.push(`  -- Pares (lote origen -> lote destino) con el código 309. Dos movimientos por par.`)
-    L.push(`  create temporary table tmp_recl (n int, codproducto text, producto text, lote_origen text, loc_origen text, lote_destino text, loc_destino text, cantidad numeric) on commit drop;`)
+    L.push(`  create temporary table tmp_recl (n int, codproducto text, nombre_origen text, nombre_destino text, lote_origen text, loc_origen text, lote_destino text, loc_destino text, cantidad numeric) on commit drop;`)
     for (let i = 0; i < pares.length; i += 100) {
       const trozo = pares.slice(i, i + 100)
-      L.push(`  insert into tmp_recl (n, codproducto, producto, lote_origen, loc_origen, lote_destino, loc_destino, cantidad) values`)
+      L.push(`  insert into tmp_recl (n, codproducto, nombre_origen, nombre_destino, lote_origen, loc_origen, lote_destino, loc_destino, cantidad) values`)
       L.push(
         trozo
-          .map((p, j) => `    (${i + j + 1}, ${q(p.cod)}, ${q(p.producto)}, ${q(p.loteOrigen)}, ${q(p.locOrigen)}, ${q(p.loteDestino)}, ${q(p.locDestino)}, ${n2(p.cantidad)})`)
+          .map((p, j) => `    (${i + j + 1}, ${q(p.cod)}, ${q(p.nombreOrigen)}, ${q(p.nombreDestino)}, ${q(p.loteOrigen)}, ${q(p.locOrigen)}, ${q(p.loteDestino)}, ${q(p.locDestino)}, ${n2(p.cantidad)})`)
           .join(",\n") + ";",
       )
     }
@@ -417,7 +439,7 @@ async function main() {
     L.push(`    ${proyectoId},`)
     L.push(`    coalesce(p.id, 0),`)
     L.push(`    t.codproducto,`)
-    L.push(`    t.producto,`)
+    L.push(`    case when m.orden = 1 then t.nombre_origen else t.nombre_destino end,`)
     L.push(`    case when m.orden = 1 then t.lote_origen else t.lote_destino end,`)
     L.push(`    case when m.orden = 1 then t.loc_origen else t.loc_destino end,`)
     L.push(`    alm.nombre,`)
@@ -439,7 +461,7 @@ async function main() {
     L.push(`  -- Queda registrado también como corrección (sin cuadre: es posterior al conteo).`)
     L.push(`  insert into sig_inventario_ajuste`)
     L.push(`    (proyecto_id, cuadre_id, fecha, codproducto, producto, lote, location, direccion, cod_movimiento, cantidad, tipo, motivo, responsable, estado, aprobado_por, aprobado_fecha)`)
-    L.push(`  select ${proyectoId}, null, current_date, t.codproducto, t.producto,`)
+    L.push(`  select ${proyectoId}, null, current_date, t.codproducto, case when m.orden = 1 then t.nombre_origen else t.nombre_destino end,`)
     L.push(`         case when m.orden = 1 then t.lote_origen else t.lote_destino end,`)
     L.push(`         case when m.orden = 1 then t.loc_origen else t.loc_destino end,`)
     L.push(`         case when m.orden = 1 then 'salida' else 'ingreso' end,`)
