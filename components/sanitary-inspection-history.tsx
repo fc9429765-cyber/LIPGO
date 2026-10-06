@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { FileText, Loader2, ImageIcon } from "lucide-react"
 import { getSanitaryRegistryHistory } from "@/lib/orders-actions"
 import { useAuth } from "@/components/auth-provider"
+import { Chip, Esqueleto, EstadoVacio, Eyebrow } from "@/components/ui/lipgo"
 
 interface SanitaryRecord {
   id: number
@@ -62,144 +63,88 @@ export function SanitaryInspectionHistory() {
     }
   }
 
+  // ---- Solo presentación (gerencia 2026-10-05): misma consulta, mismas columnas y mismas palabras;
+  // cambia la tipografía, los chips Sí/No y la cabecera. ----
+  const siNo = (v: string) => (v === "Si" ? <Chip tono="ok">Sí</Chip> : <Chip tono="critico">{v || "No"}</Chip>)
+
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Historial de Inspección Sanitaria</CardTitle>
-          <CardDescription>Registro completo de todas las inspecciones sanitarias realizadas</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : records.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">No hay registros de inspección disponibles</div>
-          ) : (
-            <div className="max-h-[600px] overflow-y-auto overflow-x-auto rounded-md border">
-              <Table>
-                <TableHeader className="sticky top-0 bg-background z-10">
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead>Hora Registro</TableHead>
-                    <TableHead>Orden Cargue</TableHead>
-                    <TableHead>Placa</TableHead>
-                    <TableHead>Conductor</TableHead>
-                    <TableHead>Producto</TableHead>
-                    <TableHead>Carpas</TableHead>
-                    <TableHead>Limpieza</TableHead>
-                    <TableHead>Olores</TableHead>
-                    <TableHead>Plástico</TableHead>
-                    <TableHead>Fumigación</TableHead>
-                    <TableHead>Plaguicida</TableHead>
-                    <TableHead>Observaciones</TableHead>
-                    <TableHead>Fumigador</TableHead>
-                    <TableHead>Auxiliar</TableHead>
-                    <TableHead>Aprobación</TableHead>
-                    <TableHead>Foto</TableHead>
-                    <TableHead>PDF</TableHead>
+    <div className="flex flex-col gap-4 p-3 sm:p-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <Eyebrow>Recepción y Despacho · Portería y vehículos</Eyebrow>
+          <h1 className="text-xl font-bold leading-tight sm:text-2xl">Historial de inspección sanitaria</h1>
+          <p className="lg-num text-sm text-muted-foreground">{loading ? "Cargando…" : `${records.length.toLocaleString("es-CO")} inspecciones registradas en este proyecto`}</p>
+        </div>
+      </div>
+
+      <section className="lg-card overflow-hidden" aria-label="Inspecciones sanitarias">
+        {loading ? (
+          <div className="p-4"><Esqueleto lineas={6} /></div>
+        ) : records.length === 0 ? (
+          <div className="p-4"><EstadoVacio titulo="No hay registros de inspección todavía" /></div>
+        ) : (
+          <div className="max-h-[640px] overflow-x-auto overflow-y-auto">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-background">
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead>Hora registro</TableHead>
+                  <TableHead>Orden cargue</TableHead>
+                  <TableHead>Placa</TableHead>
+                  <TableHead>Conductor</TableHead>
+                  <TableHead>Producto</TableHead>
+                  <TableHead>Carpas</TableHead>
+                  <TableHead>Limpieza</TableHead>
+                  <TableHead>Olores</TableHead>
+                  <TableHead>Plástico</TableHead>
+                  <TableHead>Fumigación</TableHead>
+                  <TableHead>Plaguicida</TableHead>
+                  <TableHead>Observaciones</TableHead>
+                  <TableHead>Fumigador</TableHead>
+                  <TableHead>Auxiliar</TableHead>
+                  <TableHead>Aprobación</TableHead>
+                  <TableHead>Foto</TableHead>
+                  <TableHead>PDF</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {records.map((record) => (
+                  <TableRow key={record.id}>
+                    <TableCell className="lg-num font-medium">{record.id}</TableCell>
+                    <TableCell className="lg-num whitespace-nowrap">{record.fecha || "—"}</TableCell>
+                    <TableCell className="lg-num whitespace-nowrap">{record.horaregistro || "—"}</TableCell>
+                    <TableCell className="lg-num whitespace-nowrap">{record.ordencargue || "—"}</TableCell>
+                    <TableCell className="lg-num">{record.placa}</TableCell>
+                    <TableCell className="whitespace-nowrap">{record.conductor}</TableCell>
+                    <TableCell className="whitespace-nowrap">{record.producto}</TableCell>
+                    <TableCell>{siNo(record.carpas)}</TableCell>
+                    <TableCell>{siNo(record.limpieza)}</TableCell>
+                    <TableCell>{siNo(record.olores)}</TableCell>
+                    <TableCell>{siNo(record.plastico)}</TableCell>
+                    <TableCell>{siNo(record.fumigacion)}</TableCell>
+                    <TableCell>{record.plaguicida || "—"}</TableCell>
+                    <TableCell className="max-w-xs truncate" title={record.observaciones || undefined}>{record.observaciones || "—"}</TableCell>
+                    <TableCell className="whitespace-nowrap">{record.fumigador}</TableCell>
+                    <TableCell className="whitespace-nowrap">{record.auxiliar}</TableCell>
+                    <TableCell>{record.aprobacion === "aprobado" ? <Chip tono="ok">Aprobado</Chip> : <Chip tono="critico">{record.aprobacion || "—"}</Chip>}</TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleViewPhoto(record.foto)} disabled={!record.foto} title={record.foto ? "Ver foto" : "No hay foto disponible"} aria-label={record.foto ? "Ver foto" : "No hay foto disponible"}>
+                        <ImageIcon className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleViewPDF(record.pdf)} disabled={!record.pdf} title={record.pdf ? "Ver PDF" : "No hay PDF disponible"} aria-label={record.pdf ? "Ver PDF" : "No hay PDF disponible"}>
+                        <FileText className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {records.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell className="font-medium">{record.id}</TableCell>
-                      <TableCell>{record.fecha || "-"}</TableCell>
-                      <TableCell>{record.horaregistro || "-"}</TableCell>
-                      <TableCell>{record.ordencargue || "-"}</TableCell>
-                      <TableCell>{record.placa}</TableCell>
-                      <TableCell>{record.conductor}</TableCell>
-                      <TableCell>{record.producto}</TableCell>
-                      <TableCell>
-                        <span
-                          className={`px-2 py-1 rounded text-xs ${
-                            record.carpas === "Si" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {record.carpas}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`px-2 py-1 rounded text-xs ${
-                            record.limpieza === "Si" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {record.limpieza}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`px-2 py-1 rounded text-xs ${
-                            record.olores === "Si" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {record.olores}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`px-2 py-1 rounded text-xs ${
-                            record.plastico === "Si" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {record.plastico}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`px-2 py-1 rounded text-xs ${
-                            record.fumigacion === "Si" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {record.fumigacion}
-                        </span>
-                      </TableCell>
-                      <TableCell>{record.plaguicida || "-"}</TableCell>
-                      <TableCell className="max-w-xs truncate">{record.observaciones || "-"}</TableCell>
-                      <TableCell>{record.fumigador}</TableCell>
-                      <TableCell>{record.auxiliar}</TableCell>
-                      <TableCell>
-                        <span
-                          className={`px-2 py-1 rounded text-xs ${
-                            record.aprobacion === "aprobado" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {record.aprobacion}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleViewPhoto(record.foto)}
-                          disabled={!record.foto}
-                          title={record.foto ? "Ver foto" : "No hay foto disponible"}
-                        >
-                          <ImageIcon className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleViewPDF(record.pdf)}
-                          disabled={!record.pdf}
-                          title={record.pdf ? "Ver PDF" : "No hay PDF disponible"}
-                        >
-                          <FileText className="h-4 w-4 text-purple-900" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </section>
     </div>
   )
 }
