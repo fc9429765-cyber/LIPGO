@@ -438,9 +438,9 @@ async function main() {
   L.push(`  from saldoinvdetalle where idempresa = ${proyectoId};`)
   L.push(`-- Esperado: ${fmt(totObj)} und y 0 negativas.`)
   L.push(`select 'movimientos de la recolocación' as verificacion, cod_movimiento, tipomov, count(*) as filas, round(sum(cantidad)::numeric,2) as und`)
-  L.push(`  from invtrans where idempresa = ${proyectoId} and observaciones like '%[reub#${cuadreId}]%' group by 1,2 order by 1,2;`)
+  L.push(`  from invtrans where idempresa = ${proyectoId} and observaciones like '%[reub#${cuadreId}]%' group by 1,2,3 order by 2,3;`)
   L.push(`select 'total por producto' as verificacion, codproducto, round(sum(stock_actual)::numeric,2) as und`)
-  L.push(`  from saldoinvdetalle where idempresa = ${proyectoId} group by 1 having sum(stock_actual) <> 0 order by 2 desc;`)
+  L.push(`  from saldoinvdetalle where idempresa = ${proyectoId} group by 1,2 having sum(stock_actual) <> 0 order by 3 desc;`)
   writeFileSync(rutaSql, L.join("\n") + "\n", "utf8")
   console.log(`\n✅ SQL escrito en ${rutaSql}. LA BASE DE DATOS NO SE TOCÓ.`)
 }
