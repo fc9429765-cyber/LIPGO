@@ -127,3 +127,47 @@ order by created_at desc
 limit 10;
 -- Si la tabla no existe en esta instalación (falta el SQL 217), esta consulta
 -- falla sola: el resto del diagnóstico ya corrió.
+
+
+-- ----------------------------------------------------------------------------
+-- 7) LLAVES FORÁNEAS QUE PUEDEN ESTAR BLOQUEANDO EL BORRADO
+-- ----------------------------------------------------------------------------
+-- Si el borrado falla con "Error al eliminar cabecera de la orden", casi
+-- siempre es una llave foránea: otra tabla apunta a esta orden y la base se
+-- niega a dejarla huérfana.
+--
+-- Lo que importa es la columna `al_borrar`:
+--   NO ACTION / RESTRICT -> BLOQUEA. Hay que limpiar esa tabla primero.
+--   CASCADE              -> se borra solo, no estorba.
+--   SET NULL             -> se desliga solo, no estorba.
+select tc.table_name                                   as tabla_que_apunta,
+       kcu.column_name                                 as columna,
+       rc.delete_rule                                  as al_borrar,
+       case rc.delete_rule
+         when 'NO ACTION' then 'BLOQUEA el borrado'
+         when 'RESTRICT'  then 'BLOQUEA el borrado'
+         else 'no estorba'
+       end                                             as diagnostico
+from information_schema.table_constraints tc
+join information_schema.key_column_usage kcu
+  on kcu.constraint_name = tc.constraint_name
+ and kcu.constraint_schema = tc.constraint_schema
+join information_schema.referential_constraints rc
+  on rc.constraint_name = tc.constraint_name
+ and rc.constraint_schema = tc.constraint_schema
+join information_schema.constraint_column_usage ccu
+  on ccu.constraint_name = tc.constraint_name
+ and ccu.constraint_schema = tc.constraint_schema
+where tc.constraint_type = 'FOREIGN KEY'
+  and ccu.table_schema   = 'public'
+  and ccu.table_name     = 'cabeceraoc'
+order by rc.delete_rule, tc.table_name;
+
+
+-- ----------------------------------------------------------------------------
+-- 8) SI EL PASO 7 SEÑALÓ UNA TABLA QUE BLOQUEA: ¿TIENE FILAS DE ESTA ORDEN?
+-- ----------------------------------------------------------------------------
+-- Cambia `apoyo_cargue_asignaciones` por la tabla que haya salido arriba.
+select count(*) as filas_que_bloquean
+from public.apoyo_cargue_asignaciones
+where idorden in (select id from public.cabeceraoc where ordendecargue = 'AVI202610069897');
