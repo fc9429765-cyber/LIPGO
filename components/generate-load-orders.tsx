@@ -1126,7 +1126,7 @@ function GenerateLoadOrdersComponent() {
                 )}
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">{sinVehiculo ? "Orden sin vehículo: no aplica capacidad." : "Selecciona un vehículo para ver su capacidad frente al peso de los pedidos."}</p>
+              <div className="flex items-end justify-between gap-2"><Cifra tamano="compacta" label="Peso cargado" valor={totalWeightTons.toFixed(3)} unidad="ton" /><Cifra tamano="compacta" label="Capacidad" valor="—" sub={sinVehiculo ? "sin vehículo" : "elige un vehículo"} className="text-right" /></div>
             )}
             {selectedOrders.length > 0 && (
               <div className="flex flex-wrap gap-1.5 border-t border-border pt-3">
@@ -1205,7 +1205,7 @@ function GenerateLoadOrdersComponent() {
 
         {/* Pedidos seleccionados */}
         <section className="lg-card flex flex-col lg:col-span-3" aria-label="Pedidos seleccionados">
-          {tituloTarjeta("Pedidos seleccionados", selectedOrders.length > 0 ? <Chip tono="info">{selectedOrders.length} {selectedOrders.length === 1 ? "pedido" : "pedidos"} · {totalUnidades} und · {totalWeightTons.toFixed(1)} t</Chip> : undefined)}
+          {tituloTarjeta("Pedidos seleccionados", selectedOrders.length > 0 ? <span className="lg-num text-sm"><span className="text-muted-foreground">Peso total orden:</span> <b>{totalWeightTons.toFixed(3)} ton</b> <span className="text-muted-foreground">· {selectedOrders.length} {selectedOrders.length === 1 ? "pedido" : "pedidos"} · {totalUnidades} und</span></span> : undefined)}
           <div className="px-4 pt-3">{botonGenerar(true)}</div>
 
           {selectedOrders.length === 0 ? (
@@ -1264,7 +1264,7 @@ function GenerateLoadOrdersComponent() {
                                   className={cn("lg-num h-8 w-20 text-right text-sm", unitsToLoad < maxToLoad && "border-atencion-bd bg-atencion-bg")}
                                 />
                               </TableCell>
-                              <TableCell className="lg-num w-28 py-2 text-right text-xs text-muted-foreground">{unitsToLoad > 0 ? `${(pesoTotalKg / 1000).toFixed(3)} t` : "—"}</TableCell>
+                              <TableCell className="lg-num w-32 py-2 text-right text-xs">{unitsToLoad > 0 ? <span className="font-medium text-primary">Peso total: {(pesoTotalKg / 1000).toFixed(3)} ton</span> : <span className="text-muted-foreground">—</span>}</TableCell>
                             </TableRow>
                           )
                         })}
