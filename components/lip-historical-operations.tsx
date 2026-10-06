@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Chip, Cifra, Esqueleto, Progreso, type Tono } from "@/components/ui/lipgo"
+import { cn } from "@/lib/utils"
 import {
   Loader2, ChevronLeft, ChevronRight, RefreshCw, TrendingUp, TrendingDown,
   Truck, Target, Users, TicketCheck, ArrowUpRight, ArrowDownRight, Minus,
@@ -38,6 +40,15 @@ const COLORS = {
 }
 const PIE_COLORS = [COLORS.primary, COLORS.emerald, COLORS.amber, COLORS.rose, COLORS.violet, COLORS.cyan]
 const BAR_PAIRS: [string, string][] = [["#3b82f6", "#93c5fd"], ["#10b981", "#6ee7b7"], ["#f59e0b", "#fcd34d"], ["#f43f5e", "#fda4af"]]
+
+// Clases estáticas (Tailwind no genera clases armadas en tiempo de ejecución).
+const ICONO_TONO: Record<Tono, string> = {
+  ok: "bg-ok-bg text-ok-fg",
+  atencion: "bg-atencion-bg text-atencion-fg",
+  critico: "bg-critico-bg text-critico-fg",
+  info: "bg-info-bg text-info-fg",
+  neutro: "bg-muted text-foreground",
+}
 
 function DeltaBadge({ current, previous, suffix = "" }: { current: number; previous: number; suffix?: string }) {
   if (previous === 0 && current === 0) return null
@@ -252,111 +263,105 @@ export function LipHistoricalOperations() {
   const bottom5 = useMemo(() => operatorStats.length > 5 ? operatorStats.slice(-5).reverse() : [], [operatorStats])
   const maxStatTon = useMemo(() => Math.max(...operatorStats.map(o => o.toneladas), 1), [operatorStats])
 
+  // ---- Solo presentación (gerencia 2026-10-05: cero cambios de comportamiento). Mismos filtros, mismas
+  // tarjetas (6), misma barra de cumplimiento, mismas gráficas, mismos rankings y la misma tabla. ----
+  const tonoCumpl = (v: number): Tono => (v >= 100 ? "ok" : v >= 80 ? "atencion" : "critico")
+
   if (loading) {
-    return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+    return (
+      <div className="flex flex-col gap-4" aria-busy aria-label="Cargando el histórico mensual">
+        <div className="lg-card p-5"><Esqueleto lineas={3} /></div>
+        <div className="grid gap-4 lg:grid-cols-2"><div className="lg-card p-5"><Esqueleto lineas={5} /></div><div className="lg-card p-5"><Esqueleto lineas={5} /></div></div>
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-end">
         <div>
-          <h2 className="text-xl font-bold text-foreground">Historico Mensual</h2>
-          <p className="text-sm text-muted-foreground capitalize">{monthLabel}</p>
+          <h2 className="text-lg font-semibold leading-tight">Historico Mensual</h2>
+          <p className="text-sm capitalize text-muted-foreground">{monthLabel}</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex flex-wrap items-center gap-2">
           <Select value={filterProducto} onValueChange={setFilterProducto}>
-            <SelectTrigger className="h-8 text-xs w-[160px]"><SelectValue placeholder="Producto" /></SelectTrigger>
+            <SelectTrigger className="h-9 w-[170px] bg-background text-sm"><SelectValue placeholder="Producto" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos los Productos</SelectItem>
               {productos.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filterOperacion} onValueChange={setFilterOperacion}>
-            <SelectTrigger className="h-8 text-xs w-[150px]"><SelectValue placeholder="Operacion" /></SelectTrigger>
+            <SelectTrigger className="h-9 w-[160px] bg-background text-sm"><SelectValue placeholder="Operacion" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas las Ops.</SelectItem>
               {operaciones.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
             </SelectContent>
           </Select>
           <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => navigateMonth(-1)}><ChevronLeft className="h-4 w-4" /></Button>
-            <span className="text-xs font-medium capitalize w-32 text-center">{monthLabel}</span>
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => navigateMonth(1)}><ChevronRight className="h-4 w-4" /></Button>
+            <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => navigateMonth(-1)} aria-label="Mes anterior"><ChevronLeft className="h-4 w-4" /></Button>
+            <span className="w-36 text-center text-sm font-medium capitalize">{monthLabel}</span>
+            <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => navigateMonth(1)} aria-label="Mes siguiente"><ChevronRight className="h-4 w-4" /></Button>
           </div>
-          <Button variant="outline" size="sm" onClick={() => loadData()} className="h-8"><RefreshCw className="h-3.5 w-3.5" /></Button>
+          <Button variant="outline" size="sm" onClick={() => loadData()} className="h-9 gap-1.5" aria-label="Actualizar"><RefreshCw className="h-3.5 w-3.5" /><span className="hidden sm:inline">Actualizar</span></Button>
         </div>
       </div>
 
       {/* KPI Cards - 6 cards including Meta del Mes */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+      <section className="lg-card grid grid-cols-2 gap-y-5 p-5 sm:gap-x-6 lg:grid-cols-6 lg:gap-y-0" aria-label="Cifras del mes">
         {[
-          { title: "Toneladas Mes", value: totalTon.toFixed(1), prev: prevTon, icon: Truck, color: "text-blue-500", bg: "bg-blue-500/10", subtitle: `Meta: ${totalMeta.toFixed(1)} ton` },
-          { title: "Meta del Mes", value: totalMeta.toFixed(1), prev: prevMeta, icon: Target, color: "text-indigo-500", bg: "bg-indigo-500/10", subtitle: `Faltan: ${Math.max(totalMeta - totalTon, 0).toFixed(1)} ton` },
-          { title: "Cumplimiento", value: `${avgCumplimiento}%`, prev: prevCumplimiento, icon: Target, color: avgCumplimiento >= 100 ? "text-emerald-500" : avgCumplimiento >= 80 ? "text-amber-500" : "text-rose-500", bg: avgCumplimiento >= 100 ? "bg-emerald-500/10" : avgCumplimiento >= 80 ? "bg-amber-500/10" : "bg-rose-500/10", isCumplimiento: true, subtitle: `${totalTon.toFixed(1)} / ${totalMeta.toFixed(1)}` },
-          { title: "Total Operaciones", value: totalOperaciones.toString(), prev: prevOperaciones, icon: TicketCheck, color: "text-cyan-500", bg: "bg-cyan-500/10" },
-          { title: "Operadores", value: totalOperadores.toString(), prev: prevOperadores, icon: Users, color: "text-violet-500", bg: "bg-violet-500/10" },
-          { title: "Dias Activos", value: diasActivos.toString(), prev: 0, icon: BarChart3, color: "text-slate-500", bg: "bg-slate-500/10" },
+          { title: "Toneladas Mes", value: totalTon.toFixed(1), prev: prevTon, icon: Truck, tono: "neutro" as Tono, subtitle: `Meta: ${totalMeta.toFixed(1)} ton` },
+          { title: "Meta del Mes", value: totalMeta.toFixed(1), prev: prevMeta, icon: Target, tono: "info" as Tono, subtitle: `Faltan: ${Math.max(totalMeta - totalTon, 0).toFixed(1)} ton` },
+          { title: "Cumplimiento", value: `${avgCumplimiento}%`, prev: prevCumplimiento, icon: Target, tono: tonoCumpl(avgCumplimiento), isCumplimiento: true, subtitle: `${totalTon.toFixed(1)} / ${totalMeta.toFixed(1)}` },
+          { title: "Total Operaciones", value: totalOperaciones.toString(), prev: prevOperaciones, icon: TicketCheck, tono: "neutro" as Tono },
+          { title: "Operadores", value: totalOperadores.toString(), prev: prevOperadores, icon: Users, tono: "neutro" as Tono },
+          { title: "Dias Activos", value: diasActivos.toString(), prev: 0, icon: BarChart3, tono: "neutro" as Tono },
         ].map((kpi, i) => (
-          <Card key={i} className="relative overflow-hidden">
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between">
-                <div className="space-y-1">
-                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">{kpi.title}</p>
-                  <p className="text-2xl font-bold tracking-tight">{kpi.value}</p>
-                  {(kpi as any).subtitle && <p className="text-[10px] text-muted-foreground">{(kpi as any).subtitle}</p>}
-                  {kpi.prev !== 0 && (
-                    <DeltaBadge
-                      current={(kpi as any).isCumplimiento ? avgCumplimiento : Number(kpi.value.replace("%", "").replace(",", ""))}
-                      previous={kpi.prev}
-                      suffix=" vs mes ant."
-                    />
-                  )}
-                </div>
-                <div className={`${kpi.bg} ${kpi.color} p-2 rounded-xl`}>
-                  <kpi.icon className="h-4 w-4" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <div key={i} className={cn("flex items-start gap-2.5", i < 5 && "lg:border-r lg:border-border lg:pr-4", i > 0 && "lg:pl-4")}>
+            <span className={cn("mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", ICONO_TONO[kpi.tono])}>
+              <kpi.icon className="h-3.5 w-3.5" aria-hidden />
+            </span>
+            <Cifra
+              tamano="compacta"
+              label={kpi.title}
+              valor={kpi.value}
+              tono={kpi.tono}
+              sub={(kpi as any).subtitle}
+              chips={kpi.prev !== 0 ? (
+                <DeltaBadge
+                  current={(kpi as any).isCumplimiento ? avgCumplimiento : Number(kpi.value.replace("%", "").replace(",", ""))}
+                  previous={kpi.prev}
+                  suffix=" vs mes ant."
+                />
+              ) : undefined}
+              className="min-w-0"
+            />
+          </div>
         ))}
-      </div>
+      </section>
 
       {/* Cumplimiento general progress bar */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-semibold">Cumplimiento General del Mes</p>
-            <Badge variant={avgCumplimiento >= 100 ? "default" : avgCumplimiento >= 80 ? "secondary" : "destructive"} className="text-xs">
-              {totalTon.toFixed(1)} / {totalMeta.toFixed(1)} ton ({avgCumplimiento}%)
-            </Badge>
-          </div>
-          <div className="w-full bg-muted rounded-full h-4 relative overflow-hidden">
-            <div
-              className="h-4 rounded-full transition-all duration-700"
-              style={{
-                width: `${Math.min(avgCumplimiento, 100)}%`,
-                backgroundColor: avgCumplimiento >= 100 ? COLORS.emerald : avgCumplimiento >= 80 ? COLORS.amber : COLORS.rose,
-              }}
-            />
-            {/* 100% marker */}
-            <div className="absolute top-0 bottom-0 w-0.5 bg-foreground/30" style={{ left: "100%" }} />
-          </div>
-          <div className="flex justify-between mt-1">
-            <span className="text-[10px] text-muted-foreground">0 ton</span>
-            <span className="text-[10px] text-muted-foreground">{totalMeta.toFixed(1)} ton (Meta)</span>
-          </div>
-        </CardContent>
-      </Card>
+      <section className="lg-card p-4" aria-label="Cumplimiento general del mes">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-sm font-semibold">Cumplimiento General del Mes</p>
+          <Chip tono={tonoCumpl(avgCumplimiento)}>{totalTon.toFixed(1)} / {totalMeta.toFixed(1)} ton ({avgCumplimiento}%)</Chip>
+        </div>
+        <Progreso pct={Math.min(avgCumplimiento, 100)} tono={tonoCumpl(avgCumplimiento)} />
+        <div className="mt-1 flex justify-between">
+          <span className="lg-num text-[11px] text-muted-foreground">0 ton</span>
+          <span className="lg-num text-[11px] text-muted-foreground">{totalMeta.toFixed(1)} ton (Meta)</span>
+        </div>
+      </section>
 
       {/* Cumplimiento: Bars for toneladas + Line for meta */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Toneladas Diarias vs Meta</CardTitle>
-            <CardDescription className="text-xs">Barras = toneladas reales, Linea = meta diaria. Verde si supera la meta, rojo si no.</CardDescription>
-          </CardHeader>
-          <CardContent>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <section className="lg-card" aria-label="Toneladas diarias vs meta">
+          <div className="border-b border-border px-4 py-2.5">
+            <h3 className="text-sm font-semibold">Toneladas Diarias vs Meta</h3>
+            <p className="text-xs text-muted-foreground">Barras = toneladas reales, Linea = meta diaria. Verde si supera la meta, rojo si no.</p>
+          </div>
+          <div className="p-3">
             {dailyCumplimiento.length > 0 ? (
               <ResponsiveContainer width="100%" height={280}>
                 <ComposedChart data={dailyCumplimiento} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
@@ -393,15 +398,13 @@ export function LipHistoricalOperations() {
                   />
                 </ComposedChart>
               </ResponsiveContainer>
-            ) : <p className="text-xs text-muted-foreground text-center py-12">Sin datos</p>}
-          </CardContent>
-        </Card>
+            ) : <p className="py-12 text-center text-xs text-muted-foreground">Sin datos</p>}
+          </div>
+        </section>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Volumen Diario por Producto</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <section className="lg-card" aria-label="Volumen diario por producto">
+          <div className="border-b border-border px-4 py-2.5"><h3 className="text-sm font-semibold">Volumen Diario por Producto</h3></div>
+          <div className="p-3">
             {dailyVolumeByProduct.length > 0 ? (
               <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={dailyVolumeByProduct} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
@@ -415,18 +418,18 @@ export function LipHistoricalOperations() {
                   ))}
                 </AreaChart>
               </ResponsiveContainer>
-            ) : <p className="text-xs text-muted-foreground text-center py-12">Sin datos</p>}
-          </CardContent>
-        </Card>
+            ) : <p className="py-12 text-center text-xs text-muted-foreground">Sin datos</p>}
+          </div>
+        </section>
       </div>
 
-      {/* NEW: Cumplimiento by Tipo de Operacion y Tipo de Producto - grouped bars */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold">Cumplimiento por Tipo de Operacion y Producto</CardTitle>
-          <CardDescription className="text-xs">Toneladas reales vs meta del mes por cada combinacion</CardDescription>
-        </CardHeader>
-        <CardContent>
+      {/* Cumplimiento by Tipo de Operacion y Tipo de Producto - grouped bars */}
+      <section className="lg-card" aria-label="Cumplimiento por tipo de operación y producto">
+        <div className="border-b border-border px-4 py-2.5">
+          <h3 className="text-sm font-semibold">Cumplimiento por Tipo de Operacion y Producto</h3>
+          <p className="text-xs text-muted-foreground">Toneladas reales vs meta del mes por cada combinacion</p>
+        </div>
+        <div className="p-3">
           {cumplimientoByOpAndProduct.data.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={cumplimientoByOpAndProduct.data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
@@ -454,32 +457,30 @@ export function LipHistoricalOperations() {
                 ))}
               </BarChart>
             </ResponsiveContainer>
-          ) : <p className="text-xs text-muted-foreground text-center py-12">Sin datos</p>}
+          ) : <p className="py-12 text-center text-xs text-muted-foreground">Sin datos</p>}
           {/* Summary badges below the chart */}
           {cumplimientoByOpAndProduct.data.length > 0 && (
-            <div className="flex flex-wrap gap-3 mt-3 justify-center">
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
               {cumplimientoByOpAndProduct.data.map((row, ri) => (
                 cumplimientoByOpAndProduct.products.map((p, pi) => {
                   const cumpl = (row as any)[`${p}_cumpl`] || 0
                   return (
-                    <Badge key={`${ri}-${pi}`} variant={cumpl >= 100 ? "default" : "secondary"} className="text-[10px] gap-1">
-                      {row.operacion} / {p}: <span className="font-bold">{cumpl}%</span>
-                    </Badge>
+                    <Chip key={`${ri}-${pi}`} tono={cumpl >= 100 ? "ok" : "neutro"}>
+                      {row.operacion} / {p}: <b>{cumpl}%</b>
+                    </Chip>
                   )
                 })
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       {/* Cumplimiento by operation + Op Pie */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Cumplimiento Diario por Tipo de Operacion</CardTitle>
-          </CardHeader>
-          <CardContent>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <section className="lg-card lg:col-span-2" aria-label="Cumplimiento diario por tipo de operación">
+          <div className="border-b border-border px-4 py-2.5"><h3 className="text-sm font-semibold">Cumplimiento Diario por Tipo de Operacion</h3></div>
+          <div className="p-3">
             {cumplimientoByOp.data.length > 0 ? (
               <ResponsiveContainer width="100%" height={260}>
                 <LineChart data={cumplimientoByOp.data} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
@@ -494,15 +495,13 @@ export function LipHistoricalOperations() {
                   ))}
                 </LineChart>
               </ResponsiveContainer>
-            ) : <p className="text-xs text-muted-foreground text-center py-12">Sin datos</p>}
-          </CardContent>
-        </Card>
+            ) : <p className="py-12 text-center text-xs text-muted-foreground">Sin datos</p>}
+          </div>
+        </section>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Toneladas por Operacion</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center">
+        <section className="lg-card" aria-label="Toneladas por operación">
+          <div className="border-b border-border px-4 py-2.5"><h3 className="text-sm font-semibold">Toneladas por Operacion</h3></div>
+          <div className="flex flex-col items-center p-3">
             {opPie.length > 0 ? (
               <>
                 <ResponsiveContainer width="100%" height={200}>
@@ -513,125 +512,110 @@ export function LipHistoricalOperations() {
                     <Tooltip formatter={(v: number) => [`${v.toFixed(2)} ton`, ""]} contentStyle={{ fontSize: 11 }} />
                   </PieChart>
                 </ResponsiveContainer>
-                <div className="flex flex-wrap gap-3 mt-1 justify-center">
+                <div className="mt-1 flex flex-wrap justify-center gap-3">
                   {opPie.map((p, i) => (
-                    <span key={i} className="flex items-center gap-1 text-[10px]">
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />{p.name}: {p.value.toFixed(1)} ton
+                    <span key={i} className="lg-num flex items-center gap-1 text-[11px]">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />{p.name}: {p.value.toFixed(1)} ton
                     </span>
                   ))}
                 </div>
               </>
-            ) : <p className="text-xs text-muted-foreground text-center py-12">Sin datos</p>}
-          </CardContent>
-        </Card>
+            ) : <p className="py-12 text-center text-xs text-muted-foreground">Sin datos</p>}
+          </div>
+        </section>
       </div>
 
       {/* Top 5 + Bottom 5 Operators */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="border-emerald-200 dark:border-emerald-900/40">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-amber-500" />
-              <CardTitle className="text-sm font-semibold">Top 5 Operadores del Mes</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <section className="lg-card" aria-label="Top 5 operadores del mes">
+          <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+            <Trophy className="h-4 w-4 text-atencion-fg" aria-hidden />
+            <h3 className="text-sm font-semibold">Top 5 Operadores del Mes</h3>
+          </div>
+          <div className="flex flex-col gap-2 p-3">
             {top5.length > 0 ? top5.map((op, i) => (
               <div key={i} className="flex items-center gap-3">
-                <div className={`flex items-center justify-center w-7 h-7 rounded-full text-[10px] font-bold ${i === 0 ? "bg-amber-500 text-white" : i === 1 ? "bg-slate-400 text-white" : i === 2 ? "bg-orange-400 text-white" : "bg-muted text-muted-foreground"}`}>{i + 1}</div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold truncate">{op.operador}</p>
-                  <p className="text-[9px] text-muted-foreground">{op.tiposOp}</p>
-                  <div className="w-full bg-muted rounded-full h-1.5 mt-1">
-                    <div className="h-1.5 rounded-full bg-emerald-500 transition-all" style={{ width: `${(op.toneladas / maxStatTon) * 100}%` }} />
-                  </div>
+                <div className={cn("flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold", i === 0 ? "bg-amber-500 text-white" : i === 1 ? "bg-slate-400 text-white" : i === 2 ? "bg-orange-400 text-white" : "bg-muted text-muted-foreground")}>{i + 1}</div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold">{op.operador}</p>
+                  <p className="text-[10px] text-muted-foreground">{op.tiposOp}</p>
+                  <Progreso pct={(op.toneladas / maxStatTon) * 100} tono="ok" className="mt-1" />
                 </div>
                 <div className="text-right">
-                  <p className="text-xs font-bold">{op.toneladas} ton</p>
-                  <p className="text-[9px] text-muted-foreground">{op.dias}d | ~{op.promedio}/d</p>
+                  <p className="lg-num text-xs font-bold">{op.toneladas} ton</p>
+                  <p className="lg-num text-[10px] text-muted-foreground">{op.dias}d | ~{op.promedio}/d</p>
                 </div>
               </div>
-            )) : <p className="text-xs text-muted-foreground text-center py-6">Sin datos</p>}
-          </CardContent>
-        </Card>
+            )) : <p className="py-6 text-center text-xs text-muted-foreground">Sin datos</p>}
+          </div>
+        </section>
 
-        <Card className="border-rose-200 dark:border-rose-900/40">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-rose-500" />
-              <CardTitle className="text-sm font-semibold text-rose-600 dark:text-rose-400">Operadores con Menor Rendimiento</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-2">
+        <section className="lg-card" aria-label="Operadores con menor rendimiento">
+          <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+            <AlertTriangle className="h-4 w-4 text-critico-fg" aria-hidden />
+            <h3 className="text-sm font-semibold">Operadores con Menor Rendimiento</h3>
+          </div>
+          <div className="flex flex-col gap-2 p-3">
             {bottom5.length > 0 ? bottom5.map((op, i) => (
-              <div key={i} className="flex items-center gap-3 bg-rose-50 dark:bg-rose-950/30 px-3 py-2 rounded-lg">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold truncate">{op.operador}</p>
-                  <p className="text-[9px] text-muted-foreground">{op.tiposOp}</p>
-                  <div className="w-full bg-muted rounded-full h-1.5 mt-1">
-                    <div className="h-1.5 rounded-full bg-rose-500 transition-all" style={{ width: `${(op.toneladas / maxStatTon) * 100}%` }} />
-                  </div>
+              <div key={i} className="flex items-center gap-3 rounded-xl border border-critico-bd bg-critico-bg px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold">{op.operador}</p>
+                  <p className="text-[10px] text-muted-foreground">{op.tiposOp}</p>
+                  <Progreso pct={(op.toneladas / maxStatTon) * 100} tono="critico" className="mt-1" />
                 </div>
                 <div className="text-right">
-                  <Badge variant="destructive" className="text-[10px]">{op.toneladas} ton</Badge>
-                  <p className="text-[9px] text-muted-foreground mt-0.5">{op.dias}d | ~{op.promedio}/d</p>
+                  <Chip tono="critico">{op.toneladas} ton</Chip>
+                  <p className="lg-num mt-0.5 text-[10px] text-muted-foreground">{op.dias}d | ~{op.promedio}/d</p>
                 </div>
               </div>
-            )) : <p className="text-xs text-muted-foreground text-center py-6">Todos los operadores rinden bien</p>}
-          </CardContent>
-        </Card>
+            )) : <p className="py-6 text-center text-xs text-muted-foreground">Todos los operadores rinden bien</p>}
+          </div>
+        </section>
       </div>
 
       {/* Full Operator Table */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold">Detalle Completo de Operadores</CardTitle>
-          <CardDescription className="text-xs">{operatorStats.length} operadores en el mes - Toneladas basadas en sumatoria de Toneladas Cargadas</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-auto max-h-[400px]">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-[11px] w-8">#</TableHead>
-                  <TableHead className="text-[11px]">Operador</TableHead>
-                  <TableHead className="text-[11px]">Operaciones</TableHead>
-                  <TableHead className="text-[11px] text-center">Dias</TableHead>
-                  <TableHead className="text-[11px] text-center">Total Ops.</TableHead>
-                  <TableHead className="text-[11px] text-right">Toneladas</TableHead>
-                  <TableHead className="text-[11px] text-right">Promedio/Dia</TableHead>
-                  <TableHead className="text-[11px] w-[130px]">Rendimiento</TableHead>
+      <section className="lg-card" aria-label="Detalle completo de operadores">
+        <div className="border-b border-border px-4 py-2.5">
+          <h3 className="text-sm font-semibold">Detalle Completo de Operadores</h3>
+          <p className="text-xs text-muted-foreground">{operatorStats.length} operadores en el mes - Toneladas basadas en sumatoria de Toneladas Cargadas</p>
+        </div>
+        <div className="max-h-[400px] overflow-auto">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-background">
+              <TableRow>
+                <TableHead className="w-8">#</TableHead>
+                <TableHead>Operador</TableHead>
+                <TableHead>Operaciones</TableHead>
+                <TableHead className="text-center">Dias</TableHead>
+                <TableHead className="text-center">Total Ops.</TableHead>
+                <TableHead className="text-right">Toneladas</TableHead>
+                <TableHead className="text-right">Promedio/Dia</TableHead>
+                <TableHead className="w-[150px]">Rendimiento</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {operatorStats.length > 0 ? operatorStats.map((op, i) => (
+                <TableRow key={i} className="hover:bg-muted/50">
+                  <TableCell className="lg-num text-xs font-semibold text-muted-foreground">{i + 1}</TableCell>
+                  <TableCell className="text-sm font-medium">{op.operador}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{op.tiposOp}</TableCell>
+                  <TableCell className="lg-num text-center text-sm">{op.dias}</TableCell>
+                  <TableCell className="lg-num text-center text-sm">{op.operaciones}</TableCell>
+                  <TableCell className="lg-num text-right text-sm font-semibold">{op.toneladas}</TableCell>
+                  <TableCell className="lg-num text-right text-sm">{op.promedio}</TableCell>
+                  <TableCell>
+                    <Progreso pct={Math.min((op.toneladas / maxStatTon) * 100, 100)} tono={op.toneladas / maxStatTon > 0.7 ? "ok" : op.toneladas / maxStatTon > 0.4 ? "atencion" : "critico"} />
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {operatorStats.length > 0 ? operatorStats.map((op, i) => (
-                  <TableRow key={i} className="hover:bg-muted/50">
-                    <TableCell className="text-xs font-semibold text-muted-foreground">{i + 1}</TableCell>
-                    <TableCell className="text-xs font-medium">{op.operador}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{op.tiposOp}</TableCell>
-                    <TableCell className="text-xs text-center">{op.dias}</TableCell>
-                    <TableCell className="text-xs text-center">{op.operaciones}</TableCell>
-                    <TableCell className="text-xs text-right font-semibold">{op.toneladas}</TableCell>
-                    <TableCell className="text-xs text-right">{op.promedio}</TableCell>
-                    <TableCell>
-                      <div className="w-full bg-muted rounded-full h-2">
-                        <div className="h-2 rounded-full transition-all" style={{
-                          width: `${Math.min((op.toneladas / maxStatTon) * 100, 100)}%`,
-                          backgroundColor: op.toneladas / maxStatTon > 0.7 ? COLORS.emerald : op.toneladas / maxStatTon > 0.4 ? COLORS.amber : COLORS.rose,
-                        }} />
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )) : (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center text-xs text-muted-foreground py-8">Sin datos de operadores</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+              )) : (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-8 text-center text-xs text-muted-foreground">Sin datos de operadores</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </section>
     </div>
   )
 }
