@@ -2689,7 +2689,7 @@ export async function deleteLoadOrder(orderId: number) {
     // Step 1: Get the order to be deleted to get ordendecargue
     const { data: orderToDelete, error: fetchError } = await supabase
       .from("cabeceraoc")
-      .select("ordendecargue, tipooperacion")
+      .select("ordendecargue, tipooperacion, facturasiigo, idempresa")
       .eq("id", orderId)
       .single()
 
@@ -2705,6 +2705,26 @@ export async function deleteLoadOrder(orderId: number) {
     const ordenDeCargue = orderToDelete.ordendecargue
     console.log("[v0] Order to delete has ordendecargue:", ordenDeCargue)
 
+    /*
+     * UNA ORDEN YA FACTURADA NO SE BORRA.
+     *
+     * `facturasiigo` lleno significa que existe una factura electronica
+     * emitida por esta orden. Esa factura NO se puede borrar: se anula con una
+     * nota credito, que es otro documento contable con su propia numeracion.
+     *
+     * Si se borrara la orden, la factura quedaria en Siigo sin nada que la
+     * respalde en LIPgo -- y el cruce contable se romperia sin que nadie se
+     * entere. Primero se anula en Siigo, despues se borra aqui.
+     */
+    if (String(orderToDelete.facturasiigo ?? "").trim() !== "") {
+      return {
+        success: false,
+        message:
+          `La orden ${ordenDeCargue} ya tiene factura emitida en Siigo y no se puede eliminar. ` +
+          "Anulala primero en Siigo con una nota credito.",
+      }
+    }
+
     // Si es una orden de Cargue (madre), borra primero sus clones automáticos
     // (o bloquea si alguno ya fue procesado). Los demás tipos (Descargue,
     // Distribucion, Tolva...) no disparan esta cascada.
@@ -2713,6 +2733,82 @@ export async function deleteLoadOrder(orderId: number) {
       if (!cascada.success) {
         return cascada
       }
+    }
+
+    /*
+     * REVERSO DE INVENTARIO Y CALIDAD.
+     *
+     * La aprobacion de calidad (`approveBatchAllocation`) deja tres rastros
+     * por orden: el movimiento de inventario en `invtrans`, la asignacion de
+     * lotes en `historicolotes`, y la marca `horalote` en la cabecera.
+     *
+     * Hasta ahora el borrado de la orden no tocaba ninguno, asi que el
+     * inventario seguia descontado por un despacho que ya no existia y los
+     * lotes quedaban asignados a una orden borrada. El saldo
+     * (`saldoinvdetalle`) se deriva de `invtrans`, asi que retirar las
+     * transacciones restituye el inventario sin tener que recalcular nada.
+     *
+     * Es el mismo reverso que ya hace "Anular asignacion de lotes"
+     * (`annulBatchAssignment` en lib/batch-actions.ts); aqui se aplica tambien
+     * al borrar la orden entera.
+     *
+     * Va ANTES de borrar la cabecera: si algo falla, la orden sigue existiendo
+     * y se puede reintentar. Al reves quedaria inventario descontado sin orden
+     * a la cual atribuirlo, que es precisamente lo que se esta corrigiendo.
+     */
+    const { error: invtransDeleteError } = await supabase
+      .from("invtrans")
+      .delete()
+      .eq("ocargue", ordenDeCargue)
+    if (invtransDeleteError) {
+      console.error("[v0] Error deleting invtrans:", invtransDeleteError)
+      return { success: false, message: "Error al revertir las transacciones de inventario" }
+    }
+    console.log("[v0] Deleted invtrans for ocargue:", ordenDeCargue)
+
+    const { error: lotesDeleteError } = await supabase
+      .from("historicolotes")
+      .delete()
+      .eq("ordendecargue", ordenDeCargue)
+    if (lotesDeleteError) {
+      console.error("[v0] Error deleting historicolotes:", lotesDeleteError)
+      return { success: false, message: "Error al revertir la asignacion de lotes" }
+    }
+    console.log("[v0] Deleted historicolotes for ocargue:", ordenDeCargue)
+
+    /*
+     * Los traslados de despacho y las pausas del cargue tambien cuelgan de la
+     * orden. Sin esto quedan apuntando a un numero de orden que ya no existe:
+     * los traslados reaparecerian como pendientes de un despacho borrado, y
+     * las pausas sumarian tiempo muerto a una orden fantasma en los
+     * indicadores de piso.
+     *
+     * No bloquean el borrado si fallan --no son el nucleo de la operacion y
+     * una orden a medio borrar es peor que un registro suelto-- pero el fallo
+     * se registra para poder limpiarlo despues.
+     */
+    const { error: trasladosError } = await supabase
+      .from("despachotraslados")
+      .delete()
+      .eq("ocargue", ordenDeCargue)
+    if (trasladosError) {
+      console.error("[v0] Error deleting despachotraslados:", trasladosError.message)
+      void registrarErrorServidor("orders.deleteLoadOrder.despachotraslados", trasladosError, {
+        orderId,
+        ordenDeCargue,
+      })
+    }
+
+    const { error: pausasError } = await supabase
+      .from("pausas")
+      .delete()
+      .eq("ordendecargue", ordenDeCargue)
+    if (pausasError) {
+      console.error("[v0] Error deleting pausas:", pausasError.message)
+      void registrarErrorServidor("orders.deleteLoadOrder.pausas", pausasError, {
+        orderId,
+        ordenDeCargue,
+      })
     }
 
     // Step 2: Delete all associated lines in detalleoc where idorden = orderId
