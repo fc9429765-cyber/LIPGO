@@ -27,7 +27,7 @@
 select 'lotes negativos' as foto, codproducto, nombreproducto, lote, location, stock_actual
   from saldoinvdetalle where idempresa = 1 and stock_actual < 0 order by stock_actual;
 select 'total por producto' as foto, codproducto, round(sum(stock_actual)::numeric,2) as und
-  from saldoinvdetalle where idempresa = 1 group by 1 having sum(stock_actual) <> 0 order by 2 desc;
+  from saldoinvdetalle where idempresa = 1 group by 1,2 having sum(stock_actual) <> 0 order by 3 desc;
 
 -- ========================== CORRECCIÓN ==============================
 begin;
@@ -187,8 +187,8 @@ commit;
 select 'lotes negativos (debe ser 0)' as verificacion, count(*) as lotes
   from saldoinvdetalle where idempresa = 1 and stock_actual < 0;
 select 'movimientos de reclasificación' as verificacion, tipomov, cod_movimiento, count(*) as filas, round(sum(cantidad)::numeric,2) as und
-  from invtrans where observaciones like '%[recl#40]%' group by 1,2 order by 1;
+  from invtrans where observaciones like '%[recl#40]%' group by 1,2,3 order by 2;
 -- Esperado: 74 Salida y 74 Entrada, 9.281 und cada lado (neto 0).
 select 'total por producto' as verificacion, codproducto, round(sum(stock_actual)::numeric,2) as und
-  from saldoinvdetalle where idempresa = 1 group by 1 having sum(stock_actual) <> 0 order by 2 desc;
+  from saldoinvdetalle where idempresa = 1 group by 1,2 having sum(stock_actual) <> 0 order by 3 desc;
 -- Esperado: idéntico al ANTES (la reclasificación no cambia totales por producto).

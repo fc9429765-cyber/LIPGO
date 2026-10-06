@@ -22,7 +22,7 @@
 -- ============================ ANTES =================================
 select 'cabecera' as foto, id, fecha, estado, activo, items, items_con_diferencia, total_sistema, total_conteo, total_diferencia from sig_inventario_cuadre where id = 40;
 select 'correcciones' as foto, estado, tipo, cod_movimiento, count(*) as lineas, round(sum(cantidad)::numeric,2) as und, count(invtrans_id) as posteadas
-  from sig_inventario_ajuste where cuadre_id = 40 and activo is true group by 1,2,3 order by 3;
+  from sig_inventario_ajuste where cuadre_id = 40 and activo is true group by 1,2,3,4 order by 4;
 select 'stock vivo total' as foto, round(sum(stock_actual)::numeric,2) as und, count(*) filter (where stock_actual < 0) as lotes_negativos
   from saldoinvdetalle where idempresa = 1;
 
@@ -109,10 +109,10 @@ commit;
 select 'cabecera' as verificacion, id, fecha, estado, activo, items, items_con_diferencia, total_sistema, total_conteo, total_diferencia from sig_inventario_cuadre where id = 40;
 -- Esperado: estado = 'aprobado'.
 select 'correcciones' as verificacion, estado, tipo, cod_movimiento, count(*) as lineas, round(sum(cantidad)::numeric,2) as und, count(invtrans_id) as posteadas
-  from sig_inventario_ajuste where cuadre_id = 40 and activo is true group by 1,2,3 order by 3;
+  from sig_inventario_ajuste where cuadre_id = 40 and activo is true group by 1,2,3,4 order by 4;
 -- Esperado: todas 'aprobado' y posteadas = lineas.
 select 'movimientos creados' as verificacion, tipomov, cod_movimiento, status, count(*) as filas, round(sum(cantidad)::numeric,2) as und, min(creado) as desde, max(creado) as hasta
-  from invtrans where observaciones like '%cuadre #40%' group by 1,2,3 order by 2;
+  from invtrans where observaciones like '%cuadre #40%' group by 1,2,3,4 order by 3;
 -- Esperado: 97 Entrada 701 y 89 Salida 702, todos fechados 2026-09-30.
 select 'stock vivo total' as verificacion, round(sum(stock_actual)::numeric,2) as und, count(*) filter (where stock_actual < 0) as lotes_negativos
   from saldoinvdetalle where idempresa = 1;
