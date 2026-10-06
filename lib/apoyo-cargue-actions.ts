@@ -24,6 +24,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentEmpresaId } from "@/lib/company-filter"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
 import { getColombiaDateTime } from "@/lib/date-utils"
+import { estadoQuincena } from "@/lib/quincena-abierta"
 
 const num = (v: any) => Number(v || 0)
 
@@ -336,6 +337,10 @@ export async function agregarApoyoAOrden(
       .single()
     if (error || !o) throw new Error(error?.message || "Orden no encontrada")
 
+    // Solo se corrige la quincena en curso: las anteriores ya se pagaron.
+    const q = estadoQuincena(String(o.fechacargue).slice(0, 10))
+    if (!q.abierta) return { success: false, message: q.motivo ?? "La quincena de esa orden ya está cerrada" }
+
     const actuales = String(o.auxiliares || "")
       .split(",")
       .map((s: string) => s.trim())
@@ -401,6 +406,10 @@ export async function quitarApoyoDeOrden(idorden: number, persona: string): Prom
       .eq("id", idorden)
       .single()
     if (error || !o) throw new Error(error?.message || "Orden no encontrada")
+
+    // Solo se corrige la quincena en curso: las anteriores ya se pagaron.
+    const q = estadoQuincena(String(o.fechacargue).slice(0, 10))
+    if (!q.abierta) return { success: false, message: q.motivo ?? "La quincena de esa orden ya está cerrada" }
 
     const actuales = String(o.auxiliares || "")
       .split(",")
