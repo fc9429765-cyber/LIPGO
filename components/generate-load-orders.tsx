@@ -227,7 +227,10 @@ function GenerateLoadOrdersComponent() {
     // Solo pedidos ABIERTOS, sin límite de fecha: un pedido pendiente puede ser
     // viejo y no debe desaparecer de aquí (el filtro de estado de abajo se
     // conserva como segunda barrera).
-    const result = await getOrders(undefined, { soloAbiertos: true })
+    // La empresa elegida arriba manda (gerencia 2026-10-05: el pedido 5102611 de Cedi Funza aparecía en Avimol
+    // para un usuario con acceso a varios proyectos). getOrders comprueba que sea accesible antes de usarla; si
+    // no viene, cae a todas las accesibles, como antes.
+    const result = await getOrders(selectedEmpresaId ?? undefined, { soloAbiertos: true })
     if (result.success && result.data) {
       let filteredOrders = result.data
 
