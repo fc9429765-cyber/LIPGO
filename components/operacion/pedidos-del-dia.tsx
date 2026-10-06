@@ -41,6 +41,8 @@ export function PedidosDelDia({ empresaId, className }: { empresaId: number | nu
   const [abierto, setAbierto] = useState(false)
   // Sin permiso (o sin acceso al proyecto) la línea no existe: no se avisa ni se explica.
   const [oculto, setOculto] = useState(false)
+  // Un fallo de lectura NO se esconde (regla de monitoreo: nada falla en silencio): se dice en una línea discreta.
+  const [error, setError] = useState<string | null>(null)
 
   const cargar = useCallback(async () => {
     if (!empresaId) return
@@ -50,10 +52,15 @@ export function PedidosDelDia({ empresaId, className }: { empresaId: number | nu
       if (r.success) {
         setData(r.data)
         setOculto(false)
+        setError(null)
       } else {
         setData(null)
-        setOculto(true)
+        setOculto(Boolean(r.sinPermiso))
+        setError(r.sinPermiso ? null : r.message)
       }
+    } catch (e: any) {
+      setData(null)
+      setError(e?.message || "No se pudieron leer los pedidos del día.")
     } finally {
       setCargando(false)
     }
@@ -62,10 +69,22 @@ export function PedidosDelDia({ empresaId, className }: { empresaId: number | nu
   useEffect(() => {
     setData(null)
     setOculto(false)
+    setError(null)
     void cargar()
   }, [cargar])
 
-  if (!empresaId || oculto || !data) return null
+  if (!empresaId || oculto) return null
+  if (error) {
+    return (
+      <div className={cn("flex items-center justify-between gap-2 rounded-xl border border-border bg-muted px-3 py-2 text-xs text-muted-foreground", className)}>
+        <span>Pedidos del día: {error}</span>
+        <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={cargar} disabled={cargando}>
+          <RefreshCw className={cn("h-3 w-3", cargando && "animate-spin")} /> Reintentar
+        </Button>
+      </div>
+    )
+  }
+  if (!data) return null
   const r = resumenVencen(data)
   if (!hayQueMostrar(r)) return null
   const tono = tonoVencen(r)
