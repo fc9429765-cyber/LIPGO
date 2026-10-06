@@ -71,9 +71,9 @@ export function ApoyoCargue() {
             Asignación de apoyo en cargue
           </CardTitle>
           <CardDescription>
-            Agrega personal extra (por ejemplo, de turno fijo) a una orden de Cargue o Descargue del día para que
-            también entre en el reparto de toneladas de esa orden. No reemplaza al personal ya asignado en
-            Picking/Packing, solo se le suma.
+            Ajusta quién entra en el reparto de toneladas de una orden de Cargue o Descargue del día. Las dos
+            listas —la cuadrilla de cargue y descargue, y quienes ya terminaron su turno— salen del reporte de
+            asistencia de ese día.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -124,7 +124,7 @@ export function ApoyoCargue() {
                         }
                       >
                         <UserPlus className="h-4 w-4" />
-                        Agregar apoyo
+                        Personal de apoyo
                       </Button>
                     </div>
                   </div>
@@ -152,7 +152,7 @@ export function ApoyoCargue() {
                                 size="icon"
                                 variant="ghost"
                                 className="h-7 w-7"
-                                title="Quitar apoyo (solo si fue agregado desde este módulo)"
+                                title="Sacar a esta persona del reparto de toneladas de la orden"
                                 onClick={() => quitar(orden, p.persona)}
                               >
                                 <X className="h-3.5 w-3.5" />
