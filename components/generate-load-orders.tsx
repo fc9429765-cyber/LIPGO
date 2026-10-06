@@ -843,9 +843,8 @@ function GenerateLoadOrdersComponent() {
   }
   const enVista = (o: Order) =>
     vista === "todos" ? true : vista === "hoy" ? promesaDe(o) === hoyISO : vista === "atrasados" ? diasAtraso(o) > 0 : esParcial(o)
-  const ordenesVisibles = orders
-    .filter((o) => coincide(o) && enVista(o))
-    .sort((a, b) => (promesaDe(a) ?? "9999-12-31").localeCompare(promesaDe(b) ?? "9999-12-31") || b.idpedido - a.idpedido)
+  // Mismo orden de siempre (el de loadOrders): la vista rápida y la búsqueda solo filtran, no reordenan.
+  const ordenesVisibles = orders.filter((o) => coincide(o) && enVista(o))
   const nHoy = orders.filter((o) => promesaDe(o) === hoyISO).length
   const nAtrasados = orders.filter((o) => diasAtraso(o) > 0).length
   const nParciales = orders.filter(esParcial).length
@@ -899,7 +898,6 @@ function GenerateLoadOrdersComponent() {
             disabled={loading}
             onClick={() => {
               loadOrders()
-              loadVehicles()
               toast({ title: "Actualizando datos", description: "Recargando pedidos desde la base de datos..." })
             }}
           >
@@ -1173,8 +1171,8 @@ function GenerateLoadOrdersComponent() {
                   {ordenesVisibles.map((order) => {
                     const sel = selectedOrders.includes(order.idpedido)
                     return (
-                      <TableRow key={order.idpedido} className={cn("cursor-pointer", sel && "bg-ok-bg/60")} onClick={() => handleOrderSelection(order.idpedido, !sel)}>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
+                      <TableRow key={order.idpedido} className={cn(sel && "bg-ok-bg/60")}>
+                        <TableCell>
                           <Checkbox id={`order-${order.idpedido}`} checked={sel} onCheckedChange={(checked) => handleOrderSelection(order.idpedido, checked as boolean)} aria-label={`Seleccionar el pedido ${order.pedido || order.idpedido}`} />
                         </TableCell>
                         <TableCell>
