@@ -184,18 +184,38 @@ const CHK_LIBRO = {
   regla: "Lo cargado de una línea es la suma de lo que se llevó cada orden; si difieren, una orden se escribió sin anotarse.",
   gravedad: "alerta" as const,
 }
+
+/**
+ * Líneas históricas que gerencia ya revisó una por una y dio por cerradas
+ * (2026-10-07, al cerrar el cruce pedidos ↔ órdenes de cargue). Siguen
+ * incumpliendo la regla, pero ya tienen explicación y decisión, así que repetir
+ * la alerta todas las noches solo enseña a ignorar las alertas.
+ *
+ * Una línea nueva que incumpla SÍ salta, que es para lo que sirve el control.
+ */
+const PEDIDO_MAS_REVISADOS: Record<number, string> = {
+  // ID1 pedido 147 (1-ago-2026, Comercial de Víveres San Andrés): se digitaron 2
+  // unidades y salieron 2.000 en una sola orden. El pedido está entregado y
+  // cerrado; gerencia lo dio por cerrado porque a hoy no tiene validez.
+  260: "Digitación del 1-ago-2026 (pidió 2, salieron 2.000); pedido entregado y cerrado.",
+}
+
 export async function checkPedidos(sb: SB): Promise<ResultadoCheck[]> {
   const out: ResultadoCheck[] = []
   try {
-    const { data, error } = await sb
-      .from("pedidosdetalle")
-      .select("transid, idpedido, id_empresa, producto, unidades, unidadescargadas")
-      .not("unidadescargadas", "is", null)
-      .order("transid", { ascending: true })
-      .limit(5000)
-    if (error) throw error
+    // TODAS las líneas, no las primeras 5.000: `pedidosdetalle` tiene más de
+    // 24.000 y con el tope una línea nueva con transid alto nunca se habría
+    // mirado (encontrado el 2026-10-07).
+    const data = await fetchAllRows((from, to) =>
+      sb
+        .from("pedidosdetalle")
+        .select("transid, idpedido, id_empresa, producto, unidades, unidadescargadas")
+        .not("unidadescargadas", "is", null)
+        .order("transid", { ascending: true })
+        .range(from, to),
+    )
     const casos = (data ?? [])
-      .filter((l: any) => n0(l.unidadescargadas) > n0(l.unidades) + 0.01)
+      .filter((l: any) => n0(l.unidadescargadas) > n0(l.unidades) + 0.01 && !PEDIDO_MAS_REVISADOS[Number(l.transid)])
       .map((l: any) => `ID${l.id_empresa} pedido ${l.idpedido} · ${l.producto}: pedidas ${n0(l.unidades)}, cargadas ${n0(l.unidadescargadas)}`)
     out.push(resultadoDe(CHK_PEDIDO_MAS, casos))
   } catch (e: any) {
