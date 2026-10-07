@@ -36,15 +36,19 @@
 --   Nada de eso se corrige aquí: es enero, un mes ya cerrado con su conteo aprobado,
 --   y tocar inventario de un mes cerrado movería su base.
 --
--- QUÉ SE CORRIGE Y POR QUÉ ESOS TRES CAMPOS
---   unidades            2    → 2000   lo pedido de verdad
---   unidadespendientes  -1998 → 0     deja de haber un pendiente negativo
---   peso                25   → 25000  es el peso de la LÍNEA, no el unitario: en las
---                                     líneas hermanas de este producto siempre vale
---                                     12,5 por unidad (40→500, 20→250, 150→1.875) y
---                                     aquí vale 25 para 2 unidades, o sea 12,5. Si se
---                                     suben las unidades y no el peso, la demanda en
---                                     kilos de ese día queda mal por 24.975.
+-- QUÉ SE CORRIGE: SOLO DOS CAMPOS
+--   unidades  2  → 2000   lo pedido de verdad
+--   peso      25 → 25000  es el peso de la LÍNEA, no el unitario: en las líneas hermanas
+--                         de este producto vale 12,5 por unidad en 11 de 12 casos
+--                         (40→500, 20→250, 150→1.875, 1.000→12.500, 2.800→35.000) y aquí
+--                         vale 25 para 2 unidades, o sea 12,5. Si se suben las unidades y
+--                         no el peso, la demanda en kilos de ese día queda mal por 24.975.
+--
+--   `unidadespendientes` NO SE TOCA: es una COLUMNA GENERADA (`unidades - unidadescargadas`,
+--   comprobado en 25 de 25 filas). Postgres rechaza escribirla con
+--   "column unidadespendientes can only be updated to DEFAULT" — así falló la primera
+--   corrida de este script. Al subir `unidades` pasa sola de -1.998 a 0, y hay un candado
+--   al final que lo verifica.
 --
 -- QUÉ NO SE TOCA, A PROPÓSITO
 --   total_linea 58.200.000  ya corresponde a 2.000: no hay nada que ajustar.
@@ -82,6 +86,7 @@ do $corregir$
 declare
   v_und      numeric;
   v_cargadas numeric;
+  v_pend     numeric;
   v_peso     numeric;
   v_total    numeric;
   v_empresa  int;
@@ -119,23 +124,33 @@ begin
     raise exception 'El peso de la linea ya no es 25 (es %): se deshace todo y hay que revisar la tasa.', v_peso;
   end if;
 
+  -- OJO: `unidadespendientes` es una COLUMNA GENERADA (`unidades - unidadescargadas`,
+  -- comprobado en 25 de 25 filas el 2026-10-07). Postgres rechaza escribirla:
+  -- "column unidadespendientes can only be updated to DEFAULT". No se toca: al subir
+  -- `unidades` a 2.000 se recalcula sola a 0, y el candado de abajo lo verifica.
   update public.pedidosdetalle
-     set unidades           = 2000,
-         unidadespendientes = 0,
-         peso               = 25000
+     set unidades = 2000,
+         peso     = 25000
    where transid = 260;
 
-  raise notice 'Linea 260 del pedido 147: unidades 2 -> 2000, pendientes -1998 -> 0, peso 25 -> 25000.';
+  raise notice 'Linea 260 del pedido 147: unidades 2 -> 2000, peso 25 -> 25000 (pendientes se recalculan solos).';
 
   -- COHERENCIA FINAL.
   select unidades, unidadescargadas, unidadespendientes, peso
-    into v_und, v_cargadas, v_peso, v_total
+    into v_und, v_cargadas, v_pend, v_peso
     from public.pedidosdetalle where transid = 260;
   if v_und <> 2000 then
     raise exception 'La linea no quedo en 2000: se deshace todo.';
   end if;
   if v_cargadas > v_und then
     raise exception 'Sigue habiendo mas cargado que pedido: se deshace todo.';
+  end if;
+  -- La columna generada tiene que haberse recalculado sola.
+  if v_pend <> 0 then
+    raise exception 'Las unidades pendientes quedaron en % en vez de 0: se deshace todo.', v_pend;
+  end if;
+  if v_peso <> 25000 then
+    raise exception 'El peso de la linea quedo en % en vez de 25000: se deshace todo.', v_peso;
   end if;
 
   -- Cuantas lineas siguen incumpliendo en TODA la base. Se INFORMA, no se aborta: si
