@@ -1253,7 +1253,7 @@ export async function generateLoadOrder(orderData: {
     // La inspección deja de estar huérfana: queda amarrada a esta orden.
     await vincularRegistroSanitario(supabase, horaSanitaria.registroId, orderCode)
 
-    const detailUpdateResult = await updatePedidoDetalleStatus(orderData.detailUpdates, orderCode)
+    const detailUpdateResult = await updatePedidoDetalleStatus(orderData.detailUpdates, orderCode, nextId)
 
     if (!detailUpdateResult.success) {
       return { success: false, message: detailUpdateResult.message }
@@ -2167,6 +2167,14 @@ export async function updatePedidoDetalleStatus(
     idpedido?: number
   }>,
   orderCode?: string,
+  /**
+   * Id de la orden en `cabeceraoc`. Es el vínculo FIABLE para el libro: `ocargue` es un
+   * código de texto y `cabeceraoc` tiene códigos repetidos, así que por texto no siempre
+   * se sabe de qué orden habla una fila. Es lo que dejó 254 atribuciones huérfanas antes
+   * del 2026-10-07 (script 251). Opcional para no romper a nadie; si no llega, la fila
+   * queda con el código como antes.
+   */
+  idorden?: number,
 ) {
   const supabase = await createClient()
   try {
@@ -2244,6 +2252,8 @@ export async function updatePedidoDetalleStatus(
             idpedido: Number(l?.idpedido ?? u.idpedido) || 0,
             transid: Number(u.transid),
             ocargue: orderCode,
+            // El vínculo por id, además del código de texto (script 251).
+            idorden: Number.isFinite(Number(idorden)) ? Number(idorden) : null,
             unidades: Number(u.unidadescargadas) || 0,
             origen: "app",
           }

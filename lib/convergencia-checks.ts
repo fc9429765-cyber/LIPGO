@@ -393,8 +393,79 @@ export async function checkRastroSinOrden(sb: SB, dias = 30): Promise<ResultadoC
   }
 }
 
+const CHK_VINCULO_POR_ID = {
+  clave: "vinculo_orden_por_id",
+  titulo: "Rastros nuevos que no quedaron ligados a su orden por id",
+  regla:
+    "Toda fila nueva que nombre una orden de cargue debe guardar también su id (`idorden`), no solo el código de texto. El código no es único (cabeceraoc tiene 55 repetidos), así que por texto no siempre se sabe de qué orden habla una fila. Es el termómetro del paso 3: cuando esto lleve días en cero, se puede poner la llave foránea y el huérfano se vuelve imposible.",
+  gravedad: "alerta" as const,
+}
+
+/**
+ * Filas RECIENTES que traen código de orden pero no su id.
+ *
+ * Mira solo los últimos días a propósito: el histórico anterior al script 251 tiene su
+ * residuo conocido y medido (38 ambiguas y 322 huérfanas en invtrans, 30 y 77 en
+ * historicolotes, 24 y 254 en el libro) y no se va a mover. Lo que importa aquí es si el
+ * CÓDIGO NUEVO está escribiendo el vínculo, que es la condición para el paso 3.
+ */
+export async function checkVinculoPorId(sb: SB, dias = 15): Promise<ResultadoCheck> {
+  try {
+    const desde = diasAtrasISO(dias)
+    const desdeFecha = desde.slice(0, 10)
+    const casos: string[] = []
+
+    const mov = await fetchAllRows((from, to) =>
+      sb
+        .from("invtrans")
+        .select("id, ocargue, idorden, creado")
+        .not("ocargue", "is", null)
+        .ilike("origen", "orden de cargue")
+        .is("idorden", null)
+        .gte("creado", desde)
+        .order("id", { ascending: true })
+        .range(from, to),
+    )
+    if (mov.length > 0) casos.push(`invtrans: ${mov.length} movimiento(s) con código de orden y sin idorden (ids ${mov.slice(0, 5).map((m: any) => m.id).join(", ")}${mov.length > 5 ? "…" : ""})`)
+
+    const lotes = await fetchAllRows((from, to) =>
+      sb
+        .from("historicolotes")
+        .select("id, ordendecargue, idorden, fecha")
+        .not("ordendecargue", "is", null)
+        .is("idorden", null)
+        .gte("fecha", desdeFecha)
+        .order("id", { ascending: true })
+        .range(from, to),
+    )
+    if (lotes.length > 0) casos.push(`historicolotes: ${lotes.length} asignación(es) con código de orden y sin idorden`)
+
+    // Solo lo que escribió la APP. Las filas que reconstruyó el backfill del 4-oct llevan
+    // la fecha de ese día y son histórico, no trabajo nuevo: contarlas diría que el código
+    // no está escribiendo el vínculo cuando sí lo está.
+    const libro = await fetchAllRows((from, to) =>
+      sb
+        .from("pedidodetalle_ocargue")
+        .select("id, ocargue, idorden, creado_en")
+        .eq("origen", "app")
+        .not("ocargue", "is", null)
+        .is("idorden", null)
+        .gte("creado_en", desde)
+        .order("id", { ascending: true })
+        .range(from, to),
+    )
+    if (libro.length > 0) casos.push(`pedidodetalle_ocargue: ${libro.length} atribución(es) con código de orden y sin idorden`)
+
+    return resultadoDe(CHK_VINCULO_POR_ID, casos)
+  } catch (e: any) {
+    const msg = e?.message ?? String(e)
+    const falta = /idorden|column .* does not exist/i.test(msg)
+    return sinDatos(CHK_VINCULO_POR_ID, falta ? "falta correr scripts/251_ligar_rastros_a_la_orden_por_id.sql" : msg)
+  }
+}
+
 export async function correrChecks(sb: SB): Promise<ResultadoCheck[]> {
-  const [dup, mas, pend, stock, ped, err, rastro] = await Promise.all([
+  const [dup, mas, pend, stock, ped, err, rastro, vinculo] = await Promise.all([
     checkSalidasDuplicadas(sb),
     checkSalioMasQueOrden(sb),
     checkPendientesInventario(sb),
@@ -402,6 +473,7 @@ export async function correrChecks(sb: SB): Promise<ResultadoCheck[]> {
     checkPedidos(sb),
     checkErroresLegibles(sb),
     checkRastroSinOrden(sb),
+    checkVinculoPorId(sb),
   ])
-  return [dup, mas, ...pend, ...stock, ...ped, err, rastro]
+  return [dup, mas, ...pend, ...stock, ...ped, err, rastro, vinculo]
 }

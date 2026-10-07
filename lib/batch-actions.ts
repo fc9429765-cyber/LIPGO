@@ -389,6 +389,8 @@ export async function approveBatchAllocation(data: BatchApprovalData, selectedEm
       location: allocation.location,
       cantidad: allocation.cantidad,
       ordendecargue: data.ordendecargue,
+      // Mismo vínculo por id que en invtrans (script 251): el código de texto no basta.
+      idorden: ordenId,
       fecha: currentDate,
       aprobadopor: currentUsuario,
       placa: placaOrden,
@@ -486,6 +488,11 @@ export async function approveBatchAllocation(data: BatchApprovalData, selectedEm
         status: group.esAlterno ? "Lote alterno" : "por descontar",
         origen: "orden de cargue",
         ocargue: data.ordendecargue,
+        // El vínculo FIABLE con la orden (script 251). `ocargue` es un código de texto y
+        // `cabeceraoc` tiene códigos repetidos, así que por texto no siempre se sabe a qué
+        // orden pertenece el movimiento: por eso todo lo que se creó antes del 2026-10-07
+        // dejó 322 movimientos huérfanos. `ordenId` ya está resuelto arriba, contra la base.
+        idorden: ordenId,
         creado: currentTimestamp,
         creadopor: currentUsuario,
       }
