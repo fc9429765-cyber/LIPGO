@@ -1,7 +1,8 @@
 -- =====================================================================
 -- 227_pedidos_cuadrar_cargadas_historico.sql
 --
--- NO CORRER SIN INSTRUCCIÓN EXPRESA DE GERENCIA.
+-- AUTORIZADO POR GERENCIA EL 2026-10-07: el PASO 2 ya está habilitado (antes venía
+-- comentado como salvaguarda, por eso una primera corrida solo mostró las consultas).
 --
 -- Cambia los NÚMEROS DE PEDIDOS de proyectos en operación. No toca inventario
 -- (invtrans) ni ningún saldo: `pedidosdetalle` es el control del pedido del
@@ -81,9 +82,12 @@ where l.segun_ordenes > d.unidades + 0.01
 order by (l.segun_ordenes - d.unidades) desc;
 
 -- ---------------------------------------------------------------------
--- PASO 2 — CORRECCIÓN DEL GRUPO C. Quitar el comentario SOLO con la instrucción dada.
+-- PASO 2 — CORRECCIÓN DEL GRUPO C.
+-- HABILITADO el 2026-10-07 por instrucción expresa de gerencia ("corre el 227"),
+-- después de revisar con ella a dónde mueve cantidades: solo sube el contador
+-- `pedidosdetalle.unidadescargadas` y vuelve a derivar el estado del pedido; no
+-- toca inventario ni ningún saldo. Hasta esa fecha el bloque estuvo comentado.
 -- ---------------------------------------------------------------------
-/*
 begin;
 
 -- 2a. Las líneas, por llave primaria. Solo las que caben en lo pedido.
@@ -138,7 +142,6 @@ where c.idpedido = r.idpedido
 drop table _lineas_a_cuadrar;
 
 commit;
-*/
 
 -- ---------------------------------------------------------------------
 -- PASO 3 — DESPUÉS. La primera consulta debe quedar en cero. La segunda debe seguir
