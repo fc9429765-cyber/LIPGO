@@ -1714,7 +1714,7 @@ Maestro de vendedores, resuelto por la tabla genérica sobre `vendedores`.
 
 #### Gestión de Usuarios
 
-Alta y mantenimiento de usuarios, con sus permisos de módulo y los proyectos a los que tiene acceso. En la pestaña Accesos se le asignan **perfiles de acceso** (ver el módulo siguiente): al aplicarlos, el servidor recalcula y escribe las empresas, owners y módulos del usuario; lo marcado a mano se conserva. También permite copiar los permisos de otro usuario como punto de partida.
+Alta y mantenimiento de usuarios, con sus permisos de módulo y los proyectos a los que tiene acceso. La pestaña **Perfil** (la primera, por defecto) muestra el acceso efectivo de la persona y le asigna **perfiles de acceso** como tarjetas; Módulos y Empresas quedan como ajuste fino, con una etiqueta en cada casilla que venga de un perfil. Al aplicar perfiles (ver el módulo siguiente), el servidor recalcula y escribe las empresas, owners y módulos del usuario; lo marcado a mano se conserva. También permite copiar los permisos de otro usuario como punto de partida.
 
 - **Archivo:** `components/configuration/user-permissions-management.tsx`
 - **Permiso:** `gestion_usuarios`

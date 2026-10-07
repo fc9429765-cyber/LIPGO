@@ -149,6 +149,39 @@ export async function usuariosParaPlantilla(): Promise<UsuarioDePerfil[]> {
 }
 
 /**
+ * Qué parte del acceso de un usuario la puso un perfil.
+ *
+ * La pantalla lo usa para marcar cada casilla que vino de un perfil. Sin esa
+ * marca no se distingue lo del perfil de lo manual, y desmarcar algo del
+ * perfil "no hace nada" --el próximo recálculo lo devuelve-- sin que se
+ * entienda por qué.
+ */
+export async function getAccesoMaterializadoUsuario(
+  profileId: string,
+): Promise<{ empresas: number[]; owners: string[]; permisos: string[] }> {
+  const vacio = { empresas: [] as number[], owners: [] as string[], permisos: [] as string[] }
+  if (!profileId) return vacio
+  try {
+    const sb: any = await getSupabaseAdmin()
+    const { data, error } = await sb
+      .from("acceso_perfil_materializado")
+      .select("tipo, valor")
+      .eq("profile_id", profileId)
+    if (error) throw error
+    const out = { empresas: [] as number[], owners: [] as string[], permisos: [] as string[] }
+    for (const r of data ?? []) {
+      if (r.tipo === "empresa") out.empresas.push(Number(r.valor))
+      else if (r.tipo === "owner") out.owners.push(String(r.valor))
+      else if (r.tipo === "permiso") out.permisos.push(String(r.valor))
+    }
+    return out
+  } catch (e: any) {
+    if (!tablaInexistente(e)) console.error("[acceso-perfiles] materializado de usuario:", e?.message ?? e)
+    return vacio
+  }
+}
+
+/**
  * Lo que un usuario tiene HOY, para usarlo como punto de partida de un perfil.
  *
  * Es la forma rápida de ordenar lo existente: se abre al coordinador que ya
