@@ -64,11 +64,17 @@ order by i.id;
 
 -- 1c. La prueba del cruce: lo asignado a la 9899 contra lo asignado a la 9896.
 -- Las dos columnas deben dar 1.011 y coincidir producto por producto.
+--
+-- OJO: `historicolotes.cantidad` es de tipo TEXTO, no numérico, así que hay que castear
+-- para poder sumar (`sum(text)` no existe). Comprobado el 2026-10-07 que las 24.759 filas
+-- de la tabla tienen texto numérico limpio, así que el casteo no puede fallar. Que esa
+-- columna sea texto es un hallazgo aparte, que se informa y no se cambia aquí: cambiar el
+-- tipo de una columna en uso es otro trabajo y con su propia reversa.
 select coalesce(a.producto, b.producto) as producto,
        a.asignado_9899, b.asignado_9896
-from (select producto, sum(cantidad) as asignado_9899
+from (select producto, sum(cantidad::numeric) as asignado_9899
         from public.historicolotes where ordendecargue = 'MOL202610069899' group by producto) a
-full join (select producto, sum(cantidad) as asignado_9896
+full join (select producto, sum(cantidad::numeric) as asignado_9896
         from public.historicolotes where ordendecargue = 'MOL202610069896' group by producto) b
   on b.producto = a.producto
 order by 1;
@@ -116,7 +122,8 @@ begin
     raise exception 'Se esperaban 13 movimientos y 1011 unidades en MOL202610069899, y hay % movimientos con % unidades: se deshace todo y hay que revisar.', v_invtrans, v_und;
   end if;
 
-  select count(*), coalesce(sum(cantidad), 0) into v_historico, v_und_hl
+  -- `historicolotes.cantidad` es TEXTO: hay que castear para sumar (ver nota del paso 1c).
+  select count(*), coalesce(sum(cantidad::numeric), 0) into v_historico, v_und_hl
     from public.historicolotes where ordendecargue = 'MOL202610069899';
   if v_historico <> 24 or v_und_hl <> 1011 then
     raise exception 'Se esperaban 24 filas de historicolotes y 1011 unidades en MOL202610069899, y hay % filas con % unidades: se deshace todo.', v_historico, v_und_hl;
@@ -131,8 +138,13 @@ begin
   end if;
 
   -- Solo de ID3 y solo de esta orden, nunca por filtros amplios.
+  -- `origen` se compara en minúsculas: en la base conviven "orden de cargue",
+  -- "Orden de cargue" y "Orden de Cargue", y con igualdad exacta este candado podría
+  -- abortar una corrección buena por una diferencia de mayúsculas. Comprobado el
+  -- 2026-10-07 que las 13 filas de esta orden traen "orden de cargue" en minúsculas.
   if exists (select 1 from public.invtrans
-              where ocargue = 'MOL202610069899' and (idempresa <> 3 or origen <> 'orden de cargue')) then
+              where ocargue = 'MOL202610069899'
+                and (idempresa <> 3 or lower(trim(origen)) <> 'orden de cargue')) then
     raise exception 'Hay movimientos de MOL202610069899 que no son de ID3 o no vienen de la orden de cargue: se deshace todo.';
   end if;
 
