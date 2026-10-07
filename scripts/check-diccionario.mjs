@@ -88,6 +88,15 @@ function archivosDe(carpeta) {
 // `.from("tabla")` y `.from('tabla')`. Se ignoran los que llevan variable o plantilla,
 // porque ahi no se puede saber el nombre sin ejecutar.
 const RE_FROM = /\.from\(\s*["']([a-zA-Z_][a-zA-Z0-9_]*)["']\s*\)/g
+
+// `supabase.storage.from("archivos")` NO es una tabla: es un deposito de archivos.
+// Se mira el texto justo antes de la llamada porque el `.storage` suele quedar en la
+// linea anterior (`await supabase.storage\n  .from("certificados")`). Sin esto, los
+// cinco depositos del proyecto (archivos, certificados, firmas, plantillas y
+// soportes_gastos) aparecerian como tablas que faltan.
+const VENTANA_ANTES = 80
+const esDeposito = (src, indice) => /\bstorage\s*\.?\s*$/.test(src.slice(Math.max(0, indice - VENTANA_ANTES), indice))
+
 const usadas = new Map() // tabla -> Set(archivos)
 
 for (const carpeta of CARPETAS_CODIGO) {
@@ -99,6 +108,7 @@ for (const carpeta of CARPETAS_CODIGO) {
       continue
     }
     for (const m of src.matchAll(RE_FROM)) {
+      if (esDeposito(src, m.index)) continue
       const tabla = m[1]
       if (!usadas.has(tabla)) usadas.set(tabla, new Set())
       usadas.get(tabla).add(ruta.slice(raiz.length + 1).replace(/\\/g, "/"))
@@ -107,7 +117,7 @@ for (const carpeta of CARPETAS_CODIGO) {
 }
 
 // `.from()` tambien lo usan Array.from y otras APIs; se descartan los nombres que
-// claramente no son tablas por no parecerse a nada del esquema conocido NI a una tabla.
+// claramente no son tablas.
 const NO_SON_TABLAS = new Set(["length", "default", "window", "document"])
 const desconocidas = [...usadas.keys()].filter((t) => !conocidas.has(t) && !NO_SON_TABLAS.has(t)).sort()
 
@@ -116,16 +126,24 @@ const desconocidas = [...usadas.keys()].filter((t) => !conocidas.has(t) && !NO_S
 const sinDescripcion = objetos.filter((o) => !o.descripcion).map((o) => o.nombre).sort()
 
 function leerBaseline() {
-  if (!existsSync(RUTA_BASELINE)) return { sinDescripcion: [] }
+  if (!existsSync(RUTA_BASELINE)) return { sinDescripcion: [], tablasInexistentes: [] }
   try {
     const json = JSON.parse(readFileSync(RUTA_BASELINE, "utf8"))
-    return { sinDescripcion: Array.isArray(json.sinDescripcion) ? json.sinDescripcion : [] }
+    return {
+      sinDescripcion: Array.isArray(json.sinDescripcion) ? json.sinDescripcion : [],
+      tablasInexistentes: Array.isArray(json.tablasInexistentes) ? json.tablasInexistentes : [],
+    }
   } catch (e) {
     throw new Error(`No pude leer ${RUTA_BASELINE}: ${e.message}`)
   }
 }
 
 const baseline = leerBaseline()
+
+// Tablas que el codigo usa y que NO EXISTEN en la base. No son un diccionario viejo:
+// son un defecto real, ya informado, esperando decision. Se congelan para no dejar el
+// pipeline en rojo, pero siguen a la vista en cada corrida.
+const inexistentesConocidas = new Set(baseline.tablasInexistentes.map((t) => (typeof t === "string" ? t : t.tabla)))
 const conocidasSinDescripcion = new Set(baseline.sinDescripcion)
 const nuevasSinDescripcion = sinDescripcion.filter((t) => !conocidasSinDescripcion.has(t))
 const yaDescritas = baseline.sinDescripcion.filter((t) => !sinDescripcion.includes(t))
@@ -159,15 +177,29 @@ console.log(
   ),
 )
 
-if (desconocidas.length > 0) {
+const nuevasDesconocidas = desconocidas.filter((t) => !inexistentesConocidas.has(t))
+const defectosConocidos = desconocidas.filter((t) => inexistentesConocidas.has(t))
+
+if (nuevasDesconocidas.length > 0) {
   falla = true
-  console.error(rojo(`\n✗ El diccionario esta viejo: el codigo usa ${desconocidas.length} tabla(s) que no estan en el.`))
-  for (const t of desconocidas) {
+  console.error(rojo(`\n✗ El diccionario esta viejo: el codigo usa ${nuevasDesconocidas.length} tabla(s) que no estan en el.`))
+  for (const t of nuevasDesconocidas) {
     const d = [...usadas.get(t)].slice(0, 2).join(", ")
     console.error(rojo(`    · ${t}`) + gris(`  (${d}${usadas.get(t).size > 2 ? ", …" : ""})`))
   }
-  console.error(amarillo("\n  Regenera el diccionario:  pnpm run diccionario"))
-  console.error(gris("  (si alguno de esos nombres no es una tabla, agregalo a NO_SON_TABLAS en este script)"))
+  console.error(amarillo("\n  Si creaste una tabla:          pnpm run diccionario"))
+  console.error(amarillo("  Si la tabla NO existe, es un defecto real: informalo y congelalo en"))
+  console.error(gris(`    ${RUTA_BASELINE.slice(raiz.length + 1).replace(/\\/g, "/")} -> "tablasInexistentes"`))
+  console.error(gris("  Si el nombre no es una tabla, agregalo a NO_SON_TABLAS en este script."))
+}
+
+if (defectosConocidos.length > 0) {
+  console.warn(amarillo(`\n· ${defectosConocidos.length} tabla(s) que el codigo usa y NO EXISTEN en la base (defecto conocido, pendiente de decision):`))
+  for (const t of defectosConocidos) {
+    const ficha = baseline.tablasInexistentes.find((x) => (typeof x === "string" ? x : x.tabla) === t)
+    const nota = typeof ficha === "object" && ficha?.nota ? ` — ${ficha.nota}` : ""
+    console.warn(gris(`    · ${t}${nota}`))
+  }
 }
 
 if (nuevasSinDescripcion.length > 0) {

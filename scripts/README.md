@@ -12,19 +12,31 @@ Todo script nuevo lleva un **consecutivo de tres dígitos** al principio:
 El número dice **en qué orden se fueron necesitando**, que es el orden en que
 habría que correrlos en una instalación nueva. No es una fecha ni una versión.
 
-**Para saber el siguiente número**, mira el último de la carpeta:
+**Para saber el siguiente número, pregúntalo. No lo adivines:**
 
 ```bash
-ls scripts/*.sql | sort | tail -1
+pnpm run check:scripts -- --siguiente
 ```
 
-## Las tres carpetas
+Responde el siguiente libre de cada serie. Hacerlo así no es un capricho: cuando dos
+personas trabajan a la vez, las dos miran el último archivo al mismo tiempo y las dos
+toman el mismo número. Entonces la frase que más se usa en el día a día, *"corre el
+244"*, deja de identificar un archivo. Pasó de verdad el 7 de octubre de 2026: en una
+sola jornada quedaron duplicados el 241, el 243 y el 244.
+
+Hay **10 números duplicados históricos**, congelados en
+`scripts/scripts-numeros-duplicados.json`. No se renombran: un script que ya se corrió
+debe conservar su nombre, o nadie sabe qué se ejecutó. Pero `pnpm run check:scripts`
+corre en el pipeline y **falla si aparece uno nuevo**.
+
+## Las carpetas
 
 | Carpeta | Serie | Qué contiene |
 |---|---|---|
-| `scripts/` | `001`–`179` | Todo lo general: permisos, columnas, vistas, correcciones |
-| `scripts/sig/` | `01`–`60` | Sistema Integrado de Gestión. **Serie propia**, no se renumera |
-| `scripts/auditoria/` | `01`–`04` | Triggers de auditoría. Serie propia |
+| `scripts/` | `001`–`248` | Todo lo general: permisos, columnas, vistas, correcciones |
+| `scripts/sig/` | `01`–`63` | Sistema Integrado de Gestión. **Serie propia**, no se renumera |
+| `scripts/auditoria/` | `01`–`06` | Triggers de auditoría. Serie propia |
+| `scripts/diccionario/` | `01`– | Diccionario de datos. Serie propia. Ver su [README](diccionario/README.md) |
 
 `scripts/sig/` conserva su numeración porque ya está corrida en Supabase:
 renumerarla rompería la correspondencia entre lo que dice el repositorio y lo

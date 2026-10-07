@@ -86,13 +86,14 @@ function construirDocumento(esquema: Esquema): string {
   const vistas = esquema.objetos.filter((o) => !o.tipo.startsWith("tabla"))
   const totalColumnas = esquema.objetos.reduce((s, o) => s + o.columnas.length, 0)
   const generadas = esquema.objetos.flatMap((o) => o.columnas.filter((c) => c.generada).map((c) => ({ tabla: o.nombre, c })))
+  // Columnas de texto cuyo NOMBRE promete una cantidad. Se excluyen a propósito los
+  // nombres que son identificadores (`numero_factura`, `numero_documento`, `codigo`…):
+  // esos son texto con toda la razón y llenarían la lista de ruido. Lo que se busca es
+  // la columna sobre la que alguien va a intentar un `sum()` y se va a estrellar.
+  const PROMETE_CANTIDAD = /(^|_)(cantidad|cantidades|unidades|peso|pesos|total|totales|precio|monto|saldo|stock|valor)($|_)/i
   const textoNumerico = esquema.objetos.flatMap((o) =>
     o.columnas
-      .filter(
-        (c) =>
-          /^(text|character|varchar)/i.test(c.tipo) &&
-          /(cantidad|unidades|peso|total|precio|valor|monto|saldo|stock|numero)/i.test(c.nombre),
-      )
+      .filter((c) => /^(text|character|varchar)/i.test(c.tipo) && PROMETE_CANTIDAD.test(c.nombre))
       .map((c) => ({ tabla: o.nombre, c })),
   )
   const sinDescripcion = esquema.objetos.filter((o) => !o.descripcion)
