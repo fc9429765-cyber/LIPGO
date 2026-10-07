@@ -89,7 +89,7 @@ recorte fino, exclusivo de Pedidos/facturación.
 **Tablas:** `autorizacion_perfiles` (EL perfil: el puesto) + `acceso_perfil_empresas` /
 `_owners` / `_permisos` (qué abre) + `autorizacion_perfil_procesos` (qué autoriza con clave),
 `autorizacion_usuario_perfiles` (quién lo tiene, con alcance) y `acceso_perfil_materializado`
-(qué filas puso cada perfil en cada usuario). Scripts `247` (nació aparte) y `249` (se fundió
+(qué filas puso cada perfil en cada usuario). Scripts `247` (nació aparte) y `252` (se fundió
 con autorizaciones: `acceso_perfiles` ya no existe).
 
 Un **perfil** es el puesto: **empresas + owners + permisos de módulo + procesos autorizables**

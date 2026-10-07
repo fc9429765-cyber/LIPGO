@@ -421,7 +421,7 @@ export function PerfilesAcceso() {
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
             Las tablas de perfiles no existen todavía. Hay que correr{" "}
-            <code className="rounded bg-amber-100 px-1">scripts/249_perfiles_unificados.sql</code> en la base de datos.
+            <code className="rounded bg-amber-100 px-1">scripts/252_perfiles_unificados.sql</code> en la base de datos.
           </p>
         </div>
       )}

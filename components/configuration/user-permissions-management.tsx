@@ -931,7 +931,7 @@ export function UserPermissionsManagement() {
                             </div>
                             {faltaScriptPerfiles ? (
                               <p className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-                                Falta correr <code>scripts/249_perfiles_unificados.sql</code> para poder usar perfiles.
+                                Falta correr <code>scripts/252_perfiles_unificados.sql</code> para poder usar perfiles.
                               </p>
                             ) : perfilesCatalogo.length === 0 ? (
                               <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border p-6 text-center">

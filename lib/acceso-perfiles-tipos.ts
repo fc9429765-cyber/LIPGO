@@ -4,7 +4,7 @@
 // y solo puede exportar funciones async.
 //
 // Desde el 2026-10-07 el perfil es UNO solo (`autorizacion_perfiles`, script
-// 249): el puesto, con los procesos que autoriza con clave y las empresas,
+// 252): el puesto, con los procesos que autoriza con clave y las empresas,
 // owners y módulos que abre.
 
 export type PerfilAcceso = {

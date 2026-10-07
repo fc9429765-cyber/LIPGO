@@ -4,7 +4,7 @@
 //
 // Desde el 2026-10-07 el perfil es UNO solo: `autorizacion_perfiles` (el
 // puesto del script 203) con lo que autoriza con clave Y con lo que abre:
-// empresas, owners y módulos (hijas `acceso_perfil_*`, script 249). Este
+// empresas, owners y módulos (hijas `acceso_perfil_*`, script 252). Este
 // archivo administra la parte de acceso y se apoya en `autorizaciones-actions`
 // para la cabecera del perfil, los procesos y la asignación, que siguen
 // siendo de ese módulo (con su candado financiero y su bitácora).
@@ -39,7 +39,7 @@ const PERFILES = "autorizacion_perfiles"
 const ASIGNACION = "autorizacion_usuario_perfiles"
 
 const FALTA_MIGRACION =
-  "Las tablas de perfiles no están al día: hay que correr scripts/249_perfiles_unificados.sql."
+  "Las tablas de perfiles no están al día: hay que correr scripts/252_perfiles_unificados.sql."
 
 function tablaInexistente(e: any): boolean {
   return e?.code === "42P01" || /relation .* does not exist/i.test(String(e?.message ?? ""))
