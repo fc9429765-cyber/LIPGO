@@ -2898,7 +2898,7 @@
         }
       ],
       "descripcion": null,
-      "filas_aprox": 386449,
+      "filas_aprox": 465671,
       "restricciones": [
         {
           "tipo": "llave primaria",
@@ -6161,7 +6161,7 @@
         }
       ],
       "descripcion": null,
-      "filas_aprox": 9452,
+      "filas_aprox": 9528,
       "restricciones": [
         {
           "tipo": "llave foranea",
@@ -23754,10 +23754,21 @@
           "descripcion": null,
           "admite_nulos": true,
           "expresion_generada": null
+        },
+        {
+          "tipo": "bigint",
+          "orden": 13,
+          "nombre": "idorden",
+          "defecto": null,
+          "generada": false,
+          "identidad": false,
+          "descripcion": "Orden de cargue de esta asignacion de lote, por id (cabeceraoc.id). Ver invtrans.idorden. Script 251.",
+          "admite_nulos": true,
+          "expresion_generada": null
         }
       ],
       "descripcion": null,
-      "filas_aprox": 24508,
+      "filas_aprox": 24792,
       "restricciones": [
         {
           "tipo": "llave foranea",
@@ -26132,10 +26143,21 @@
           "descripcion": "Origen de la produccion: NULL = LIP (servicio facturable, valor de todo lo historico y de lo que sube el LOGO); 'Harinera' = produccion propia de Harinera, genera inventario pero NUNCA llega a cabeceraoc ni a facturacion.",
           "admite_nulos": true,
           "expresion_generada": null
+        },
+        {
+          "tipo": "bigint",
+          "orden": 25,
+          "nombre": "idorden",
+          "defecto": null,
+          "generada": false,
+          "identidad": false,
+          "descripcion": "Orden de cargue a la que pertenece el movimiento, por id (cabeceraoc.id). Es el vinculo FIABLE: `ocargue` es un codigo de texto y cabeceraoc tiene codigos repetidos. Nulo cuando el movimiento no viene de una orden, o cuando el codigo es ambiguo o huerfano. Script 251.",
+          "admite_nulos": true,
+          "expresion_generada": null
         }
       ],
       "descripcion": null,
-      "filas_aprox": 32013,
+      "filas_aprox": 33147,
       "restricciones": [
         {
           "tipo": "llave foranea",
@@ -30774,10 +30796,21 @@
           "descripcion": "app = lo escribió el cargue; backfill_auditoria / backfill_linea = reconstruido el 2026-10-04 y comprobado contra el detalle de la orden; linea_sin_orden = la orden ya no existe, es el rastro que guardaba la línea y no se puede probar con el documento.",
           "admite_nulos": false,
           "expresion_generada": null
+        },
+        {
+          "tipo": "bigint",
+          "orden": 10,
+          "nombre": "idorden",
+          "defecto": null,
+          "generada": false,
+          "identidad": false,
+          "descripcion": "Orden de cargue de esta atribucion, por id (cabeceraoc.id). Ver invtrans.idorden. Script 251.",
+          "admite_nulos": true,
+          "expresion_generada": null
         }
       ],
       "descripcion": "Libro auxiliar: cuántas unidades tomó cada orden de cargue de cada línea de pedido. Permite que un pedido salga en varias órdenes sin perder lo ya despachado, revertir una sola orden y mostrar al cliente qué orden despachó cada parte. No es inventario: el inventario es invtrans.",
-      "filas_aprox": 19854,
+      "filas_aprox": 20146,
       "restricciones": [
         {
           "tipo": "llave primaria",
@@ -31268,7 +31301,7 @@
         }
       ],
       "descripcion": null,
-      "filas_aprox": 12045,
+      "filas_aprox": 12216,
       "restricciones": [
         {
           "tipo": "llave foranea",
@@ -62178,5 +62211,5 @@
       "indices_unicos": []
     }
   ],
-  "generado_en": "2026-10-07T19:29:29.469866+00:00"
+  "generado_en": "2026-10-07T20:50:10.974879+00:00"
 }

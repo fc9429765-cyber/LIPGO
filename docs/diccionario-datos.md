@@ -6,13 +6,13 @@
 > `comment on column`, para que viajen pegadas al dato.
 > Lo que el esquema no puede contar está en [diccionario-trampas.md](diccionario-trampas.md).
 
-Base `postgres`, esquema `public`. Generado el 7/10/2026, 2:29:29 p. m..
+Base `postgres`, esquema `public`. Generado el 7/10/2026, 3:50:10 p. m..
 
 | | Cuántos |
 |---|---|
 | Tablas | 301 |
 | Vistas | 47 |
-| Columnas | 4.816 |
+| Columnas | 4.819 |
 | Objetos con descripción | 62 de 348 |
 
 ## Lo que hay que mirar antes de escribir una consulta
@@ -857,7 +857,7 @@ _Sin descripción. Se escribe en la base con `comment on table public.asistencia
 
 ### auditoria
 
-Tabla · 386.449 filas aprox. · 13 columnas
+Tabla · 465.671 filas aprox. · 13 columnas
 
 _Sin descripción. Se escribe en la base con `comment on table public.auditoria is '...'`._
 
@@ -1324,7 +1324,7 @@ _Sin descripción. Se escribe en la base con `comment on table public.bonos_nomi
 
 ### cabeceraoc
 
-Tabla · 9.452 filas aprox. · 46 columnas
+Tabla · 9.528 filas aprox. · 46 columnas
 
 _Sin descripción. Se escribe en la base con `comment on table public.cabeceraoc is '...'`._
 
@@ -3860,7 +3860,7 @@ _Sin descripción. Se escribe en la base con `comment on table public.historiala
 
 ### historicolotes
 
-Tabla · 24.508 filas aprox. · 12 columnas
+Tabla · 24.792 filas aprox. · 13 columnas
 
 _Sin descripción. Se escribe en la base con `comment on table public.historicolotes is '...'`._
 
@@ -3882,6 +3882,7 @@ _Sin descripción. Se escribe en la base con `comment on table public.historicol
 | `location` | text |  |  |  |
 | `pdf` | text |  |  |  |
 | `placa` | text |  |  |  |
+| `idorden` | bigint |  |  | Orden de cargue de esta asignacion de lote, por id (cabeceraoc.id). Ver invtrans.idorden. Script 251. |
 
 ### hojas_de_vida
 
@@ -4191,7 +4192,7 @@ _Sin descripción. Se escribe en la base con `comment on table public.invglobal 
 
 ### invtrans
 
-Tabla · 32.013 filas aprox. · 24 columnas
+Tabla · 33.147 filas aprox. · 25 columnas
 
 _Sin descripción. Se escribe en la base con `comment on table public.invtrans is '...'`._
 
@@ -4225,6 +4226,7 @@ _Sin descripción. Se escribe en la base con `comment on table public.invtrans i
 | `cod_movimiento` | text |  |  |  |
 | `horaprod` | text |  |  | Hora real de produccion del lote, formato "HH:MM" (hora Colombia). La captura el formulario de Ingreso de Producción. Junto con `fechaprod` determina el turno en Liquidación Tolva; NO usar `creado`, que es la hora de registro. |
 | `tipo_produccion` | text |  |  | Origen de la produccion: NULL = LIP (servicio facturable, valor de todo lo historico y de lo que sube el LOGO); 'Harinera' = produccion propia de Harinera, genera inventario pero NUNCA llega a cabeceraoc ni a facturacion. |
+| `idorden` | bigint |  |  | Orden de cargue a la que pertenece el movimiento, por id (cabeceraoc.id). Es el vinculo FIABLE: `ocargue` es un codigo de texto y cabeceraoc tiene codigos repetidos. Nulo cuando el movimiento no viene de una orden, o cuando el codigo es ambiguo o huerfano. Script 251. |
 
 ### iso_clausulas
 
@@ -4949,7 +4951,7 @@ _Sin descripción. Se escribe en la base con `comment on table public.pausas is 
 
 ### pedidodetalle_ocargue
 
-Tabla · 19.854 filas aprox. · 9 columnas
+Tabla · 20.146 filas aprox. · 10 columnas
 
 Libro auxiliar: cuántas unidades tomó cada orden de cargue de cada línea de pedido. Permite que un pedido salga en varias órdenes sin perder lo ya despachado, revertir una sola orden y mostrar al cliente qué orden despachó cada parte. No es inventario: el inventario es invtrans.
 
@@ -4968,10 +4970,11 @@ Libro auxiliar: cuántas unidades tomó cada orden de cargue de cada línea de p
 | `creado_en` | timestamp with time zone | obligatoria | `now()` |  |
 | `creado_por` | text |  |  |  |
 | `origen` | text | obligatoria | `'app'::text` | app = lo escribió el cargue; backfill_auditoria / backfill_linea = reconstruido el 2026-10-04 y comprobado contra el detalle de la orden; linea_sin_orden = la orden ya no existe, es el rastro que guardaba la línea y no se puede probar con el documento. |
+| `idorden` | bigint |  |  | Orden de cargue de esta atribucion, por id (cabeceraoc.id). Ver invtrans.idorden. Script 251. |
 
 ### pedidoscabecera
 
-Tabla · 12.045 filas aprox. · 42 columnas
+Tabla · 12.216 filas aprox. · 42 columnas
 
 _Sin descripción. Se escribe en la base con `comment on table public.pedidoscabecera is '...'`._
 
