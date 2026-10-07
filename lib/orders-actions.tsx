@@ -2725,6 +2725,45 @@ export async function deleteLoadOrder(orderId: number) {
       }
     }
 
+    /*
+     * UNA ORDEN QUE YA DESPACHÓ NO SE BORRA.
+     *
+     * Regla de gerencia (2026-10-07): "si tiene los otros pasos del proceso, como picking
+     * verificado, no se puede borrar o afectaría el inventario".
+     *
+     * El picking es el momento en que la mercancía sale de verdad: las líneas pasan de
+     * `por descontar` (una reserva) a `aprobado` (una salida). Si la orden se borra después
+     * de eso, el reverso devuelve el inventario y el sistema queda diciendo que hay producto
+     * que ya se fue en un camión. El saldo se infla en silencio y nadie se entera hasta el
+     * conteo del mes.
+     *
+     * Una reserva sin picking sí se puede borrar: no salió nada todavía.
+     *
+     * Si de verdad hay que deshacer un despacho, no es borrando la orden: es una corrección
+     * de inventario, que deja su propio rastro y pasa por clave.
+     */
+    const { data: yaDespacho, error: errDespacho } = await supabase
+      .from("invtrans")
+      .select("id, nombreproducto, cantidad, status")
+      .eq("ocargue", ordenDeCargue)
+      .ilike("origen", "orden de cargue")
+      .ilike("status", "apr%")
+      .limit(500)
+    if (errDespacho) {
+      return { success: false, message: `No se pudo comprobar si la orden ya despachó: ${errDespacho.message}. No se borró nada.` }
+    }
+    if ((yaDespacho ?? []).length > 0) {
+      const unidades = (yaDespacho ?? []).reduce((s: number, r: any) => s + (Number(r.cantidad) || 0), 0)
+      return {
+        success: false,
+        message:
+          `La orden ${ordenDeCargue} ya despachó: tiene ${yaDespacho!.length} salida(s) de inventario aprobadas ` +
+          `por ${unidades.toLocaleString("es-CO")} unidades. Borrarla devolvería a la bodega un producto que ya salió. ` +
+          `Si hay que corregirla, hazlo desde Cuadre y Correcciones de inventario, que deja rastro; o anula el pedido ` +
+          `asociado si lo que cambió fue la entrega.`,
+      }
+    }
+
     // Si es una orden de Cargue (madre), borra primero sus clones automáticos
     // (o bloquea si alguno ya fue procesado). Los demás tipos (Descargue,
     // Distribucion, Tolva...) no disparan esta cascada.

@@ -308,14 +308,100 @@ export async function checkErroresLegibles(sb: SB): Promise<ResultadoCheck> {
 }
 
 /** Corre todas las comprobaciones. Cada una falla por separado: nunca una tumba a las demás. */
+const CHK_RASTRO_SIN_ORDEN = {
+  clave: "rastro_sin_orden",
+  titulo: "Rastros de una orden que ya no existe",
+  regla:
+    "Toda orden que viva en el sistema debe tener su proceso completo. Si se borra una orden, se van con ella su asignación de lotes y sus movimientos de inventario: un rastro suelto es inventario o lotes atribuidos a un documento que nadie puede abrir.",
+  gravedad: "critico" as const,
+}
+
+/**
+ * Asignaciones de lote y movimientos de inventario cuya orden de cargue ya no existe.
+ *
+ * Regla de gerencia (2026-10-07): "toda orden que viva en el sistema debe tener su proceso
+ * completo; si no es así es una alerta y debe quedar visible".
+ *
+ * SOLO MIRA HACIA ADELANTE, por instrucción expresa: "lo pasado que quede así". La deuda
+ * histórica medida el 2026-10-07 (72 filas de asignación en 29 órdenes y 149 movimientos en
+ * 44 órdenes, toda anterior a septiembre) se deja quieta y queda fuera de la ventana. Desde
+ * el 2026-10-06 el borrado de una orden ya se lleva sus rastros, así que lo que aparezca aquí
+ * es nuevo y hay que mirarlo.
+ */
+export async function checkRastroSinOrden(sb: SB, dias = 30): Promise<ResultadoCheck> {
+  try {
+    const desde = diasAtrasISO(dias)
+    const desdeFecha = desde.slice(0, 10)
+
+    // Las órdenes que existen hoy. Se traen todas: son ~9.500 y el cruce tiene que ser exacto.
+    const ordenes = await fetchAllRows((from, to) =>
+      sb.from("cabeceraoc").select("ordendecargue").order("id", { ascending: true }).range(from, to),
+    )
+    const existen = new Set(ordenes.map((o: any) => String(o.ordendecargue ?? "").trim()).filter(Boolean))
+    if (existen.size === 0) {
+      return sinDatos(CHK_RASTRO_SIN_ORDEN, "no se pudo leer ninguna orden de cargue: sin eso el cruce diría que todo está huérfano")
+    }
+
+    const movimientos = await fetchAllRows((from, to) =>
+      sb
+        .from("invtrans")
+        .select("id, ocargue, idempresa, nombreproducto, cantidad, status, creado")
+        .not("ocargue", "is", null)
+        .ilike("origen", "orden de cargue")
+        .gte("creado", desde)
+        .order("id", { ascending: true })
+        .range(from, to),
+    )
+    const lotes = await fetchAllRows((from, to) =>
+      sb
+        .from("historicolotes")
+        .select("id, ordendecargue, idempresa, producto, cantidad, fecha")
+        .gte("fecha", desdeFecha)
+        .order("id", { ascending: true })
+        .range(from, to),
+    )
+
+    const casos: string[] = []
+    const porOrdenMov = new Map<string, { n: number; und: number; id: number }>()
+    for (const m of movimientos) {
+      const oc = String(m.ocargue ?? "").trim()
+      if (!oc || existen.has(oc)) continue
+      const v = porOrdenMov.get(oc) ?? { n: 0, und: 0, id: m.idempresa }
+      v.n++
+      v.und += n0(m.cantidad)
+      porOrdenMov.set(oc, v)
+    }
+    for (const [oc, v] of porOrdenMov) {
+      casos.push(`ID${v.id} · ${oc}: ${v.n} movimiento(s) de inventario por ${n0(v.und)} unidades, y la orden no existe`)
+    }
+
+    const porOrdenLote = new Map<string, { n: number; id: number }>()
+    for (const l of lotes) {
+      const oc = String(l.ordendecargue ?? "").trim()
+      if (!oc || existen.has(oc)) continue
+      const v = porOrdenLote.get(oc) ?? { n: 0, id: l.idempresa }
+      v.n++
+      porOrdenLote.set(oc, v)
+    }
+    for (const [oc, v] of porOrdenLote) {
+      casos.push(`ID${v.id} · ${oc}: ${v.n} línea(s) de asignación de lote, y la orden no existe`)
+    }
+
+    return resultadoDe(CHK_RASTRO_SIN_ORDEN, casos)
+  } catch (e: any) {
+    return sinDatos(CHK_RASTRO_SIN_ORDEN, e?.message ?? String(e))
+  }
+}
+
 export async function correrChecks(sb: SB): Promise<ResultadoCheck[]> {
-  const [dup, mas, pend, stock, ped, err] = await Promise.all([
+  const [dup, mas, pend, stock, ped, err, rastro] = await Promise.all([
     checkSalidasDuplicadas(sb),
     checkSalioMasQueOrden(sb),
     checkPendientesInventario(sb),
     checkStockNegativo(sb),
     checkPedidos(sb),
     checkErroresLegibles(sb),
+    checkRastroSinOrden(sb),
   ])
-  return [dup, mas, ...pend, ...stock, ...ped, err]
+  return [dup, mas, ...pend, ...stock, ...ped, err, rastro]
 }

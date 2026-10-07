@@ -754,6 +754,42 @@ export async function annulBatchAssignment(ordenCargue: string) {
   try {
     const supabase = await createClient()
 
+    /*
+     * UNA ASIGNACIÓN QUE YA PASÓ POR PICKING NO SE ANULA.
+     *
+     * Regla de gerencia (2026-10-07): "si tiene los otros pasos del proceso, como picking
+     * verificado, no se puede borrar o afectaría el inventario".
+     *
+     * La asignación de lote es una RESERVA: aparta el producto para que otra orden no lo
+     * tome, y sus líneas quedan en `por descontar`. El picking es el que despacha: las pasa
+     * a `aprobado` y ahí la mercancía salió de verdad.
+     *
+     * Anular después del picking borra esas salidas y devuelve el inventario, así que el
+     * sistema queda diciendo que hay producto que ya se fue en un camión. Pasa en silencio.
+     *
+     * Mientras solo haya reserva, anular es correcto y sigue permitido.
+     */
+    const { data: yaDespacho, error: errDespacho } = await supabase
+      .from("invtrans")
+      .select("id, cantidad")
+      .eq("ocargue", ordenCargue)
+      .ilike("origen", "orden de cargue")
+      .ilike("status", "apr%")
+      .limit(500)
+    if (errDespacho) {
+      return { success: false, message: `No se pudo comprobar si la orden ya despachó: ${errDespacho.message}. No se anuló nada.` }
+    }
+    if ((yaDespacho ?? []).length > 0) {
+      const unidades = (yaDespacho ?? []).reduce((s: number, r: any) => s + (Number(r.cantidad) || 0), 0)
+      return {
+        success: false,
+        message:
+          `La orden ${ordenCargue} ya pasó por Picking: tiene ${yaDespacho!.length} salida(s) aprobadas por ` +
+          `${unidades.toLocaleString("es-CO")} unidades. Anular la asignación devolvería a la bodega un producto que ` +
+          `ya salió. Si hay que corregirla, hazlo desde Cuadre y Correcciones de inventario, que deja rastro.`,
+      }
+    }
+
     const { error: deleteError } = await supabase.from("historicolotes").delete().eq("ordendecargue", ordenCargue)
 
     if (deleteError) {
