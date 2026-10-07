@@ -41,6 +41,15 @@ jobs:
         run: pnpm exec tsc --noEmit
       - name: Guías de aprendizaje
         run: pnpm run check:aprendizaje
+      # Avisa si alguien creó una tabla y no regeneró el diccionario, o si una tabla
+      # nueva llegó sin descripción. No necesita base de datos: lee el JSON versionado.
+      - name: Diccionario de datos
+        run: pnpm run check:diccionario
+      # Dos personas trabajando a la vez toman "el siguiente numero" al mismo tiempo y
+      # quedan dos scripts con el mismo. Entonces "corre el 244" deja de identificar un
+      # archivo. Los duplicados historicos estan congelados; uno nuevo rompe.
+      - name: Numeración de scripts
+        run: pnpm run check:scripts
       - name: Pruebas
         run: pnpm test
       - name: Build de producción

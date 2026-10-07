@@ -18,7 +18,7 @@
  * sin el botón "Reintentar". Antes se lograba con un `key` que REMONTABA
  * MainContent entero en cada navegación; eso borraba el estado de los saltos
  * con dato (Gestión de Ordenes → Báscula con la orden, Visor → Ausentismos
- * con la persona, Ciclo → Gestión de Facturas filtrado, buscador → registro)
+ * con la persona, Ciclo → Solicitar Facturas filtrado, buscador → registro)
  * justo antes de que el módulo destino lo leyera.
  */
 
@@ -26,6 +26,7 @@ import React from "react"
 import { AlertTriangle, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { reportarErrorApp } from "@/lib/errores-app"
+import { esErrorDeDesfase, recargarPorDesfase } from "@/lib/desfase-despliegue"
 
 interface Props {
   children: React.ReactNode
@@ -48,19 +49,13 @@ export class ErrorBoundary extends React.Component<Props, State> {
     console.error("[ErrorBoundary] Error no capturado en el módulo:", error, info.componentStack)
     // Monitoreo propio (SQL 217): queda registrado con usuario, pantalla y versión.
     reportarErrorApp({ origen: "boundary", mensaje: error?.message ?? String(error), stack: error?.stack ?? null, componente: info.componentStack ?? null })
-    // Pestaña vieja tras un despliegue: el navegador pide un archivo JS que ya
-    // no existe ("Loading chunk … failed"). La única salida es recargar; se
-    // hace sola UNA vez cada 30 s para no entrar en bucle si el error persiste.
-    if (/ChunkLoadError|Loading chunk|Failed to fetch dynamically imported module|Importing a module script failed|CSS_CHUNK_LOAD_FAILED/i.test(`${error?.name} ${error?.message}`)) {
-      try {
-        const ultima = Number(sessionStorage.getItem("lipgo:recarga-chunk") || 0)
-        if (Date.now() - ultima > 30_000) {
-          sessionStorage.setItem("lipgo:recarga-chunk", String(Date.now()))
-          window.location.reload()
-        }
-      } catch {
-        window.location.reload()
-      }
+    // Pestaña vieja tras un despliegue: el navegador pide un archivo JS o una acción del
+    // servidor que ya no existen. La única salida es recargar; se hace sola UNA vez cada 30 s
+    // para no entrar en bucle. La detección vive en lib/desfase-despliegue.ts (probada con
+    // los mensajes reales del 4 y 5 de octubre: "Failed to load chunk" no lo reconocía la
+    // expresión anterior y cuatro usuarios quedaron con la pantalla rota).
+    if (esErrorDeDesfase(`${error?.name} ${error?.message}`)) {
+      recargarPorDesfase()
     }
   }
 

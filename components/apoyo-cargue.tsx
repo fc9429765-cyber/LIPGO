@@ -18,6 +18,7 @@ import {
 // El diálogo vive aparte porque Centro de Coordinación usa EXACTAMENTE el
 // mismo: dos copias podrían mostrar repartos distintos para la misma orden.
 import { ApoyoCargueDialog, type OrdenParaApoyo } from "@/components/apoyo-cargue-dialog"
+import { estadoQuincena } from "@/lib/quincena-abierta"
 
 function hoyColombia(): string {
   const colombiaDate = new Date().toLocaleString("en-US", { timeZone: "America/Bogota" })
@@ -36,6 +37,9 @@ export function ApoyoCargue() {
   const [loading, setLoading] = useState(false)
 
   const [ordenApoyo, setOrdenApoyo] = useState<OrdenParaApoyo | null>(null)
+
+  /** Solo la quincena en curso se puede corregir: las anteriores ya se pagaron. */
+  const quincena = estadoQuincena(fecha)
 
   const cargarOrdenes = useCallback(async () => {
     setLoading(true)
@@ -71,20 +75,34 @@ export function ApoyoCargue() {
             Asignación de apoyo en cargue
           </CardTitle>
           <CardDescription>
-            Agrega personal extra (por ejemplo, de turno fijo) a una orden de Cargue o Descargue del día para que
-            también entre en el reparto de toneladas de esa orden. No reemplaza al personal ya asignado en
-            Picking/Packing, solo se le suma.
+            Ajusta quién entra en el reparto de toneladas de una orden de Cargue o Descargue del día. Las dos
+            listas —la cuadrilla de cargue y descargue, y quienes ya terminaron su turno— salen del reporte de
+            asistencia de ese día.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm font-medium">Fecha</label>
             <DatePickerField value={fecha} onChange={setFecha} className="w-44" />
             <Button variant="outline" size="sm" onClick={cargarOrdenes} disabled={loading} className="gap-2">
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               Actualizar
             </Button>
+            {/* La quincena en curso se puede corregir hacia atrás; las anteriores
+                ya se pagaron y el servidor también las rechaza. */}
+            {quincena.abierta ? (
+              <span className="rounded-full border border-ok-bd bg-ok-bg px-2.5 py-0.5 text-xs font-medium text-ok-fg">
+                Quincena en curso{quincena.quincena ? ` · ${quincena.quincena.etiqueta}` : ""}
+              </span>
+            ) : (
+              <span className="rounded-full border border-atencion-bd bg-atencion-bg px-2.5 py-0.5 text-xs font-medium text-atencion-fg">
+                Quincena cerrada
+              </span>
+            )}
           </div>
+          {!quincena.abierta && quincena.motivo && (
+            <p className="text-sm text-atencion-fg">{quincena.motivo}</p>
+          )}
 
           {loading ? (
             <div className="flex items-center justify-center py-10 text-muted-foreground">
@@ -115,6 +133,8 @@ export function ApoyoCargue() {
                       <Button
                         size="sm"
                         className="gap-1"
+                        disabled={!quincena.abierta}
+                        title={quincena.abierta ? undefined : (quincena.motivo ?? undefined)}
                         onClick={() =>
                           setOrdenApoyo({
                             id: orden.id,
@@ -124,7 +144,7 @@ export function ApoyoCargue() {
                         }
                       >
                         <UserPlus className="h-4 w-4" />
-                        Agregar apoyo
+                        Personal de apoyo
                       </Button>
                     </div>
                   </div>
@@ -152,7 +172,12 @@ export function ApoyoCargue() {
                                 size="icon"
                                 variant="ghost"
                                 className="h-7 w-7"
-                                title="Quitar apoyo (solo si fue agregado desde este módulo)"
+                                disabled={!quincena.abierta}
+                                title={
+                                  quincena.abierta
+                                    ? "Sacar a esta persona del reparto de toneladas de la orden"
+                                    : (quincena.motivo ?? undefined)
+                                }
                                 onClick={() => quitar(orden, p.persona)}
                               >
                                 <X className="h-3.5 w-3.5" />

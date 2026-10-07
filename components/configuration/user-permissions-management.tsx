@@ -50,10 +50,16 @@ import {
 // "use server"): Next.js no permite exportar valores no async desde archivos
 // con la directiva "use server".
 import type { UserPermissions } from "@/lib/permissions-map"
-import { MODULE_PERMISSION_MAP } from "@/lib/permissions-map"
 import { PROCESOS } from "@/lib/mapa-procesos-tipos"
 import { getProcesosDeUsuario, guardarProcesosDeUsuario } from "@/lib/permisos-mapa-actions"
-import { groups } from "@/lib/dashboard-data"
+import { PERMISSION_TREE, filtrarArbol, type PermGroup, type PermItem } from "@/lib/permisos-arbol"
+import {
+  listarPerfilesAcceso,
+  getPerfilesDeUsuario,
+  asignarPerfilesUsuario,
+  getAccesoMaterializadoUsuario,
+} from "@/lib/acceso-perfiles-actions"
+import type { PerfilAcceso } from "@/lib/acceso-perfiles-tipos"
 import {
   Loader2,
   Save,
@@ -73,6 +79,8 @@ import {
   Clock,
   CheckCircle2,
   ArrowRight,
+  LayoutTemplate,
+  Check,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/components/auth-provider"
@@ -84,60 +92,9 @@ interface UserWithPermissions {
   permisos_usuarios: UserPermissions | UserPermissions[] | null
 }
 
-// ---------------------------------------------------------------------------
-// El arbol de permisos se DERIVA de la estructura de navegacion real
-// (`groups` en lib/dashboard-data.ts) usando `MODULE_PERMISSION_MAP`. Asi la
-// pantalla refleja SIEMPRE los mismos grupos, subgrupos y modulos que ve el
-// usuario en el sidebar, sin listas paralelas que se desincronicen.
-// ---------------------------------------------------------------------------
-type PermItem = { key: keyof UserPermissions; label: string }
-type PermSection = { title: string | null; permissions: PermItem[] }
-type PermGroup = { title: string; sections: PermSection[] }
-
-function collectPerms(modules: { name: string; label?: string }[]): PermItem[] {
-  const seen = new Set<string>()
-  const out: PermItem[] = []
-  for (const m of modules) {
-    const key = MODULE_PERMISSION_MAP[m.name] as keyof UserPermissions | undefined
-    if (!key) continue
-    if (seen.has(key as string)) continue
-    seen.add(key as string)
-    out.push({ key, label: m.label ?? m.name })
-  }
-  return out
-}
-
-// Permisos que NO son modulos del menu pero deben poder otorgarse aqui (SIG por norma).
-const EXTRA_PERMS_POR_SUBGRUPO: Record<string, PermItem[]> = {
-  "Sistema Integrado (SIG)": [
-    { key: "sig_iso9001", label: "— Pestaña ISO 9001:2015" },
-    { key: "sig_iso14001", label: "— Pestaña ISO 14001:2015" },
-    { key: "sig_iso45001", label: "— Pestaña ISO 45001:2018" },
-  ],
-  // Roles DENTRO de Ciclo de Facturación -- `ciclo_facturacion` (arriba, auto-
-  // derivado del menú) solo da acceso a VER el módulo; sin estos 2, nadie
-  // podía dar de alta un Jefe o un Coordinador reales (no existía el checkbox
-  // -- bug real encontrado 2026-09-11, ver lib/permissions-map.ts:358-361).
-  Facturación: [
-    { key: "ciclo_facturacion_jefe", label: "— Ciclo de Facturación: rol Jefe (enviar anexo/factura, cerrar)" },
-    { key: "ciclo_facturacion_coordinador", label: "— Ciclo de Facturación: rol Coordinador (subir firmado por el cliente)" },
-  ],
-}
-
-const PERMISSION_TREE: PermGroup[] = groups
-  .map((g) => {
-    const sections: PermSection[] = []
-    if (g.modules?.length) {
-      const perms = collectPerms(g.modules)
-      if (perms.length) sections.push({ title: null, permissions: perms })
-    }
-    for (const sg of g.subgroups ?? []) {
-      const perms = [...collectPerms(sg.modules), ...(EXTRA_PERMS_POR_SUBGRUPO[sg.title] ?? [])]
-      if (perms.length) sections.push({ title: sg.title, permissions: perms })
-    }
-    return { title: g.title, sections }
-  })
-  .filter((g) => g.sections.length > 0)
+// El árbol de permisos vive en lib/permisos-arbol.ts: lo dibujan esta
+// pantalla y Perfiles de acceso, y un árbol duplicado se desincroniza en
+// silencio. Se deriva del menú real (`groups`) con MODULE_PERMISSION_MAP.
 
 // Genera una contraseña segura (14 caracteres, sin caracteres ambiguos) con el CSPRNG.
 function generarPasswordSegura(): string {
@@ -166,6 +123,18 @@ function iniciales(nombre: string): string {
   if (partes.length === 0) return "?"
   if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase()
   return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
+}
+
+// Marca lo que un perfil puso en el usuario. Sin ella no se distingue lo que
+// vino del perfil de lo marcado a mano, y desmarcar algo del perfil "no hace
+// nada" (el proximo recalculo lo devuelve) sin que se entienda por que.
+function TagPerfil() {
+  return (
+    <span className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-primary/10 px-1 py-px align-middle text-[9px] font-semibold uppercase tracking-wide text-primary">
+      <LayoutTemplate className="h-2.5 w-2.5" />
+      perfil
+    </span>
+  )
 }
 
 function extraerPermisos(u: UserWithPermissions): UserPermissions | undefined {
@@ -216,6 +185,19 @@ export function UserPermissionsManagement() {
   const [loadingAccess, setLoadingAccess] = useState(false)
   const [savingAccess, setSavingAccess] = useState(false)
 
+  // Perfiles de acceso (las plantillas) y los que tiene el usuario seleccionado
+  const [perfilesCatalogo, setPerfilesCatalogo] = useState<PerfilAcceso[]>([])
+  const [faltaScriptPerfiles, setFaltaScriptPerfiles] = useState(false)
+  const [perfilesUsuario, setPerfilesUsuario] = useState<number[]>([])
+  const [perfilesOriginal, setPerfilesOriginal] = useState<number[]>([])
+  const [savingPerfiles, setSavingPerfiles] = useState(false)
+  // Qué parte del acceso de la persona vino de perfiles (para marcarlo en pantalla)
+  const [matUsuario, setMatUsuario] = useState<{ empresas: number[]; owners: string[]; permisos: string[] }>({
+    empresas: [],
+    owners: [],
+    permisos: [],
+  })
+
   // Crear usuario
   const [createOpen, setCreateOpen] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -250,16 +232,19 @@ export function UserPermissionsManagement() {
 
   const loadAll = async () => {
     setLoading(true)
-    const [result, meta, emp, own] = await Promise.all([
+    const [result, meta, emp, own, perf] = await Promise.all([
       getAllUsersWithPermissions(selectedEmpresaId),
       getAuthMetaUsuarios(),
       empresas.length ? Promise.resolve(empresas) : getAllEmpresas(),
       owners.length ? Promise.resolve(owners) : getAllOwners(),
+      listarPerfilesAcceso(),
     ])
     if (result.success && result.data) setUsers(result.data as UserWithPermissions[])
     if (meta.success && meta.data) setAuthMeta(meta.data)
     setEmpresas(emp)
     setOwners(own)
+    setPerfilesCatalogo(perf.data)
+    setFaltaScriptPerfiles(!!perf.faltaMigracion)
     setLoading(false)
   }
 
@@ -280,10 +265,12 @@ export function UserPermissionsManagement() {
 
     // Accesos
     setLoadingAccess(true)
-    const [emp, own, proc] = await Promise.all([
+    const [emp, own, proc, perf, mat] = await Promise.all([
       getUserAccess(u.id),
       getUserOwnerAccess(u.id),
       getProcesosDeUsuario(u.id),
+      getPerfilesDeUsuario(u.id),
+      getAccesoMaterializadoUsuario(u.id),
     ])
     setEmpresaAccess(emp)
     setEmpresaOriginal(emp)
@@ -292,6 +279,9 @@ export function UserPermissionsManagement() {
     setProcesos(proc.procesos)
     setProcesosOriginal(proc.procesos)
     setFaltaScriptMapa(!!proc.faltaMigracion)
+    setPerfilesUsuario(perf)
+    setPerfilesOriginal(perf)
+    setMatUsuario(mat)
     setLoadingAccess(false)
   }
 
@@ -314,24 +304,7 @@ export function UserPermissionsManagement() {
     return { total: users.length, activos, inactivos: users.length - activos, nunca }
   }, [users, authMeta])
 
-  const filteredTree = useMemo(() => {
-    const q = permSearch.trim().toLowerCase()
-    if (!q) return PERMISSION_TREE
-    return PERMISSION_TREE.map((g) => {
-      const sections = g.sections
-        .map((s) => ({
-          ...s,
-          permissions: s.permissions.filter(
-            (p) =>
-              p.label.toLowerCase().includes(q) ||
-              (s.title ?? "").toLowerCase().includes(q) ||
-              g.title.toLowerCase().includes(q),
-          ),
-        }))
-        .filter((s) => s.permissions.length > 0)
-      return { ...g, sections }
-    }).filter((g) => g.sections.length > 0)
-  }, [permSearch])
+  const filteredTree = useMemo(() => filtrarArbol(permSearch), [permSearch])
 
   // Al buscar, expandimos automáticamente los grupos con coincidencias.
   useEffect(() => {
@@ -353,6 +326,13 @@ export function UserPermissionsManagement() {
       a.length === b.length && a.every((x) => b.includes(x))
     return !eqSet(empresaAccess, empresaOriginal) || !eqSet(ownerAccess, ownerOriginal)
   }, [empresaAccess, empresaOriginal, ownerAccess, ownerOriginal])
+
+  const perfilesDirty = useMemo(
+    () =>
+      perfilesUsuario.length !== perfilesOriginal.length ||
+      perfilesUsuario.some((id) => !perfilesOriginal.includes(id)),
+    [perfilesUsuario, perfilesOriginal],
+  )
 
   const groupCount = (g: PermGroup) => {
     let total = 0
@@ -457,6 +437,54 @@ export function UserPermissionsManagement() {
       toast({ title: "Error", description: "No se pudieron guardar todos los accesos.", variant: "destructive" })
     } finally {
       setSavingAccess(false)
+    }
+  }
+
+  /*
+   * Aplica los perfiles marcados. El servidor recalcula y ESCRIBE empresas,
+   * owners y módulos del usuario, así que después hay que volver a leer las
+   * tres cosas: lo que se ve en las otras pestañas acaba de cambiar.
+   */
+  const handleSavePerfiles = async () => {
+    if (!selectedUser) return
+    setSavingPerfiles(true)
+    const r = await asignarPerfilesUsuario(selectedUser.id, perfilesUsuario)
+    setSavingPerfiles(false)
+    if (!r.success) {
+      toast({ title: "No se pudieron aplicar los perfiles", description: r.message, variant: "destructive" })
+      return
+    }
+    setPerfilesOriginal(perfilesUsuario)
+    const c = r.cambios
+    toast({
+      title: "Perfiles aplicados",
+      description: c
+        ? `Empresas +${c.empresas.agregadas} / -${c.empresas.retiradas} · Owners +${c.owners.agregadas} / -${c.owners.retiradas} · Módulos +${c.permisos.agregados} / -${c.permisos.retirados}`
+        : undefined,
+    })
+    const [emp, own, result, perf, mat] = await Promise.all([
+      getUserAccess(selectedUser.id),
+      getUserOwnerAccess(selectedUser.id),
+      getAllUsersWithPermissions(selectedEmpresaId),
+      listarPerfilesAcceso(),
+      getAccesoMaterializadoUsuario(selectedUser.id),
+    ])
+    setEmpresaAccess(emp)
+    setEmpresaOriginal(emp)
+    setOwnerAccess(own)
+    setOwnerOriginal(own)
+    setPerfilesCatalogo(perf.data)
+    setMatUsuario(mat)
+    if (result.success && result.data) {
+      const lista = result.data as UserWithPermissions[]
+      setUsers(lista)
+      const fresco = lista.find((x) => x.id === selectedUser.id)
+      if (fresco) {
+        setSelectedUser(fresco)
+        const p = permsDeUsuario(fresco)
+        setPermissions(p)
+        setPermOriginal(p)
+      }
     }
   }
 
@@ -734,6 +762,26 @@ export function UserPermissionsManagement() {
                             {estadoSel.relativo}
                           </span>
                         </div>
+                        {perfilesUsuario.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                            {perfilesUsuario.map((id) => {
+                              const p = perfilesCatalogo.find((x) => x.id === id)
+                              return p ? (
+                                <span
+                                  key={id}
+                                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                                    p.activo
+                                      ? "border-primary/30 bg-primary/10 text-primary"
+                                      : "border-border bg-muted text-muted-foreground line-through"
+                                  }`}
+                                >
+                                  <LayoutTemplate className="h-3 w-3" />
+                                  {p.nombre}
+                                </span>
+                              ) : null
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -766,26 +814,221 @@ export function UserPermissionsManagement() {
                 </div>
 
                 <CardContent className="pt-5">
-                  <Tabs defaultValue="permisos" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2 h-11 p-1 bg-muted/60">
+                  {/* PERFIL va primero y por defecto: es la forma principal de
+                      configurar a una persona. Modulos y Empresas quedan como
+                      ajuste fino, y cada casilla que venga de un perfil lo dice. */}
+                  <Tabs defaultValue="perfil" className="w-full">
+                    <TabsList className="grid w-full grid-cols-3 h-11 p-1 bg-muted/60">
+                      <TabsTrigger value="perfil" className="gap-1.5 data-[state=active]:shadow-sm">
+                        <LayoutTemplate className="h-4 w-4" />
+                        Perfil
+                        <Badge className="ml-1 h-5 px-1.5 text-[11px] bg-primary/15 text-primary hover:bg-primary/15 border-0">
+                          {perfilesUsuario.length}
+                        </Badge>
+                      </TabsTrigger>
                       <TabsTrigger value="permisos" className="gap-1.5 data-[state=active]:shadow-sm">
                         <ShieldCheck className="h-4 w-4" />
-                        Permisos
+                        Módulos
                         <Badge className="ml-1 h-5 px-1.5 text-[11px] bg-primary/15 text-primary hover:bg-primary/15 border-0">
                           {totalActivos}
                         </Badge>
                       </TabsTrigger>
                       <TabsTrigger value="accesos" className="gap-1.5 data-[state=active]:shadow-sm">
                         <Building2 className="h-4 w-4" />
-                        Accesos
+                        <span className="hidden sm:inline">Empresas y owners</span>
+                        <span className="sm:hidden">Empresas</span>
                         <Badge className="ml-1 h-5 px-1.5 text-[11px] bg-primary/15 text-primary hover:bg-primary/15 border-0">
                           {empresaAccess.length + ownerAccess.length}
                         </Badge>
                       </TabsTrigger>
                     </TabsList>
 
+                    {/* ===== Perfil ===== */}
+                    <TabsContent value="perfil" className="mt-4 space-y-4">
+                      {loadingAccess ? (
+                        <div className="flex items-center justify-center h-40">
+                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                        </div>
+                      ) : (
+                        <>
+                          {/* Lo que esta persona tiene HOY, venga de donde venga. Va
+                              primero porque es la pregunta que trae a quien abre esto. */}
+                          <div className="rounded-2xl border border-border/60 bg-gradient-to-br from-card to-muted/20 p-4">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                  Acceso efectivo hoy
+                                </p>
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                  Lo que {selectedUser.usuario} puede ver y abrir, venga de un perfil o esté marcado a mano.
+                                </p>
+                              </div>
+                              {matUsuario.empresas.length + matUsuario.owners.length + matUsuario.permisos.length > 0 && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                                  <LayoutTemplate className="h-3 w-3" />
+                                  {matUsuario.empresas.length + matUsuario.owners.length + matUsuario.permisos.length} vienen de perfiles
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-3 grid grid-cols-3 gap-2">
+                              {[
+                                { icon: Building2, label: "Empresas", total: empresaOriginal.length, perfil: matUsuario.empresas.length },
+                                { icon: Tags, label: "Owners", total: ownerOriginal.length, perfil: matUsuario.owners.length },
+                                {
+                                  icon: ShieldCheck,
+                                  label: "Módulos",
+                                  total: Object.values(permOriginal).filter(Boolean).length,
+                                  perfil: matUsuario.permisos.length,
+                                },
+                              ].map((st) => (
+                                <div key={st.label} className="rounded-xl border border-border/60 bg-card p-2.5">
+                                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                    <st.icon className="h-3.5 w-3.5 text-primary" />
+                                    {st.label}
+                                  </div>
+                                  <p className="mt-1 text-xl font-bold leading-none tabular-nums">{st.total}</p>
+                                  <p className="mt-1 text-[10px] tabular-nums text-muted-foreground">
+                                    {st.perfil > 0 ? `${st.perfil} por perfil · ${st.total - st.perfil} a mano` : "todo a mano"}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                            {(empresaOriginal.length > 0 || ownerOriginal.length > 0) && (
+                              <div className="mt-3 flex flex-wrap gap-1">
+                                {empresaOriginal.map((id) => (
+                                  <span
+                                    key={`e${id}`}
+                                    className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-[11px]"
+                                  >
+                                    <Building2 className="h-3 w-3 text-muted-foreground" />
+                                    {empresas.find((e) => e.id === id)?.nombre ?? `Empresa ${id}`}
+                                    {matUsuario.empresas.includes(id) && <LayoutTemplate className="h-3 w-3 text-primary" />}
+                                  </span>
+                                ))}
+                                {ownerOriginal.map((o) => (
+                                  <span
+                                    key={`o${o}`}
+                                    className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-[11px]"
+                                  >
+                                    <Tags className="h-3 w-3 text-muted-foreground" />
+                                    {o}
+                                    {matUsuario.owners.includes(o) && <LayoutTemplate className="h-3 w-3 text-primary" />}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Los perfiles como tarjetas: una decision por tarjeta, no
+                              una casilla perdida en una lista. */}
+                          <div className="space-y-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <h3 className="flex items-center gap-2 text-sm font-bold">
+                                <LayoutTemplate className="h-4 w-4 text-primary" />
+                                Perfiles de acceso
+                              </h3>
+                              <span className="text-xs text-muted-foreground">Marca uno o varios: la persona recibe la unión.</span>
+                            </div>
+                            {faltaScriptPerfiles ? (
+                              <p className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                                Falta correr <code>scripts/252_perfiles_unificados.sql</code> para poder usar perfiles.
+                              </p>
+                            ) : perfilesCatalogo.length === 0 ? (
+                              <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border p-6 text-center">
+                                <LayoutTemplate className="h-8 w-8 text-muted-foreground/40" />
+                                <p className="text-sm font-medium">Todavía no hay perfiles</p>
+                                <p className="max-w-sm text-xs text-muted-foreground">
+                                  Se crean en <strong>la pestaña Perfiles</strong>. Lo más rápido: «A partir de un
+                                  usuario» con alguien que ya esté bien configurado. Mientras tanto, los módulos y empresas se
+                                  marcan a mano en las otras pestañas.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                {perfilesCatalogo.map((p) => {
+                                  const on = perfilesUsuario.includes(p.id)
+                                  return (
+                                    <button
+                                      key={p.id}
+                                      type="button"
+                                      onClick={() =>
+                                        setPerfilesUsuario((prev) => (on ? prev.filter((id) => id !== p.id) : [...prev, p.id]))
+                                      }
+                                      className={`group relative rounded-2xl border p-3.5 text-left transition-all ${
+                                        on
+                                          ? "border-primary bg-primary/10 shadow-sm ring-1 ring-primary/30"
+                                          : "border-border/60 bg-card hover:border-primary/40 hover:bg-accent/30"
+                                      } ${!p.activo ? "opacity-60" : ""}`}
+                                    >
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                          <p className="truncate text-sm font-semibold">
+                                            {p.nombre}
+                                            {!p.activo && (
+                                              <span className="ml-1 text-[10px] font-normal text-muted-foreground">(inactivo)</span>
+                                            )}
+                                          </p>
+                                          {p.descripcion && (
+                                            <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{p.descripcion}</p>
+                                          )}
+                                        </div>
+                                        <span
+                                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                                            on
+                                              ? "border-primary bg-primary text-primary-foreground"
+                                              : "border-border text-transparent group-hover:text-muted-foreground"
+                                          }`}
+                                        >
+                                          <Check className="h-3.5 w-3.5" />
+                                        </span>
+                                      </div>
+                                      <div className="mt-2.5 flex flex-wrap gap-1 text-[10px] text-muted-foreground">
+                                        <span className="rounded-full bg-muted px-1.5 py-0.5">{p.empresas.length} empresas</span>
+                                        <span className="rounded-full bg-muted px-1.5 py-0.5">{p.owners.length} owners</span>
+                                        <span className="rounded-full bg-muted px-1.5 py-0.5">{p.permisos.length} módulos</span>
+                                        <span className="rounded-full bg-muted px-1.5 py-0.5">{p.procesos.length} autoriza</span>
+                                        <span className="rounded-full bg-muted px-1.5 py-0.5">
+                                          {p.usuarios} usuario{p.usuarios === 1 ? "" : "s"}
+                                        </span>
+                                      </div>
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {perfilesCatalogo.length > 0 && (
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+                              <span className="text-xs text-muted-foreground">
+                                {perfilesDirty
+                                  ? "Cambios sin aplicar"
+                                  : perfilesUsuario.length
+                                    ? `${perfilesUsuario.length} perfil(es) aplicados`
+                                    : "Sin perfil: todo marcado a mano"}
+                              </span>
+                              <Button onClick={handleSavePerfiles} disabled={savingPerfiles || !perfilesDirty} className="gap-2">
+                                {savingPerfiles ? <Loader2 className="h-4 w-4 animate-spin" /> : <LayoutTemplate className="h-4 w-4" />}
+                                Aplicar perfiles
+                              </Button>
+                            </div>
+                          )}
+                          <p className="text-[11px] text-muted-foreground">
+                            Aplicar escribe de inmediato las empresas, owners y módulos de la persona. Lo que quieras ajustar a
+                            mano va en las otras dos pestañas y se conserva aunque cambies el perfil.
+                          </p>
+                        </>
+                      )}
+                    </TabsContent>
+
                     {/* ===== Permisos ===== */}
                     <TabsContent value="permisos" className="mt-4 space-y-3">
+                      {matUsuario.permisos.length > 0 && (
+                        <p className="text-[11px] text-muted-foreground">
+                          <TagPerfil /> lo trae un perfil. Si lo desmarcas, el próximo recálculo lo devuelve; para quitarlo,
+                          cambia el perfil en la pestaña Perfil.
+                        </p>
+                      )}
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="relative flex-1 min-w-[180px]">
                           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -900,6 +1143,7 @@ export function UserPermissionsManagement() {
                                                   }`}
                                                 >
                                                   {perm.label}
+                                                  {matUsuario.permisos.includes(perm.key as string) && <TagPerfil />}
                                                 </Label>
                                               </div>
                                             )
@@ -1003,6 +1247,12 @@ export function UserPermissionsManagement() {
 
                     {/* ===== Accesos ===== */}
                     <TabsContent value="accesos" className="mt-4 space-y-5">
+                      {matUsuario.empresas.length + matUsuario.owners.length > 0 && (
+                        <p className="text-[11px] text-muted-foreground">
+                          <TagPerfil /> lo trae un perfil. Si lo desmarcas, el próximo recálculo lo devuelve; para quitarlo,
+                          cambia el perfil en la pestaña Perfil.
+                        </p>
+                      )}
                       {loadingAccess ? (
                         <div className="flex items-center justify-center h-40">
                           <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -1039,6 +1289,7 @@ export function UserPermissionsManagement() {
                                       }
                                     />
                                     <span className="truncate">{e.nombre}</span>
+                                    {matUsuario.empresas.includes(e.id) && <TagPerfil />}
                                   </label>
                                 )
                               })}
@@ -1077,6 +1328,7 @@ export function UserPermissionsManagement() {
                                       }
                                     />
                                     <span className="truncate">{o.nombre}</span>
+                                    {matUsuario.owners.includes(o.nombre) && <TagPerfil />}
                                   </label>
                                 )
                               })}

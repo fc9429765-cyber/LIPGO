@@ -1,6 +1,7 @@
 "use server"
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { registrarErrorServidor } from "@/lib/errores-servidor"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import { diasHabilesEntre, type VacacionResumen, type SolicitudVacaciones } from "@/lib/vacaciones-types"
 
@@ -194,6 +195,7 @@ export async function crearSolicitudVacaciones(
     if (error) return { success: false, message: error.message }
     return { success: true, dias }
   } catch (err: any) {
+    void registrarErrorServidor("nomina.crearSolicitudVacaciones", err)
     return { success: false, message: err?.message || "Error" }
   }
 }
@@ -207,6 +209,7 @@ export async function rechazarSolicitudVacaciones(id: string, motivo?: string) {
       .eq("id", id)
     return error ? { success: false, message: error.message } : { success: true }
   } catch (err: any) {
+    void registrarErrorServidor("nomina.crearSolicitudVacaciones", err)
     return { success: false, message: err?.message || "Error" }
   }
 }
@@ -274,6 +277,7 @@ export async function aprobarSolicitudVacaciones(id: string, aprobadoPor?: strin
     if (error) return { success: false, message: error.message }
     return { success: true, dias: dias.length }
   } catch (err: any) {
+    void registrarErrorServidor("nomina.aprobarSolicitudVacaciones", err)
     return { success: false, message: err?.message || "Error" }
   }
 }
@@ -301,6 +305,7 @@ export async function registrarLiquidacionVacaciones(
     if (error) return { success: false, message: error.message }
     return { success: true, total }
   } catch (err: any) {
+    void registrarErrorServidor("nomina.registrarLiquidacionVacaciones", err)
     return { success: false, message: err?.message || "Error" }
   }
 }

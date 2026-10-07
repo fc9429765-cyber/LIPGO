@@ -14,6 +14,7 @@ import { getVehiclesForSanitaryWithoutOrder } from "@/lib/vehicle-actions"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/components/auth-provider"
 import { VehicleInspectionForm } from "@/components/vehicle-inspection-form"
+import { Eyebrow } from "@/components/ui/lipgo"
 
 interface SanitaryRegistryFormProps {
   initialVehicleId?: number | null
@@ -436,7 +437,8 @@ export function SanitaryRegistryForm({ initialVehicleId, onVehicleLoaded }: Sani
     <div className="container mx-auto p-4 md:p-6 max-w-5xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Registro Sanitario</h2>
+          <Eyebrow>Recepción y Despacho · Portería y vehículos</Eyebrow>
+          <h1 className="text-xl font-bold leading-tight sm:text-2xl">Registro Sanitario</h1>
           <p className="text-sm text-muted-foreground">Inspección sanitaria de vehículos de carga</p>
         </div>
       </div>

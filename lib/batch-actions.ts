@@ -7,6 +7,8 @@ import { getColombiaDate, getColombiaISO, getColombiaTime } from "@/lib/date-uti
 import { getCurrentUserContext } from "@/lib/company-filter"
 import { generarDistribucionAutomatica, autoGenerarDescarguesCedi } from "@/lib/orders-actions"
 import { reportarInterno } from "@/lib/reporte-interno-actions"
+import { registrarErrorServidor } from "@/lib/errores-servidor"
+import { validarAsignacionContraOrden } from "@/lib/asignacion-lote-regla"
 
 export interface LoadOrder {
   id: number
@@ -32,6 +34,13 @@ export interface InventoryLot {
 
 export interface BatchApprovalData {
   ordendecargue: string
+  /**
+   * Id de la orden en `cabeceraoc`. La pantalla SIEMPRE lo manda: es la llave con la que
+   * el servidor lee el detalle autorizado y confronta lo asignado. Sin él hay que resolver
+   * la orden por su número, y `cabeceraoc` tiene códigos repetidos (hallazgo abierto), así
+   * que ese camino puede ser ambiguo y por eso se rechaza si lo es.
+   */
+  idorden?: number
   allocations: {
     cliente: string
     producto: string
@@ -228,6 +237,116 @@ export async function approveBatchAllocation(data: BatchApprovalData, selectedEm
       }
     }
 
+    // ──────────────────────────────────────────────────────────────────────
+    // LA ORDEN DE CARGUE MANDA (2026-10-07, por instrucción expresa de gerencia).
+    //
+    // Nunca puede salir una cantidad mayor a la de la orden, ni un producto que la orden no
+    // incluya. Hasta hoy esto se verificaba SOLO en el navegador y SOLO contra la cantidad que
+    // la pantalla tenía en memoria, así que una canasta desfasada pasaba la validación: el
+    // 6-oct la asignación de MOL202610069899 (330 und autorizadas) se guardó con la canasta de
+    // MOL202610069896 (1.011 und) y esas 1.011 unidades salieron dos veces de ID3.
+    // Aquí no hay carrera posible: se lee el detalle REAL de la orden y se confronta.
+    // ──────────────────────────────────────────────────────────────────────
+    let ordenId: number | null = null
+    if (Number.isFinite(Number(data.idorden))) {
+      const { data: porId } = await supabase
+        .from("cabeceraoc")
+        .select("id, ordendecargue, idempresa")
+        .eq("id", Number(data.idorden))
+        .maybeSingle()
+      if (!porId) {
+        return {
+          success: false as const,
+          error: "La orden de cargue seleccionada ya no existe. Recargue la lista y vuelva a elegirla.",
+          recordsInserted: 0,
+          invtransRecordsInserted: 0,
+          pdfUrl: null as string | null,
+        }
+      }
+      if (String(porId.ordendecargue).trim() !== String(data.ordendecargue).trim()) {
+        return {
+          success: false as const,
+          error:
+            `No se guardó nada: la pantalla envió la orden ${data.ordendecargue} pero el registro ${data.idorden} ` +
+            `es la orden ${porId.ordendecargue}. Recargue la lista y vuelva a elegir la orden.`,
+          recordsInserted: 0,
+          invtransRecordsInserted: 0,
+          pdfUrl: null as string | null,
+        }
+      }
+      ordenId = Number(porId.id)
+    } else {
+      // Sin id hay que resolver por número, y `cabeceraoc` tiene códigos repetidos: si el
+      // número no identifica UNA orden, no se adivina.
+      const { data: porNumero } = await supabase
+        .from("cabeceraoc")
+        .select("id")
+        .eq("ordendecargue", data.ordendecargue)
+        .eq("idempresa", currentEmpresaId)
+        .limit(2)
+      if (!porNumero || porNumero.length === 0) {
+        return {
+          success: false as const,
+          error: `No se encontró la orden de cargue ${data.ordendecargue} en este proyecto.`,
+          recordsInserted: 0,
+          invtransRecordsInserted: 0,
+          pdfUrl: null as string | null,
+        }
+      }
+      if (porNumero.length > 1) {
+        return {
+          success: false as const,
+          error:
+            `Hay más de una orden con el número ${data.ordendecargue} en este proyecto, así que no se puede saber ` +
+            `contra cuál validar. Avise a soporte antes de continuar.`,
+          recordsInserted: 0,
+          invtransRecordsInserted: 0,
+          pdfUrl: null as string | null,
+        }
+      }
+      ordenId = Number(porNumero[0].id)
+    }
+
+    const { data: detalleAutorizado, error: detalleError } = await supabase
+      .from("detalleoc")
+      .select("producto, cantidad")
+      .eq("idorden", ordenId)
+    if (detalleError) {
+      return {
+        success: false as const,
+        error: `No se pudo leer el detalle de la orden para verificarlo: ${detalleError.message}. No se guardó nada.`,
+        recordsInserted: 0,
+        invtransRecordsInserted: 0,
+        pdfUrl: null as string | null,
+      }
+    }
+
+    const juicio = validarAsignacionContraOrden(
+      (detalleAutorizado ?? []).map((d: any) => ({ producto: d.producto, cantidad: d.cantidad })),
+      data.allocations.map((a) => ({
+        producto: a.producto,
+        cantidad: a.cantidad,
+        lote: a.lote,
+        location: a.location,
+        // El alterno no cuenta para el techo, pero su producto sí tiene que estar en la orden.
+        esAlterno: a.esAlterno === true,
+      })),
+    )
+    if (!juicio.ok) {
+      void registrarErrorServidor(
+        "batch.asignacionFueraDeLaOrden",
+        new Error(`Asignación rechazada en ${data.ordendecargue}: ${juicio.mensaje}`),
+        { ordendecargue: data.ordendecargue, idorden: ordenId, idempresa: currentEmpresaId, diferencias: juicio.diferencias },
+      )
+      return {
+        success: false as const,
+        error: juicio.mensaje,
+        recordsInserted: 0,
+        invtransRecordsInserted: 0,
+        pdfUrl: null as string | null,
+      }
+    }
+
     // Get the last id from historicolotes to generate the next consecutive ID
     const { data: lastRecord, error: lastRecordError } = await supabase
       .from("historicolotes")
@@ -270,6 +389,8 @@ export async function approveBatchAllocation(data: BatchApprovalData, selectedEm
       location: allocation.location,
       cantidad: allocation.cantidad,
       ordendecargue: data.ordendecargue,
+      // Mismo vínculo por id que en invtrans (script 251): el código de texto no basta.
+      idorden: ordenId,
       fecha: currentDate,
       aprobadopor: currentUsuario,
       placa: placaOrden,
@@ -367,6 +488,11 @@ export async function approveBatchAllocation(data: BatchApprovalData, selectedEm
         status: group.esAlterno ? "Lote alterno" : "por descontar",
         origen: "orden de cargue",
         ocargue: data.ordendecargue,
+        // El vínculo FIABLE con la orden (script 251). `ocargue` es un código de texto y
+        // `cabeceraoc` tiene códigos repetidos, así que por texto no siempre se sabe a qué
+        // orden pertenece el movimiento: por eso todo lo que se creó antes del 2026-10-07
+        // dejó 322 movimientos huérfanos. `ordenId` ya está resuelto arriba, contra la base.
+        idorden: ordenId,
         creado: currentTimestamp,
         creadopor: currentUsuario,
       }
@@ -497,6 +623,11 @@ export async function approveBatchAllocation(data: BatchApprovalData, selectedEm
     }
   } catch (error) {
     console.error("[v0] Error in approveBatchAllocation:", error)
+    // La asignación de lotes reserva inventario: si falla, hay que saberlo el mismo día.
+    void registrarErrorServidor("batch.approveBatchAllocation", error, {
+      ordendecargue: (data as any)?.ordendecargue ?? null,
+      empresaId: selectedEmpresaId ?? null,
+    })
     throw error
   }
 }
@@ -629,6 +760,42 @@ export async function updateBatchHistoryRecord(data: UpdateBatchHistoryData) {
 export async function annulBatchAssignment(ordenCargue: string) {
   try {
     const supabase = await createClient()
+
+    /*
+     * UNA ASIGNACIÓN QUE YA PASÓ POR PICKING NO SE ANULA.
+     *
+     * Regla de gerencia (2026-10-07): "si tiene los otros pasos del proceso, como picking
+     * verificado, no se puede borrar o afectaría el inventario".
+     *
+     * La asignación de lote es una RESERVA: aparta el producto para que otra orden no lo
+     * tome, y sus líneas quedan en `por descontar`. El picking es el que despacha: las pasa
+     * a `aprobado` y ahí la mercancía salió de verdad.
+     *
+     * Anular después del picking borra esas salidas y devuelve el inventario, así que el
+     * sistema queda diciendo que hay producto que ya se fue en un camión. Pasa en silencio.
+     *
+     * Mientras solo haya reserva, anular es correcto y sigue permitido.
+     */
+    const { data: yaDespacho, error: errDespacho } = await supabase
+      .from("invtrans")
+      .select("id, cantidad")
+      .eq("ocargue", ordenCargue)
+      .ilike("origen", "orden de cargue")
+      .ilike("status", "apr%")
+      .limit(500)
+    if (errDespacho) {
+      return { success: false, message: `No se pudo comprobar si la orden ya despachó: ${errDespacho.message}. No se anuló nada.` }
+    }
+    if ((yaDespacho ?? []).length > 0) {
+      const unidades = (yaDespacho ?? []).reduce((s: number, r: any) => s + (Number(r.cantidad) || 0), 0)
+      return {
+        success: false,
+        message:
+          `La orden ${ordenCargue} ya pasó por Picking: tiene ${yaDespacho!.length} salida(s) aprobadas por ` +
+          `${unidades.toLocaleString("es-CO")} unidades. Anular la asignación devolvería a la bodega un producto que ` +
+          `ya salió. Si hay que corregirla, hazlo desde Cuadre y Correcciones de inventario, que deja rastro.`,
+      }
+    }
 
     const { error: deleteError } = await supabase.from("historicolotes").delete().eq("ordendecargue", ordenCargue)
 

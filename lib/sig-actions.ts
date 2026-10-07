@@ -13,6 +13,7 @@
 // y el rol anon no puede leerlas; la autorizacion del modulo ya se controla
 // con los permisos (sig_matriz / sig_iso*). Mismo patron que permissions-actions.
 import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
+import { registrarErrorServidor } from "@/lib/errores-servidor"
 // `autorizar` vive en autorizaciones-core, que es `server-only`: se importa de
 // forma dinámica solo donde se valida una clave, para que los scripts de
 // mantenimiento (tsx) puedan seguir cargando este módulo.
@@ -3935,6 +3936,7 @@ export async function crearCuadre(
     }
     return { success: true, id: cuadreId, items: lineasBase.length }
   } catch (err: any) {
+    void registrarErrorServidor("sig.crearCuadre", err)
     return { success: false, error: err?.message || "Error desconocido" }
   }
 }
@@ -3984,6 +3986,7 @@ export async function guardarConteoCuadre(
       .eq("id", cuadreId)
     return { success: true }
   } catch (err: any) {
+    void registrarErrorServidor("sig.guardarConteoCuadre", err)
     return { success: false, error: err?.message || "Error desconocido" }
   }
 }
@@ -4045,6 +4048,7 @@ export async function guardarLineaConteoCuadre(
       .eq("id", cuadreId)
     return { success: true }
   } catch (err: any) {
+    void registrarErrorServidor("sig.guardarLineaConteoCuadre", err)
     return { success: false, error: err?.message || "Error desconocido" }
   }
 }
@@ -4059,6 +4063,7 @@ export async function cerrarCuadre(cuadreId: number, estado: string): Promise<{ 
     if (error) return { success: false, error: error.message }
     return { success: true }
   } catch (err: any) {
+    void registrarErrorServidor("sig.cerrarCuadre", err)
     return { success: false, error: err?.message || "Error desconocido" }
   }
 }
@@ -4354,6 +4359,7 @@ export async function aplicarCorreccionesConteo(
     }
     return { success: errores.length === 0, aplicadas, saltadas, pendientes, errores, error: errores.length ? `${errores.length} línea(s) no se aplicaron` : undefined }
   } catch (err: any) {
+    void registrarErrorServidor("sig.aplicarCorreccionesConteo", err)
     return { success: false, ...vacio, error: err?.message || "Error desconocido" }
   }
 }
@@ -4635,6 +4641,7 @@ export async function registrarAjusteInventario(
     if (error) return { success: false, error: error.message }
     return { success: true, id: (data as any)?.id }
   } catch (err: any) {
+    void registrarErrorServidor("sig.registrarAjusteInventario", err)
     return { success: false, error: err?.message || "Error desconocido" }
   }
 }
@@ -4646,6 +4653,7 @@ export async function eliminarAjusteInventario(id: number): Promise<{ success: b
     if (error) return { success: false, error: error.message }
     return { success: true }
   } catch (err: any) {
+    void registrarErrorServidor("sig.eliminarAjusteInventario", err)
     return { success: false, error: err?.message || "Error desconocido" }
   }
 }
@@ -4773,6 +4781,7 @@ export async function aprobarAjusteInventario(
     if (ok.error) return { success: false, error: ok.error }
     return { success: true, invtransId }
   } catch (err: any) {
+    void registrarErrorServidor("sig.aprobarAjusteInventario", err)
     return { success: false, error: err?.message || "Error desconocido" }
   }
 }
@@ -4804,6 +4813,7 @@ export async function cerrarMesCuadre(
     await supabase.from("sig_inventario_cuadre").update({ estado: "aprobado", updated_at: new Date().toISOString() }).eq("id", cuadreId)
     return { success: true, posteados }
   } catch (err: any) {
+    void registrarErrorServidor("sig.cerrarMesCuadre", err)
     return { success: false, error: err?.message || "Error desconocido" }
   }
 }
@@ -6305,6 +6315,7 @@ export async function guardarCierreMesInventario(payload: {
     if (error) return { success: false, error: error.message }
     return { success: true, data: data as SigInventarioCierreMes }
   } catch (err: any) {
+    void registrarErrorServidor("sig.guardarCierreMesInventario", err)
     return { success: false, error: err?.message || "Error desconocido" }
   }
 }
@@ -6686,6 +6697,7 @@ export async function corregirLineaActaCruce(
 
     return { success: true }
   } catch (err: any) {
+    void registrarErrorServidor("sig.corregirLineaActaCruce", err)
     return { success: false, error: err?.message || "Error desconocido" }
   }
 }
@@ -6711,6 +6723,7 @@ export async function firmarActaCruce(
     if (error) return { success: false, error: error.message }
     return { success: true }
   } catch (err: any) {
+    void registrarErrorServidor("sig.firmarActaCruce", err)
     return { success: false, error: err?.message || "Error desconocido" }
   }
 }
@@ -7012,6 +7025,7 @@ export async function guardarCuadreManualPedidoSalida(payload: {
 
     return { success: true, data: { pedidos: pOk } }
   } catch (err: any) {
+    void registrarErrorServidor("sig.guardarCuadreManualPedidoSalida", err)
     return { success: false, error: err?.message || "Error desconocido" }
   }
 }

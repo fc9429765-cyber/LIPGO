@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase-client"
+import { registrarErrorServidor } from "@/lib/errores-servidor"
 import { getColombiaDateTime, getColombiaDate } from "@/lib/date-utils"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 
@@ -228,6 +229,8 @@ export async function createTransferRequest(data: TransferRequestData) {
     return { success: true, pedidoCode, idpedido: nextIdPedido, pdfUrl: pdfResult.url }
   } catch (error) {
     console.error("Error in createTransferRequest:", error)
+    // Un traslado entre bodegas a medias deja inventario en dos sitios: al registro (SQL 217).
+    void registrarErrorServidor("traslados.createTransferRequest", error)
     throw error
   }
 }
@@ -268,6 +271,7 @@ export async function updateTransferRequest(
     return { success: true }
   } catch (error) {
     console.error("Error updating transfer request:", error)
+    void registrarErrorServidor("traslados.updateTransferRequest", error)
     throw error
   }
 }
@@ -528,6 +532,7 @@ export async function generateUnloadOrder(ocargue: string, selectedEmpresaId?: n
     }
   } catch (error) {
     console.error("[v0] Error in generateUnloadOrder:", error)
+    void registrarErrorServidor("traslados.generateUnloadOrder", error)
     throw error
   }
 }

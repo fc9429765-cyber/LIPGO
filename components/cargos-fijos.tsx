@@ -8,7 +8,7 @@
 //     y Aplicación LIPgo"), 600 toneladas fijas/mes en ID2 (dos tramos).
 //
 // Cada mes se GENERA (idempotente) un registro por concepto y se rastrea
-// facturado/pendiente con el mismo criterio que Gestión de Facturas:
+// facturado/pendiente con el mismo criterio que Solicitar Facturas:
 // `facturasiigo` manda.
 
 import { useCallback, useEffect, useRef, useState } from "react"

@@ -2,6 +2,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentUser } from "@/lib/auth-actions"
+import { exigirAdministradorUsuarios } from "@/lib/seguridad-servidor"
 import { getCurrentEmpresaId } from "@/lib/company-filter"
 // La interfaz `UserPermissions` y el mapa `MODULE_PERMISSION_MAP` viven
 // en `permissions-map.ts` (sin "use server"). Next.js prohibe exportar
@@ -108,6 +109,15 @@ export async function getAllUsersWithPermissions(selectedEmpresaId?: number | nu
 
 export async function updateUserPermissions(userId: string, permissions: Partial<UserPermissions>) {
   try {
+    // GUARDA DE SERVIDOR (2026-10-05). Esta acción corre con service role y antes NO verificaba
+    // quién la llamaba: cualquiera con sesión podía invocarla y darse a sí mismo cualquier
+    // módulo. Exige el MISMO módulo "Gestión de Usuarios" que ya exige la UI y
+    // user-admin-actions.ts (no cambia ningún permiso: hace que el servidor respete lo que ya
+    // está parametrizado) y, si la cuenta tiene segundo factor activado, que esté verificado.
+    // crearUsuario la llama desde una acción ya gateada, así que la creación no se afecta.
+    const motivo = await exigirAdministradorUsuarios("updateUserPermissions")
+    if (motivo) return { success: false, error: motivo }
+
     const supabase = await getSupabaseAdmin()
 
     // Verificar si ya existen permisos para este usuario

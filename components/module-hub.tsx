@@ -95,6 +95,11 @@ export function ModuleHub({ hub, activeModule, onSelectTab, renderLeaf, cabecera
 
           {loaded && tabs.length > 0 && (
             <div className="ml-auto flex max-w-full items-center gap-2 overflow-x-auto py-0.5">
+              {/* Con UNA sola pestaña la tira sobra: seria un boton que no lleva
+                  a ningun otro lado (caso "Seguridad y accesos" desde el
+                  2026-10-07, que es una pantalla con sus propias pestañas). Los
+                  botones de contexto de abajo si se quedan. */}
+              {tabs.length > 1 && (
               <TabsList className="h-auto gap-1 bg-transparent p-0">
                 {tabs.map((t) => {
                   const TabIcon = moduloPorNombre(t.module)?.icon
@@ -117,7 +122,8 @@ export function ModuleHub({ hub, activeModule, onSelectTab, renderLeaf, cabecera
                   )
                 })}
               </TabsList>
-              <span aria-hidden className="hidden h-6 w-px bg-border sm:block" />
+              )}
+              {tabs.length > 1 && <span aria-hidden className="hidden h-6 w-px bg-border sm:block" />}
               <BotonesContextoModulo selectedModule={activeModule} />
             </div>
           )}

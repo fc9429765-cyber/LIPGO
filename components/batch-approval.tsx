@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -65,6 +65,11 @@ export function BatchApproval() {
   const { toast } = useToast()
   const { selectedEmpresaId } = useAuth()
 
+  // Espejo del id seleccionado. Una carga que viaja lenta lo consulta para saber si ya quedó
+  // vieja y descartarse, en vez de pintar los productos de una orden que ya no está elegida.
+  const selectedOrderIdRef = useRef<string>("")
+  selectedOrderIdRef.current = selectedOrderId
+
   useEffect(() => {
     loadAvailableOrders()
     // Reset selection when empresa changes
@@ -88,42 +93,52 @@ export function BatchApproval() {
   }
 
   useEffect(() => {
-    if (selectedOrderId) {
-      loadOrderProducts()
-    } else {
-      setOrderProducts([])
-      setLotAllocations([])
-    }
+    // SIEMPRE se vacía la canasta al cambiar de orden, ANTES de empezar a cargar la nueva.
+    //
+    // Incidente ID3 del 6-oct: `loadOrderProducts` es asíncrona y pedía el inventario línea
+    // por línea (24 viajes al servidor para una orden de 23 líneas). El número de orden se
+    // actualizaba al instante y la canasta tardaba segundos, así que la pantalla mostraba la
+    // orden nueva con los productos y las cantidades YA DIGITADAS de la anterior. Aprobar en
+    // esa ventana guardaba la canasta vieja con el número nuevo: 1.011 unidades salieron dos
+    // veces. Vaciar primero deja la pantalla en blanco en vez de mentir.
+    setOrderProducts([])
+    setLotAllocations([])
+    if (selectedOrderId) loadOrderProducts(selectedOrderId)
   }, [selectedOrderId])
 
-  const loadOrderProducts = async () => {
-    if (!selectedOrderId) return
+  const loadOrderProducts = async (orderIdAlCargar: string) => {
+    if (!orderIdAlCargar) return
 
     setLoadingInventory(true)
     try {
-      const products = await getOrderProducts(Number.parseInt(selectedOrderId))
-      setOrderProducts(products)
+      const products = await getOrderProducts(Number.parseInt(orderIdAlCargar))
+      // Si el operario ya cambió de orden mientras esto viajaba, esta respuesta es vieja:
+      // se descarta. Sin esto, una respuesta lenta puede sobrescribir a una más nueva.
+      if (orderIdAlCargar !== selectedOrderIdRef.current) return
 
-      const allocations: LotAllocation[] = []
-      for (const product of products) {
-        const inventory = await getInventoryForProduct(product.producto, selectedEmpresaId)
-        allocations.push({
+      const inventarios = await Promise.all(
+        products.map((product) => getInventoryForProduct(product.producto, selectedEmpresaId)),
+      )
+      if (orderIdAlCargar !== selectedOrderIdRef.current) return
+
+      setOrderProducts(products)
+      setLotAllocations(
+        products.map((product, i) => ({
           detalleocId: product.id, // Track the specific detalleoc line
           productName: product.producto,
           cliente: product.cliente,
           orderQuantity: product.cantidad,
-          allocations: inventory.map((inv) => ({
+          allocations: inventarios[i].map((inv) => ({
             ...inv,
             cantidadDescontar: 0,
             esAlterno: false,
           })),
-        })
-      }
-      setLotAllocations(allocations)
+        })),
+      )
     } catch (error) {
       console.error("Error loading products:", error)
     } finally {
-      setLoadingInventory(false)
+      if (orderIdAlCargar === selectedOrderIdRef.current) setLoadingInventory(false)
     }
   }
 
@@ -131,11 +146,28 @@ export function BatchApproval() {
     setLotAllocations((prev) =>
       prev.map((allocation) => {
         if (allocation.detalleocId === detalleocId) {
+          // POR ENCIMA NUNCA (gerencia, 2026-10-07). El tope de un lote FIRME es lo que la
+          // orden autorizó en esta línea menos lo ya asignado en los otros lotes firmes, así
+          // la suma firme de la línea no se pasa por más que se digite. Nunca negativo, nunca
+          // más de lo que tiene el lote. El servidor lo vuelve a verificar contra `detalleoc`.
+          //
+          // EL LOTE ALTERNO NO LLEVA ESE TOPE. Es el lote de sustitución que se marca cuando
+          // el stock firme se agotó, y topearlo rompería el flujo: existe un caso real así
+          // (IND202606226011 de ID5, firme 150 + alterno 20 contra 150 autorizadas). Sumar el
+          // alterno al techo ya se intentó el 4-oct y hubo que revertirlo.
+          const firmeEnOtrosLotes = allocation.allocations.reduce(
+            (sum, inv) =>
+              sum + (inv.esAlterno || (inv.lote === lote && inv.location === location) ? 0 : inv.cantidadDescontar),
+            0,
+          )
+          const cupoFirme = Math.max(0, allocation.orderQuantity - firmeEnOtrosLotes)
           return {
             ...allocation,
             allocations: allocation.allocations.map((inv) => {
               if (inv.lote === lote && inv.location === location) {
-                return { ...inv, cantidadDescontar: value }
+                const tope = inv.esAlterno ? inv.stock_actual : Math.min(cupoFirme, inv.stock_actual)
+                const limpio = Number.isFinite(value) ? Math.max(0, value) : 0
+                return { ...inv, cantidadDescontar: Math.min(limpio, tope) }
               }
               return inv
             }),
@@ -475,6 +507,9 @@ export function BatchApproval() {
       const result = await approveBatchAllocation(
         {
           ordendecargue: codigoOrden,
+          // El id va explícito: es la llave con la que el servidor lee el detalle autorizado
+          // y confronta lo asignado. El número solo sirve para comprobar que coinciden.
+          idorden: Number.parseInt(selectedOrderId),
           allocations: allocationsToApprove,
         },
         selectedEmpresaId,
@@ -622,6 +657,9 @@ export function BatchApproval() {
       const result = await approveBatchAllocation(
         {
           ordendecargue: codigoOrden,
+          // El id va explícito: es la llave con la que el servidor lee el detalle autorizado
+          // y confronta lo asignado. El número solo sirve para comprobar que coinciden.
+          idorden: Number.parseInt(selectedOrderId),
           allocations: allocationsToApprove,
         },
         selectedEmpresaId,
@@ -995,11 +1033,15 @@ export function BatchApproval() {
                     disabled={
                       inventorySummary.length === 0 ||
                       inventorySummary.some((s) => s.totalDescontar > s.stock_actual) ||
-                      isConfirming
+                      isConfirming ||
+                      // Mientras la canasta de la orden elegida está cargando no se puede
+                      // confirmar: es la ventana en la que la pantalla puede estar mostrando
+                      // los productos de la orden anterior (incidente ID3 del 6-oct).
+                      loadingInventory
                     }
                     className="w-full"
                   >
-                    {isConfirming ? "Confirmando..." : "Confirmar Asignación"}
+                    {loadingInventory ? "Cargando la orden..." : isConfirming ? "Confirmando..." : "Confirmar Asignación"}
                   </Button>
                 </div>
               </CardContent>

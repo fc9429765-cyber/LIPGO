@@ -23,6 +23,14 @@
     {
       "path": "/api/cron/vigilancia-cuentas",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/aviso-errores",
+      "schedule": "0 23 * * *"
+    },
+    {
+      "path": "/api/cron/convergencia",
+      "schedule": "30 10 * * *"
     }
   ]
 }

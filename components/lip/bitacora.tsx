@@ -83,6 +83,11 @@ import {
   type CierreSnapshot,
 } from "@/lib/cierre-historial-actions"
 import CierreDiaDashboard from "@/components/lip/cierre-dia-dashboard"
+import { Chip, Esqueleto, EstadoVacio, Eyebrow } from "@/components/ui/lipgo"
+
+// Pestañas internas con el estilo de la barra de pestañas de los hubs (solo clases).
+const CLASE_PESTANA =
+  "h-9 flex-none gap-1.5 rounded-lg px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground data-[state=active]:bg-primary/10 data-[state=active]:font-semibold data-[state=active]:text-primary data-[state=active]:shadow-none"
 
 /**
  * Formatea una fecha ISO (`YYYY-MM-DD`) como `DD/MM/YYYY`. Si la
@@ -296,45 +301,57 @@ export default function Bitacora() {
     // El contenedor de Tabs se oculta automaticamente al imprimir el
     // dashboard (el @media print en globals.css oculta toda la UI
     // excepto #cierre-dia-print).
+    //
+    // Solo presentación (gerencia 2026-10-05: cero cambios de comportamiento):
+    // mismas pestañas, mismos textos, mismos diálogos y las mismas acciones;
+    // pintado con las primitivas del sistema visual LIPgo.
     <Tabs
       value={activeTab}
       onValueChange={setActiveTab}
       className="flex flex-col gap-4 p-4 md:p-6 print:p-0 print:gap-0"
     >
-      <TabsList className="self-start no-print print:hidden">
-        <TabsTrigger value="bitacora" className="gap-2">
-          <NotebookPen className="h-4 w-4" />
-          Bitácora
-        </TabsTrigger>
-        <TabsTrigger value="cierre" className="gap-2">
-          <FileBarChart2 className="h-4 w-4" />
-          Cierre del Día
-        </TabsTrigger>
-        <TabsTrigger value="historial" className="gap-2">
-          <HistoryIcon className="h-4 w-4" />
-          Historial
-        </TabsTrigger>
-      </TabsList>
+      <div className="no-print flex flex-col gap-3 print:hidden">
+        <div>
+          <Eyebrow>Operación LIP · Bitácora</Eyebrow>
+          <h1 className="text-2xl font-semibold leading-tight">Bitácora</h1>
+        </div>
+        <TabsList className="h-auto gap-1 self-start border-b border-border bg-transparent p-0 pb-2">
+          <TabsTrigger value="bitacora" className={CLASE_PESTANA}>
+            <NotebookPen className="h-4 w-4" />
+            Bitácora
+          </TabsTrigger>
+          <TabsTrigger value="cierre" className={CLASE_PESTANA}>
+            <FileBarChart2 className="h-4 w-4" />
+            Cierre del Día
+          </TabsTrigger>
+          <TabsTrigger value="historial" className={CLASE_PESTANA}>
+            <HistoryIcon className="h-4 w-4" />
+            Historial
+          </TabsTrigger>
+        </TabsList>
+      </div>
 
       <TabsContent
         value="bitacora"
-        className="flex flex-col gap-6 mt-0 print:hidden"
+        className="flex flex-col gap-4 mt-0 print:hidden"
       >
       {/* Captura del dia. Diseño tipo "diario": titulo descriptivo,
           textarea amplio (8 filas) y un boton primario alineado a la
           derecha que se inhabilita mientras guarda. */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <NotebookPen className="h-5 w-5" />
-            Bitácora del día
-          </CardTitle>
-          <CardDescription>
-            Registra novedades, incidencias o información relevante del día. La fecha se
-            asigna automáticamente.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
+      <section className="lg-card p-4 md:p-5" aria-labelledby="bitacora-captura-titulo">
+        <div className="mb-3 flex items-start gap-2.5">
+          <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-info-bg text-info-fg">
+            <NotebookPen className="h-4 w-4" aria-hidden />
+          </span>
+          <div>
+            <h2 id="bitacora-captura-titulo" className="text-base font-semibold leading-tight">Bitácora del día</h2>
+            <p className="text-sm text-muted-foreground">
+              Registra novedades, incidencias o información relevante del día. La fecha se
+              asigna automáticamente.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col gap-3">
           <Label htmlFor="bitacora-nueva" className="sr-only">
             Contenido de la bitácora
           </Label>
@@ -344,10 +361,10 @@ export default function Bitacora() {
             value={nuevoTexto}
             onChange={(e) => setNuevoTexto(e.target.value)}
             rows={8}
-            className="resize-y min-h-[180px]"
+            className="resize-y min-h-[180px] bg-background"
           />
           <div className="flex items-center justify-end gap-2">
-            <Button onClick={handleGuardar} disabled={saving || !nuevoTexto.trim()}>
+            <Button onClick={handleGuardar} disabled={saving || !nuevoTexto.trim()} className="h-10">
               {saving ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
@@ -356,30 +373,36 @@ export default function Bitacora() {
               Guardar
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       {/* Historial. Tabla simple con fecha, contenido (multilinea) y
           acciones. Para textos largos mantenemos `whitespace-pre-wrap`
           y `break-words` para preservar saltos de linea sin desbordar
           la celda. */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Historial</CardTitle>
-          <CardDescription>Registros guardados de la empresa actual.</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <section className="lg-card overflow-hidden" aria-labelledby="bitacora-historial-titulo">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <div>
+            <h2 id="bitacora-historial-titulo" className="text-base font-semibold leading-tight">Historial</h2>
+            <p className="text-sm text-muted-foreground">Registros guardados de la empresa actual.</p>
+          </div>
+          {!loading && rows.length > 0 && (
+            <Chip tono="neutro">{rows.length} {rows.length === 1 ? "registro" : "registros"}</Chip>
+          )}
+        </div>
+        <div className="p-4">
           {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin mr-2" />
-              Cargando historial...
+            <div aria-busy aria-label="Cargando historial...">
+              <Esqueleto lineas={4} />
             </div>
           ) : rows.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No hay registros de bitácora todavía
-            </div>
+            <EstadoVacio
+              icono={<NotebookPen className="h-5 w-5" aria-hidden />}
+              titulo="No hay registros de bitácora todavía"
+              texto="Escribe la bitácora del día arriba y pulsa Guardar."
+            />
           ) : (
-            <div className="border rounded-lg overflow-hidden">
+            <div className="overflow-hidden rounded-xl border border-border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -391,7 +414,7 @@ export default function Bitacora() {
                 <TableBody>
                   {rows.map((row) => (
                     <TableRow key={row.id}>
-                      <TableCell className="align-top font-medium">
+                      <TableCell className="lg-num align-top font-medium">
                         {formatFecha(row.fecha)}
                       </TableCell>
                       <TableCell className="align-top whitespace-pre-wrap break-words">
@@ -426,8 +449,8 @@ export default function Bitacora() {
               </Table>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       {/* Dialog de edicion. Reutiliza el mismo Textarea para que la
           experiencia de escribir sea consistente con el panel de
@@ -530,17 +553,19 @@ export default function Bitacora() {
           (boton "Ver / Imprimir") y, opcionalmente, eliminarlo.
           La lista se carga lazy al entrar a esta pestaña. */}
       <TabsContent value="historial" className="mt-0 print:hidden">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <HistoryIcon className="h-5 w-5" />
-                Historial de Cierres del Día
-              </CardTitle>
-              <CardDescription>
-                Cierres operativos guardados al generar el PDF. Abrelos
-                para verlos o reimprimirlos.
-              </CardDescription>
+        <section className="lg-card overflow-hidden" aria-labelledby="cierres-historial-titulo">
+          <div className="flex flex-row items-start justify-between gap-3 border-b border-border px-4 py-3">
+            <div className="flex items-start gap-2.5">
+              <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-info-bg text-info-fg">
+                <HistoryIcon className="h-4 w-4" aria-hidden />
+              </span>
+              <div>
+                <h2 id="cierres-historial-titulo" className="text-base font-semibold leading-tight">Historial de Cierres del Día</h2>
+                <p className="text-sm text-muted-foreground">
+                  Cierres operativos guardados al generar el PDF. Abrelos
+                  para verlos o reimprimirlos.
+                </p>
+              </div>
             </div>
             <Button
               type="button"
@@ -548,6 +573,7 @@ export default function Bitacora() {
               size="sm"
               onClick={fetchCierres}
               disabled={loadingCierres}
+              className="shrink-0"
             >
               {loadingCierres ? (
                 <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
@@ -556,20 +582,20 @@ export default function Bitacora() {
               )}
               Actualizar
             </Button>
-          </CardHeader>
-          <CardContent>
+          </div>
+          <div className="p-4">
             {loadingCierres ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                Cargando historial...
+              <div aria-busy aria-label="Cargando historial...">
+                <Esqueleto lineas={4} />
               </div>
             ) : cierres.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                Aún no hay cierres guardados. Genera el PDF del Cierre
-                del Día para que aparezca aquí.
-              </div>
+              <EstadoVacio
+                icono={<FileBarChart2 className="h-5 w-5" aria-hidden />}
+                titulo="Aún no hay cierres guardados."
+                texto="Genera el PDF del Cierre del Día para que aparezca aquí."
+              />
             ) : (
-              <div className="border rounded-lg overflow-hidden">
+              <div className="overflow-hidden rounded-xl border border-border">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -586,7 +612,7 @@ export default function Bitacora() {
                   <TableBody>
                     {cierres.map((c) => (
                       <TableRow key={c.fecha}>
-                        <TableCell className="font-medium tabular-nums">
+                        <TableCell className="lg-num font-medium">
                           {formatFecha(c.fecha)}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
@@ -599,7 +625,7 @@ export default function Bitacora() {
                             minute: "2-digit",
                           })}
                         </TableCell>
-                        <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
+                        <TableCell className="lg-num text-right text-xs text-muted-foreground">
                           {(c.size / 1024).toFixed(0)} KB
                         </TableCell>
                         <TableCell className="text-right">
@@ -666,8 +692,8 @@ export default function Bitacora() {
                 </Table>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
         <AlertDialog
           open={deleteCierreFecha != null}

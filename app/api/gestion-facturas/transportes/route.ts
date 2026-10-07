@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 
 // Lista de transportes REALES (distintos) que existen para un proyecto, para
-// que el filtro de Transporte de Gestión de Facturas sea una lista
+// que el filtro de Transporte de Solicitar Facturas sea una lista
 // desplegable en vez de texto libre — evita errores de tipeo al amarrar una
 // factura Siigo al transporte equivocado (o a ninguno, por un typo).
 export async function GET(request: NextRequest) {

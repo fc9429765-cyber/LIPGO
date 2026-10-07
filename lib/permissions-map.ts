@@ -376,8 +376,8 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   // Indicador de facturación por proyectos (Gestión Financiera): comparte el
   // permiso de Facturación Proyectos (conserva accesos ya otorgados).
   "Indicador de Facturación por Proyectos": "facturacion_proyectos",
-  "Gestión de Facturas": "gestionfacturas",
-  // Pestaña "Cuadro de Control" dentro de Gestión de Facturas; permiso propio.
+  "Solicitar Facturas": "gestionfacturas",
+  // Pestaña "Cuadro de Control" dentro de Solicitar Facturas; permiso propio.
   "Cuadro de Control Facturación": "cuadro_facturacion",
   // Consulta por proyecto (solo lectura): comparte el permiso de Cuadro de
   // Control (misma audiencia, sin migración nueva).
@@ -472,6 +472,10 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   "Actividades y Comités": "sst_actividades",
   // --- Certificaciones LIP · ISO 9001 ---
   "Repositorio ISO 9001": "iso_repositorio",
+  // Auditoría ISO 9001 reusa el permiso del repositorio: quien gestiona la
+  // documentación del sistema es quien audita contra ella. Un permiso propio
+  // obligaría a otorgarlo por separado a las mismas personas.
+  "Auditoría ISO 9001": "iso_repositorio",
   // --- Sistema Integrado de Gestión (SIG) ---
   "Dashboard SIG": "sig_matriz",
   "Análisis de Contexto DOFA": "sig_matriz",

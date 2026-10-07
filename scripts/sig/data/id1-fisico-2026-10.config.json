@@ -1,0 +1,15 @@
+{
+  "_descripcion": "Decisiones de gerencia (2026-10-05) para el Conteo total de ID1 con fecha 2026-10-01 (inventario inicial de octubre = amanecer del 1 de octubre, cierre físico del 30 de septiembre). El archivo físico es 'inventario 30 sep.xlsx' (hoja Inventario, 149 filas -> 111 claves, 45.242 und).",
+  "corte": "2026-10-01",
+  "foto": "apertura",
+  "_foto": "La foto ES el amanecer del corte (se contó al cerrar el 30 de septiembre). No se reconstruye nada: a diferencia del cargue de septiembre, aquí NO se suman de vuelta las salidas del día del corte.",
+  "alias": {
+    "PT LA NIEVE PAPEL PANADERIA 50KG": "PT000059",
+    "INDUPAN PREMIUM 12,5 KG.": "PT000189"
+  },
+  "_alias": "PAPEL 50KG -> PT000059: el sistema tiene esas mismas 307 und en PT000059 'POLI PANADERIA 50KG', misma ubicación C4 y mismo lote 20260916 (7 + 300); gerencia confirmó que es el mismo stock con otro nombre. PREMIUM 12,5 -> PT000189: el nombre del catálogo coincide exacto ('Indupan Premium 12,5 Kg.'), es un código sin historia en ID1.",
+  "noContados": "sistema",
+  "_noContados": "DECISIÓN FINAL de gerencia (2026-10-05): un producto que el archivo no menciona en ninguna fila NO se contó, así que se deja con el saldo del sistema (diferencia 0, su stock no se mueve) — 'si no están deja el que tiene el sistema al día de hoy, de resto todo igual'. Son 10 productos / 1.303 und al amanecer del 1-oct (Harina de Tercera 469, Salvado 278, Mogolla 268, Macarrón C 174, Macarrón G 87, Harina precocida 13 + 4, Fideo 8, Espagueti 1, Surtida 1); el archivo trae EXACTAMENTE 15 productos y 45.242 und (verificado en sus dos hojas). Un LOTE ausente de un producto que SÍ se contó va en 0: el contador recorrió ese producto. HISTORIA: el SQL 233 se corrió con 'cero' (una instrucción intermedia pedía que el inicial fuera exactamente el total del archivo) y se devolvió con el SQL 234, que deja esas 17 líneas en diferencia 0 y retira sus 17 correcciones.",
+  "excluir": [],
+  "_excluir": "Sin exclusiones: en septiembre los 3 subproductos se dejaron fuera del conteo y por eso la base de ese mes quedó sin ellos. Ahora entran con el saldo del sistema."
+}

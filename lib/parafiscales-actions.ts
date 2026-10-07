@@ -38,6 +38,7 @@
 // (lógica pura); aquí solo se arman las entradas. Ver `parametros_parafiscales`.
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { registrarErrorServidor } from "@/lib/errores-servidor"
 import {
   calcularAportes,
   validarParametros,
@@ -161,6 +162,7 @@ export async function guardarParametrosParafiscales(
     if (error) return { success: false, message: error.message }
     return { success: true }
   } catch (e: any) {
+    void registrarErrorServidor("nomina.guardarParametrosParafiscales", e)
     return { success: false, message: e?.message || "Error al guardar los parámetros." }
   }
 }
@@ -590,6 +592,7 @@ export async function guardarValorRealParafiscal(payload: {
     if (error) return { success: false, message: error.message }
     return { success: true }
   } catch (e: any) {
+    void registrarErrorServidor("nomina.guardarValorRealParafiscal", e)
     return { success: false, message: e?.message || "Error al guardar el valor real." }
   }
 }

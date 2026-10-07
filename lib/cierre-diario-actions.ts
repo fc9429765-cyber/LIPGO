@@ -295,7 +295,7 @@ export async function getCierreDiario(
           const sinGestion = String(o.estadofactura ?? "").trim() === ""
           alertas.tercero_sin_respaldo.detalle.push({
             ...base,
-            motivo: sinGestion ? `${falta} · nunca pasó por Gestión de Facturas` : falta,
+            motivo: sinGestion ? `${falta} · nunca pasó por Solicitar Facturas` : falta,
           })
           alertas.tercero_sin_respaldo.ordenes++
           alertas.tercero_sin_respaldo.valor += valor

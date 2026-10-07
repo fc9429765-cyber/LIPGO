@@ -12,7 +12,7 @@
  * (`verificarClaveFinanciera`); esto solo evita repetir el prompt en cada
  * submódulo.
  *
- * NO incluye "Gestión de Facturas" (queda fuera a propósito, solo con sus
+ * NO incluye "Solicitar Facturas" (queda fuera a propósito, solo con sus
  * permisos de siempre — decisión explícita del usuario 2026-08-02).
  */
 

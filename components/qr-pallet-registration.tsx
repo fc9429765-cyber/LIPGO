@@ -190,7 +190,33 @@ export default function QRPalletRegistration() {
       })
 
       if (!response.ok) {
-        throw new Error(`El servidor respondió con estado ${response.status}`)
+        /*
+         * El servicio de impresion explica POR QUE fallo, en el cuerpo de la
+         * respuesta. Antes se descartaba y el operario solo veia "estado 500",
+         * que no se puede accionar: hay que ir al servidor del servicio a leer
+         * su consola para enterarse de algo que ya venia en la respuesta.
+         *
+         * El caso real (2026-10-06) fue "permission denied for table
+         * produccion" -- el servicio quedo sin acceso a la base tras cerrar el
+         * rol anonimo (SQL 220). Con el mensaje a la vista se reconoce al
+         * instante; sin el, parecia un fallo de LIPgo.
+         */
+        let detalle = ""
+        try {
+          const cuerpo = await response.text()
+          const msg = JSON.parse(cuerpo)?.message
+          detalle = String(msg ?? cuerpo ?? "").slice(0, 300)
+        } catch {
+          // Si no se puede leer el cuerpo, queda el estado a secas.
+        }
+        const permisos = detalle.includes("permission denied")
+        throw new Error(
+          `El servicio de impresión respondió ${response.status}` +
+            (detalle ? `: ${detalle}` : ".") +
+            (permisos
+              ? " — El servicio perdió el acceso a la base de datos; avisa a quien lo administra (ver scripts/241)."
+              : ""),
+        )
       }
 
       let generatedId: string | number = "—"

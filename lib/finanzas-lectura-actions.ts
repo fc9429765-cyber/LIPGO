@@ -10,6 +10,7 @@
 
 import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 import { getCurrentUser, getUserProfile } from "@/lib/auth-actions"
+import { exigirSegundoFactorSiActivo } from "@/lib/seguridad-servidor"
 import { checkModulePermission } from "@/lib/permissions-actions"
 import { aplicarOrdenEstable } from "@/lib/orden-paginacion"
 import { registrarErrorServidor } from "@/lib/errores-servidor"
@@ -24,7 +25,13 @@ async function exigir(modulos: string[]): Promise<void> {
   const user = await getCurrentUser().catch(() => null)
   if (!user) throw new Error("Sesión requerida.")
   for (const m of modulos) {
-    if (await checkModulePermission(m)) return
+    if (await checkModulePermission(m)) {
+      // Segundo factor (2026-10-05): lo financiero es solo de LIP; si la cuenta tiene el
+      // segundo factor activado, esta sesión debe haberlo verificado. Quien no lo tiene
+      // activado sigue igual que hoy; ningún permiso cambia.
+      await exigirSegundoFactorSiActivo(`finanzas:${m}`)
+      return
+    }
   }
   throw new Error(`Sin permiso para ${modulos[0]}.`)
 }

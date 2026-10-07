@@ -16,6 +16,7 @@ import { cediDeDestino, PLANTAS_ORIGEN, type CediDestino } from "@/lib/cedis-des
 import { esProductoPorUnidad } from "@/lib/facturacion-billed-party"
 import { reportarInterno } from "@/lib/reporte-interno-actions"
 import { FILTRO_ABIERTOS_POSTGREST, normalizarEstado } from "@/lib/pedidos-estado"
+import { registrarErrorServidor } from "@/lib/errores-servidor"
 import {
   cargadoPorOtrasOrdenes,
   cargadoTrasGuardar,
@@ -348,6 +349,7 @@ export async function deleteOrder(idpedido: number) {
     return { success: true }
   } catch (error) {
     console.error("Unexpected error:", error)
+    void registrarErrorServidor("orders.deleteOrder", error, { idpedido })
     return { success: false, message: "Error inesperado al eliminar pedido" }
   }
 }
@@ -524,6 +526,7 @@ export async function approveOrder(idpedido: number, approvalCode: string) {
     return { success: true, message: "Pedido aprobado correctamente" }
   } catch (error) {
     console.error("Unexpected error:", error)
+    void registrarErrorServidor("orders.approveOrder", error, { idpedido })
     return { success: false, message: "Error inesperado al aprobar pedido" }
   }
 }
@@ -545,7 +548,16 @@ export async function updateOrderPDFUrl(idpedido: number, pdfUrl: string) {
   }
 }
 
-export async function getOrderFiltersData() {
+/**
+ * Los valores de los desplegables de filtro: pedidos, órdenes de compra,
+ * ciudades y vendedores.
+ *
+ * `empresaId` es la empresa elegida en el selector superior. Sin ella, los
+ * desplegables se armaban con TODAS las empresas accesibles: quien tiene
+ * acceso a varios proyectos veía pedidos que no existen en el que está
+ * mirando, y al escogerlos la lista salía vacía sin explicar por qué.
+ */
+export async function getOrderFiltersData(empresaId?: number) {
   const supabase = await createClient()
   try {
     console.log("[v0] Fetching order filters data")
@@ -566,8 +578,19 @@ export async function getOrderFiltersData() {
         .eq("aprobado", "si")
         .order("pedido", { ascending: false })
         .order("idpedido", { ascending: false })
-      // Filter by accessible empresas
-      q = q.in("id_empresa", accessibleEmpresas)
+      /*
+       * La empresa elegida en el selector superior manda sobre la lista de
+       * accesibles.
+       *
+       * Se comprueba que esté entre las accesibles antes de usarla: el valor
+       * viene del navegador, y sin esa comprobación bastaría con cambiarlo
+       * para ver pedidos de un proyecto al que no se tiene acceso.
+       */
+      if (empresaId && accessibleEmpresas.includes(empresaId)) {
+        q = q.eq("id_empresa", empresaId)
+      } else {
+        q = q.in("id_empresa", accessibleEmpresas)
+      }
       // Filter by accessible owners in empresafactura field (if user has owner permissions)
       if (accessibleOwners.length > 0) q = q.in("empresafactura", accessibleOwners)
       return q
@@ -1230,7 +1253,7 @@ export async function generateLoadOrder(orderData: {
     // La inspección deja de estar huérfana: queda amarrada a esta orden.
     await vincularRegistroSanitario(supabase, horaSanitaria.registroId, orderCode)
 
-    const detailUpdateResult = await updatePedidoDetalleStatus(orderData.detailUpdates, orderCode)
+    const detailUpdateResult = await updatePedidoDetalleStatus(orderData.detailUpdates, orderCode, nextId)
 
     if (!detailUpdateResult.success) {
       return { success: false, message: detailUpdateResult.message }
@@ -1424,6 +1447,12 @@ export async function generateLoadOrder(orderData: {
     }
   } catch (error) {
     console.error("[v0] Unexpected error:", error)
+    // Una orden de cargue a medias deja pedidos y vehículo en estados cruzados: al registro.
+    void registrarErrorServidor("orders.generateLoadOrder", error, {
+      pedidos: orderData.selectedOrderIds,
+      vehiculo: orderData.vehiculo ?? null,
+      empresaId: orderData.idempresaSeleccionada ?? null,
+    })
     return { success: false, message: "Error inesperado al generar orden de cargue" }
   }
 }
@@ -2138,6 +2167,14 @@ export async function updatePedidoDetalleStatus(
     idpedido?: number
   }>,
   orderCode?: string,
+  /**
+   * Id de la orden en `cabeceraoc`. Es el vínculo FIABLE para el libro: `ocargue` es un
+   * código de texto y `cabeceraoc` tiene códigos repetidos, así que por texto no siempre
+   * se sabe de qué orden habla una fila. Es lo que dejó 254 atribuciones huérfanas antes
+   * del 2026-10-07 (script 251). Opcional para no romper a nadie; si no llega, la fila
+   * queda con el código como antes.
+   */
+  idorden?: number,
 ) {
   const supabase = await createClient()
   try {
@@ -2215,6 +2252,8 @@ export async function updatePedidoDetalleStatus(
             idpedido: Number(l?.idpedido ?? u.idpedido) || 0,
             transid: Number(u.transid),
             ocargue: orderCode,
+            // El vínculo por id, además del código de texto (script 251).
+            idorden: Number.isFinite(Number(idorden)) ? Number(idorden) : null,
             unidades: Number(u.unidadescargadas) || 0,
             origen: "app",
           }
@@ -2519,6 +2558,7 @@ export async function annulOrder(idpedido: number, password: string, observacion
     return { success: true, message: "Pedido anulado exitosamente" }
   } catch (error) {
     console.error("[v0] Unexpected error:", error)
+    void registrarErrorServidor("orders.annulOrder", error, { idpedido })
     return { success: false, message: "Error inesperado al anular pedido" }
   }
 }
@@ -2562,6 +2602,7 @@ export async function closePendingOrder(idpedido: number, password: string, obse
 
     return { success: true, message: "Pedido cerrado exitosamente" }
   } catch (error) {
+    void registrarErrorServidor("orders.closePendingOrder", error, { idpedido })
     return { success: false, message: "Error inesperado al cerrar pedido" }
   }
 }
@@ -2658,7 +2699,7 @@ export async function deleteLoadOrder(orderId: number) {
     // Step 1: Get the order to be deleted to get ordendecargue
     const { data: orderToDelete, error: fetchError } = await supabase
       .from("cabeceraoc")
-      .select("ordendecargue, tipooperacion")
+      .select("ordendecargue, tipooperacion, facturasiigo, idempresa")
       .eq("id", orderId)
       .single()
 
@@ -2674,6 +2715,65 @@ export async function deleteLoadOrder(orderId: number) {
     const ordenDeCargue = orderToDelete.ordendecargue
     console.log("[v0] Order to delete has ordendecargue:", ordenDeCargue)
 
+    /*
+     * UNA ORDEN YA FACTURADA NO SE BORRA.
+     *
+     * `facturasiigo` lleno significa que existe una factura electronica
+     * emitida por esta orden. Esa factura NO se puede borrar: se anula con una
+     * nota credito, que es otro documento contable con su propia numeracion.
+     *
+     * Si se borrara la orden, la factura quedaria en Siigo sin nada que la
+     * respalde en LIPgo -- y el cruce contable se romperia sin que nadie se
+     * entere. Primero se anula en Siigo, despues se borra aqui.
+     */
+    if (String(orderToDelete.facturasiigo ?? "").trim() !== "") {
+      return {
+        success: false,
+        message:
+          `La orden ${ordenDeCargue} ya tiene factura emitida en Siigo y no se puede eliminar. ` +
+          "Anulala primero en Siigo con una nota credito.",
+      }
+    }
+
+    /*
+     * UNA ORDEN QUE YA DESPACHÓ NO SE BORRA.
+     *
+     * Regla de gerencia (2026-10-07): "si tiene los otros pasos del proceso, como picking
+     * verificado, no se puede borrar o afectaría el inventario".
+     *
+     * El picking es el momento en que la mercancía sale de verdad: las líneas pasan de
+     * `por descontar` (una reserva) a `aprobado` (una salida). Si la orden se borra después
+     * de eso, el reverso devuelve el inventario y el sistema queda diciendo que hay producto
+     * que ya se fue en un camión. El saldo se infla en silencio y nadie se entera hasta el
+     * conteo del mes.
+     *
+     * Una reserva sin picking sí se puede borrar: no salió nada todavía.
+     *
+     * Si de verdad hay que deshacer un despacho, no es borrando la orden: es una corrección
+     * de inventario, que deja su propio rastro y pasa por clave.
+     */
+    const { data: yaDespacho, error: errDespacho } = await supabase
+      .from("invtrans")
+      .select("id, nombreproducto, cantidad, status")
+      .eq("ocargue", ordenDeCargue)
+      .ilike("origen", "orden de cargue")
+      .ilike("status", "apr%")
+      .limit(500)
+    if (errDespacho) {
+      return { success: false, message: `No se pudo comprobar si la orden ya despachó: ${errDespacho.message}. No se borró nada.` }
+    }
+    if ((yaDespacho ?? []).length > 0) {
+      const unidades = (yaDespacho ?? []).reduce((s: number, r: any) => s + (Number(r.cantidad) || 0), 0)
+      return {
+        success: false,
+        message:
+          `La orden ${ordenDeCargue} ya despachó: tiene ${yaDespacho!.length} salida(s) de inventario aprobadas ` +
+          `por ${unidades.toLocaleString("es-CO")} unidades. Borrarla devolvería a la bodega un producto que ya salió. ` +
+          `Si hay que corregirla, hazlo desde Cuadre y Correcciones de inventario, que deja rastro; o anula el pedido ` +
+          `asociado si lo que cambió fue la entrega.`,
+      }
+    }
+
     // Si es una orden de Cargue (madre), borra primero sus clones automáticos
     // (o bloquea si alguno ya fue procesado). Los demás tipos (Descargue,
     // Distribucion, Tolva...) no disparan esta cascada.
@@ -2682,6 +2782,73 @@ export async function deleteLoadOrder(orderId: number) {
       if (!cascada.success) {
         return cascada
       }
+    }
+
+    /*
+     * REVERSO DE INVENTARIO Y CALIDAD.
+     *
+     * La aprobacion de calidad (`approveBatchAllocation`) deja tres rastros
+     * por orden: el movimiento de inventario en `invtrans`, la asignacion de
+     * lotes en `historicolotes`, y la marca `horalote` en la cabecera.
+     *
+     * Hasta ahora el borrado de la orden no tocaba ninguno, asi que el
+     * inventario seguia descontado por un despacho que ya no existia y los
+     * lotes quedaban asignados a una orden borrada. El saldo
+     * (`saldoinvdetalle`) se deriva de `invtrans`, asi que retirar las
+     * transacciones restituye el inventario sin tener que recalcular nada.
+     *
+     * Es el mismo reverso que ya hace "Anular asignacion de lotes"
+     * (`annulBatchAssignment` en lib/batch-actions.ts); aqui se aplica tambien
+     * al borrar la orden entera.
+     *
+     * Va ANTES de borrar la cabecera: si algo falla, la orden sigue existiendo
+     * y se puede reintentar. Al reves quedaria inventario descontado sin orden
+     * a la cual atribuirlo, que es precisamente lo que se esta corrigiendo.
+     */
+    const { error: invtransDeleteError } = await supabase
+      .from("invtrans")
+      .delete()
+      .eq("ocargue", ordenDeCargue)
+    if (invtransDeleteError) {
+      console.error("[v0] Error deleting invtrans:", invtransDeleteError)
+      return { success: false, message: "Error al revertir las transacciones de inventario" }
+    }
+    console.log("[v0] Deleted invtrans for ocargue:", ordenDeCargue)
+
+    const { error: lotesDeleteError } = await supabase
+      .from("historicolotes")
+      .delete()
+      .eq("ordendecargue", ordenDeCargue)
+    if (lotesDeleteError) {
+      console.error("[v0] Error deleting historicolotes:", lotesDeleteError)
+      return { success: false, message: "Error al revertir la asignacion de lotes" }
+    }
+    console.log("[v0] Deleted historicolotes for ocargue:", ordenDeCargue)
+
+    /*
+     * Las pausas del cargue tambien cuelgan de la orden. Sin esto quedan
+     * apuntando a un numero que ya no existe y suman tiempo muerto a una orden
+     * fantasma en los indicadores de piso.
+     *
+     * `despachotraslados` NO se toca: es una VISTA derivada, no una tabla. No
+     * se puede borrar de ella ("cannot delete from view", 55000) y no hace
+     * falta: lo que muestra sale de las tablas base, asi que desaparece solo
+     * cuando estas se limpian.
+     *
+     * No bloquea el borrado si falla --no es el nucleo de la operacion y una
+     * orden a medio borrar es peor que un registro suelto-- pero el fallo se
+     * registra para poder limpiarlo despues.
+     */
+    const { error: pausasError } = await supabase
+      .from("pausas")
+      .delete()
+      .eq("ordendecargue", ordenDeCargue)
+    if (pausasError) {
+      console.error("[v0] Error deleting pausas:", pausasError.message)
+      void registrarErrorServidor("orders.deleteLoadOrder.pausas", pausasError, {
+        orderId,
+        ordenDeCargue,
+      })
     }
 
     // Step 2: Delete all associated lines in detalleoc where idorden = orderId
@@ -2862,6 +3029,8 @@ export async function deleteLoadOrder(orderId: number) {
     return { success: true, message: "Orden de cargue eliminada exitosamente" }
   } catch (error) {
     console.error("[v0] Error deleting load order:", error)
+    // El reverso toca invtrans, pedidos, citas y el libro de órdenes: si se corta, hay que verlo.
+    void registrarErrorServidor("orders.deleteLoadOrder", error, { orderId })
     return { success: false, message: "Error inesperado al eliminar la orden de cargue" }
   }
 }
@@ -4276,6 +4445,7 @@ export async function closeOrderWithInvoice(
     }
   } catch (error) {
     console.error("[v0] Unexpected error:", error)
+    void registrarErrorServidor("orders.closeOrderWithInvoice", error, { idpedido, factura, lineas: unitsReceived.length })
     return {
       success: false,
       message: "Error inesperado al cerrar con factura",

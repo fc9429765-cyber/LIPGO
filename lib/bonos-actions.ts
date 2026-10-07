@@ -21,6 +21,7 @@
  */
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { registrarErrorServidor } from "@/lib/errores-servidor"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
 import { autorizar } from "@/lib/autorizaciones-core"
 // Las constantes y tipos viven en un módulo aparte: este archivo es
@@ -227,6 +228,7 @@ export async function registrarBono(
     if (error) return { success: false, message: error.message }
     return { success: true }
   } catch (e: any) {
+    void registrarErrorServidor("nomina.registrarBono", e)
     return { success: false, message: e?.message || "Error al registrar el bono." }
   }
 }
@@ -256,6 +258,7 @@ export async function aprobarBono(id: number, clave: string): Promise<{ success:
     if (error) return { success: false, message: error.message }
     return { success: true }
   } catch (e: any) {
+    void registrarErrorServidor("nomina.aprobarBono", e)
     return { success: false, message: e?.message || "Error al aprobar el bono." }
   }
 }
@@ -281,6 +284,7 @@ export async function rechazarBono(
     if (error) return { success: false, message: error.message }
     return { success: true }
   } catch (e: any) {
+    void registrarErrorServidor("nomina.rechazarBono", e)
     return { success: false, message: e?.message || "Error al rechazar el bono." }
   }
 }
@@ -301,6 +305,7 @@ export async function eliminarBono(id: number): Promise<{ success: boolean; mess
     if (error) return { success: false, message: error.message }
     return { success: true }
   } catch (e: any) {
+    void registrarErrorServidor("nomina.eliminarBono", e)
     return { success: false, message: e?.message || "Error al eliminar el bono." }
   }
 }

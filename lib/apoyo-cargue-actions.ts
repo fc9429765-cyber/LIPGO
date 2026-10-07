@@ -24,6 +24,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentEmpresaId } from "@/lib/company-filter"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
 import { getColombiaDateTime } from "@/lib/date-utils"
+import { estadoQuincena } from "@/lib/quincena-abierta"
 
 const num = (v: any) => Number(v || 0)
 
@@ -336,6 +337,10 @@ export async function agregarApoyoAOrden(
       .single()
     if (error || !o) throw new Error(error?.message || "Orden no encontrada")
 
+    // Solo se corrige la quincena en curso: las anteriores ya se pagaron.
+    const q = estadoQuincena(String(o.fechacargue).slice(0, 10))
+    if (!q.abierta) return { success: false, message: q.motivo ?? "La quincena de esa orden ya está cerrada" }
+
     const actuales = String(o.auxiliares || "")
       .split(",")
       .map((s: string) => s.trim())
@@ -372,10 +377,20 @@ export async function agregarApoyoAOrden(
   }
 }
 
-/** Retira a alguien agregado por este módulo (nunca a un auxiliar original de Picking/Packing). */
+/**
+ * Saca a una persona del reparto de toneladas de una orden.
+ *
+ * Hasta el 2026-10-06 solo se podía sacar a quien este mismo módulo había
+ * agregado. Por decisión de gerencia ahora también se puede sacar a un auxiliar
+ * asignado en Picking/Packing — es lo que hacía falta para poder corregir de
+ * verdad una quincena. Cada exclusión queda registrada en
+ * `apoyo_cargue_exclusiones` (quién y cuándo), además del antes/después que el
+ * trigger de auditoría ya guarda de `cabeceraoc.auxiliares`.
+ */
 export async function quitarApoyoDeOrden(idorden: number, persona: string): Promise<{ success: boolean; message?: string }> {
   try {
     const admin = await getSupabaseAdmin()
+    const usuarioActual = await getCurrentUsuarioForInsert()
 
     const { data: rastro } = await admin
       .from("apoyo_cargue_asignaciones")
@@ -383,29 +398,252 @@ export async function quitarApoyoDeOrden(idorden: number, persona: string): Prom
       .eq("idorden", idorden)
       .ilike("persona", persona)
       .limit(1)
-    if (!rastro || rastro.length === 0) {
-      return { success: false, message: "Esta persona no fue agregada desde este módulo" }
-    }
+    const veniaDeEsteModulo = !!rastro && rastro.length > 0
 
-    const { data: o, error } = await admin.from("cabeceraoc").select("id, auxiliares").eq("id", idorden).single()
+    const { data: o, error } = await admin
+      .from("cabeceraoc")
+      .select("id, idempresa, fechacargue, auxiliares")
+      .eq("id", idorden)
+      .single()
     if (error || !o) throw new Error(error?.message || "Orden no encontrada")
+
+    // Solo se corrige la quincena en curso: las anteriores ya se pagaron.
+    const q = estadoQuincena(String(o.fechacargue).slice(0, 10))
+    if (!q.abierta) return { success: false, message: q.motivo ?? "La quincena de esa orden ya está cerrada" }
 
     const actuales = String(o.auxiliares || "")
       .split(",")
       .map((s: string) => s.trim())
       .filter(Boolean)
     const restantes = actuales.filter((a) => a.toUpperCase() !== persona.trim().toUpperCase())
+    if (restantes.length === actuales.length) {
+      return { success: false, message: "Esa persona no está en el reparto de la orden" }
+    }
+    if (restantes.length === 0) {
+      // Sin auxiliares el reparto se queda sin entre quién dividir las toneladas:
+      // la orden quedaría con el pago en el aire. Debe quedar al menos uno.
+      return { success: false, message: "No se puede dejar la orden sin ningún auxiliar" }
+    }
+
     const { error: errUpd } = await admin
       .from("cabeceraoc")
       .update({ auxiliares: restantes.join(",") })
       .eq("id", idorden)
     if (errUpd) throw new Error(errUpd.message)
 
-    await admin.from("apoyo_cargue_asignaciones").delete().eq("idorden", idorden).ilike("persona", persona)
+    if (veniaDeEsteModulo) {
+      await admin.from("apoyo_cargue_asignaciones").delete().eq("idorden", idorden).ilike("persona", persona)
+    }
+
+    // Rastro de quién lo sacó. Best-effort: si la tabla todavía no existe
+    // (scripts/239), la exclusión igual se aplica — el antes/después queda en
+    // `auditoria` de todas formas.
+    try {
+      await admin.from("apoyo_cargue_exclusiones").insert([
+        {
+          idorden,
+          idempresa: Number(o.idempresa) || null,
+          fecha: String(o.fechacargue || "").slice(0, 10) || null,
+          persona: persona.trim(),
+          origen: veniaDeEsteModulo ? "apoyo" : "picking",
+          quitado_por: usuarioActual,
+        },
+      ])
+    } catch {
+      /* la tabla de rastro es opcional */
+    }
 
     return { success: true }
   } catch (e: any) {
     console.error("[apoyo-cargue] quitarApoyoDeOrden:", e)
     return { success: false, message: e?.message || "Error al quitar el apoyo" }
+  }
+}
+
+/** Una persona con reporte de asistencia del día, lista para marcar o desmarcar. */
+export interface CandidatoApoyo {
+  id: number
+  nombre: string
+  puesto: string | null
+  especialidad: boolean
+  turno: string | null
+  entradaProgramada: string | null
+  salidaProgramada: string | null
+  horaIngreso: string | null
+  horaSalida: string | null
+  novedad: string | null
+  /** en_piso | ya_salio | no_llego | novedad */
+  estado: "en_piso" | "ya_salio" | "no_llego" | "novedad"
+  /** Ya está en el reparto de toneladas de la orden (`cabeceraoc.auxiliares`). */
+  enLaOrden: boolean
+  /** Entró por este módulo, así que desde aquí se puede sacar. */
+  sePuedeQuitar: boolean
+  /** Cumple las reglas para entrar al reparto. */
+  sePuedeAgregar: boolean
+  /** Por qué no se puede agregar (null si sí se puede). */
+  motivo: string | null
+}
+
+export interface CandidatosApoyoDia {
+  fecha: string
+  /** Los auxiliares de cargue y descargue con asistencia reportada ese día. */
+  cuadrilla: CandidatoApoyo[]
+  /** Personal de otros puestos que YA terminó su turno y queda habilitado para apoyar. */
+  habilitados: CandidatoApoyo[]
+  /** De otros puestos, los que todavía están en su propio turno (solo para el contador). */
+  enTurnoPropio: number
+}
+
+/**
+ * Los dos listados con los que se arma el apoyo de una orden, los dos tomados del
+ * REPORTE DE ASISTENCIA del día (`registroasistencia`) — nunca del maestro de
+ * personal ni de la nómina:
+ *
+ *   1. `cuadrilla`   — los auxiliares de cargue y descargue de ese día, con el
+ *      estado en que quedó cada uno (en piso, ya salió, no llegó, novedad).
+ *   2. `habilitados` — personal de OTROS puestos cuyo turno programado ya terminó
+ *      (`horasalidaprogramada`, extendida por las horas extra aprobadas), que por
+ *      eso queda libre para apoyar cargue sin abandonar su puesto.
+ *
+ * Cada fila dice si ya está en la orden, si se puede agregar y, cuando no, por qué.
+ * Las reglas de disponibilidad son las MISMAS de `getPersonalApoyoDisponible`
+ * (acordadas con el usuario el 2026-09-07 y el 2026-09-14); la diferencia es que
+ * aquí también se devuelve a quien NO se puede asignar, para que el coordinador vea
+ * el cuadro completo del día en vez de una lista recortada sin explicación.
+ */
+export async function getCandidatosApoyoDia(
+  fecha: string,
+  idorden?: number | null,
+  idempresaOpcional?: number | null,
+): Promise<{ success: boolean; data: CandidatosApoyoDia | null; message?: string }> {
+  try {
+    const admin = await getSupabaseAdmin()
+    const idempresa = idempresaOpcional ?? (await getCurrentEmpresaId())
+
+    let q = admin
+      .from("registroasistencia")
+      .select("id, nombre, identificacion, puesto, especialidad, turno, horaentradaprogramada, horasalidaprogramada, horaingreso, horasalida, asistencia")
+      .eq("fecha", fecha)
+      .order("nombre", { ascending: true })
+    if (idempresa) q = q.eq("idempresa", idempresa)
+    const { data, error } = await q
+    if (error) throw new Error(error.message)
+    const filas = data || []
+
+    // Quiénes están ya en el reparto de la orden, y cuáles de ellos entraron por aquí.
+    const enLaOrden = new Set<string>()
+    const porEsteModulo = new Set<string>()
+    if (idorden) {
+      const { data: o } = await admin.from("cabeceraoc").select("auxiliares").eq("id", idorden).single()
+      for (const a of String(o?.auxiliares || "").split(",")) {
+        const t = a.trim().toUpperCase()
+        if (t) enLaOrden.add(t)
+      }
+      const { data: rastro } = await admin.from("apoyo_cargue_asignaciones").select("persona").eq("idorden", idorden)
+      for (const r of rastro || []) porEsteModulo.add(String(r.persona || "").trim().toUpperCase())
+    }
+
+    // Horas extra aprobadas: extienden el turno propio, así que quien tiene una
+    // extensión aprobada todavía NO queda habilitado para apoyar.
+    const horasExtraPorPersona = new Map<string, number>()
+    {
+      const { data: extras } = await admin
+        .from("solicitud_horas_extras")
+        .select("nombre_empleado, identificacion_empleado, cantidad")
+        .eq("fecharequerida", fecha)
+        .eq("idempresa", idempresa)
+      for (const ex of extras || []) {
+        const key = String(ex.identificacion_empleado || "").trim() || `nombre:${String(ex.nombre_empleado || "").trim().toUpperCase()}`
+        horasExtraPorPersona.set(key, (horasExtraPorPersona.get(key) || 0) + (Number(ex.cantidad) || 0))
+      }
+    }
+
+    const colombiaDate = await getColombiaDateTime()
+    const esHoy = fecha === colombiaDate.toLocaleDateString("en-CA")
+    const horaActual = colombiaDate.toTimeString().slice(0, 5)
+    const hora = (v: any) => {
+      const s = String(v ?? "").trim()
+      return s ? s.slice(0, 5) : null
+    }
+    const esCargue = (p: any) => {
+      const t = String(p ?? "").toLowerCase()
+      return t.includes("cargue") || t.includes("descargue")
+    }
+    /** Hora a la que de verdad queda libre: turno programado + horas extra aprobadas. */
+    const horaLibre = (r: any): string | null => {
+      const prog = hora(r.horasalidaprogramada)
+      if (!prog) return null
+      const cedula = String(r.identificacion || "").trim()
+      const extra =
+        horasExtraPorPersona.get(cedula) ??
+        horasExtraPorPersona.get(`nombre:${String(r.nombre || "").trim().toUpperCase()}`) ??
+        0
+      return extra > 0 ? sumarHoras(prog, extra) : prog
+    }
+
+    const aCandidato = (r: any): CandidatoApoyo => {
+      const novedad = r.asistencia ? String(r.asistencia) : null
+      const horaIngreso = hora(r.horaingreso)
+      const horaSalida = hora(r.horasalida)
+      const nombreUp = String(r.nombre || "").trim().toUpperCase()
+      const estado: CandidatoApoyo["estado"] = novedad ? "novedad" : horaSalida ? "ya_salio" : horaIngreso ? "en_piso" : "no_llego"
+
+      // Reglas para poder entrar al reparto:
+      //   * Con novedad del día (ausente) nunca: no trabajó.
+      //   * Sin hora de ingreso nunca: no estuvo en el proyecto ese día.
+      //   * "Ya marcó salida" y "sigue en su turno" solo aplican SI LA FECHA ES HOY:
+      //     son reglas del momento (no se puede mandar a apoyar a quien ya se fue o
+      //     a quien debería estar en su puesto). En un día pasado el apoyo se
+      //     registra en retrospectiva y esas dos condiciones ya no significan nada
+      //     — sin esto no se podía corregir ni un solo día anterior.
+      let motivo: string | null = null
+      if (novedad) motivo = "Novedad del día: " + novedad
+      else if (!horaIngreso) motivo = "No registró llegada ese día"
+      else if (esHoy && horaSalida) motivo = "Ya marcó salida a las " + horaSalida
+      else if (esHoy && esEspecialidad(r.especialidad)) {
+        const libre = horaLibre(r)
+        if (libre && horaActual < libre) motivo = "Está en su turno hasta las " + libre
+      }
+
+      return {
+        id: r.id,
+        nombre: r.nombre,
+        puesto: r.puesto ?? null,
+        especialidad: esEspecialidad(r.especialidad),
+        turno: r.turno ?? null,
+        entradaProgramada: hora(r.horaentradaprogramada),
+        salidaProgramada: hora(r.horasalidaprogramada),
+        horaIngreso,
+        horaSalida,
+        novedad,
+        estado,
+        enLaOrden: enLaOrden.has(nombreUp),
+        sePuedeQuitar: porEsteModulo.has(nombreUp),
+        sePuedeAgregar: motivo === null,
+        motivo,
+      }
+    }
+
+    const cuadrilla: CandidatoApoyo[] = []
+    const habilitados: CandidatoApoyo[] = []
+    let enTurnoPropio = 0
+    for (const r of filas) {
+      const c = aCandidato(r)
+      if (esCargue(r.puesto)) {
+        cuadrilla.push(c)
+        continue
+      }
+      // Otro puesto: solo entra a "habilitados" cuando ya cumplió su turno
+      // (o si ya está en la orden, para poder sacarlo desde aquí).
+      const libre = horaLibre(r)
+      const cumplio = !esHoy || !libre || horaActual >= libre
+      if (cumplio || c.enLaOrden) habilitados.push(c)
+      else enTurnoPropio++
+    }
+
+    return { success: true, data: { fecha, cuadrilla, habilitados, enTurnoPropio } }
+  } catch (e: any) {
+    console.error("[apoyo-cargue] getCandidatosApoyoDia:", e)
+    return { success: false, data: null, message: e?.message || "Error al cargar la asistencia del día" }
   }
 }

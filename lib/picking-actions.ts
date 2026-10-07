@@ -7,6 +7,7 @@ import { getCurrentEmpresaIdForInsert, getCurrentEmpresaId } from "@/lib/company
 import { normalizeName } from "@/lib/nomina-calculo-utils"
 import { getHorarioTolva, type HorarioTolvaDia } from "@/lib/horario-tolva-actions"
 import { esProductoPorUnidad } from "@/lib/facturacion-billed-party"
+import { registrarErrorServidor } from "@/lib/errores-servidor"
 import {
   decidirConfirmacion,
   esLoteAlterno,
@@ -51,7 +52,7 @@ export interface PendingLoadOrder {
   /**
    * ¿Se factura este cargue? Se decide en Picking. Encendido por defecto
    * (`null`/`true`); se DESMARCA cuando el personal que carga NO es de LIP (el
-   * vehículo trae los suyos) → `false` = ese cargue no aparece en Gestión de Facturas.
+   * vehículo trae los suyos) → `false` = ese cargue no aparece en Solicitar Facturas.
    */
   facturar?: boolean | null
   /**
@@ -1652,6 +1653,9 @@ export async function confirmPicking(
     }
   } catch (error: any) {
     console.error("[v0] Error confirming picking:", error)
+    // Un picking que falla deja inventario a medias: tiene que verse el mismo día, no solo
+    // en la consola de Vercel. Va al registro de errores (SQL 217) y de ahí al aviso diario.
+    void registrarErrorServidor("picking.confirmPicking", error, { ordenCargue, orderId, lineas: items.length, reanudando })
     return { success: false, message: error.message || "Error al confirmar el picking" }
   }
 }

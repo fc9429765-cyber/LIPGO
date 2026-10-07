@@ -13,6 +13,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useToast } from "@/hooks/use-toast"
 import { SST_TOKENS } from "@/components/sst/sst-utils"
 import { SigHeader, SigFilterBar, SigField, SigKpi, SigSection, SigDatePicker } from "@/components/sst/sig-ui"
+import { Chip, Cifra, Esqueleto, Eyebrow, Punto, TEXTO_TONO, type Tono } from "@/components/ui/lipgo"
+import { cn } from "@/lib/utils"
 import { useAuth } from "@/components/auth-provider"
 import { getPanelOperacionLIP } from "@/lib/sig-actions"
 import { Loader2, Truck, Users, ShieldCheck, Camera, Clock, Package, Timer, Smile, Target, Gauge, Receipt, FileWarning, ChevronDown } from "lucide-react"
@@ -32,6 +34,28 @@ import {
   LabelList,
 } from "recharts"
 
+// ---- Solo presentación (gerencia 2026-10-05: cero cambios de comportamiento). Las mismas piezas de
+// siempre (KPI, grupo del scorecard, chips de rango, tabla colapsable) con las primitivas del sistema
+// visual LIPgo. Textos, datos y filtros idénticos. ----
+
+const TONO_ESTADO: Record<string, Tono> = { ok: "ok", warn: "atencion", bad: "critico", nd: "neutro" }
+// Clases estáticas (Tailwind no genera clases armadas en tiempo de ejecución).
+const ICONO_TONO: Record<Tono, string> = {
+  ok: "bg-ok-bg text-ok-fg",
+  atencion: "bg-atencion-bg text-atencion-fg",
+  critico: "bg-critico-bg text-critico-fg",
+  info: "bg-info-bg text-info-fg",
+  neutro: "bg-muted text-foreground",
+}
+
+// Tono a partir de un color del semáforo SST (los cálculos siguen devolviendo el color de siempre).
+function tonoDeColor(color: string): Tono {
+  if (color === SST_TOKENS.ok) return "ok"
+  if (color === SST_TOKENS.warn) return "atencion"
+  if (color === SST_TOKENS.bad) return "critico"
+  return "neutro"
+}
+
 function KPI({
   label,
   valor,
@@ -47,7 +71,15 @@ function KPI({
   color: string
   sub?: string
 }) {
-  return <SigKpi label={label} value={valor} unit={unidad} Icon={Icon} accent={color} valueColor={color} sub={sub} />
+  const tono = tonoDeColor(color)
+  return (
+    <div className="lg-card flex items-start gap-3 p-4">
+      <span className={cn("mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", ICONO_TONO[tono])}>
+        <Icon className="h-4 w-4" aria-hidden />
+      </span>
+      <Cifra tamano="compacta" label={label} valor={typeof valor === "number" ? valor.toLocaleString("es-CO") : valor} unidad={unidad} tono={tono} sub={sub} className="min-w-0" />
+    </div>
+  )
 }
 
 // Grupo del scorecard: encabezado + filas (indicador · resultado · meta · estado).
@@ -62,23 +94,22 @@ function FragmentGrupo({
   COL: Record<string, string>
   EST_LABEL: Record<string, string>
 }) {
+  void COL
   const unid = (v: number, u: string) => (u === "%" ? `${v.toLocaleString("es-CO")}%` : `${v.toLocaleString("es-CO")} ${u}`)
   return (
     <>
       <tr className="bg-muted/40">
-        <td colSpan={4} className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide" style={{ color: SST_TOKENS.navy }}>
+        <td colSpan={4} className="lg-eyebrow px-3 py-1.5">
           {grupo}
         </td>
       </tr>
       {items.map((it) => (
-        <tr key={it.label} className="border-b last:border-0">
+        <tr key={it.label} className="border-b border-border last:border-0">
           <td className="px-3 py-2">{it.label}</td>
-          <td className="px-3 py-2 text-right font-semibold" style={{ color: COL[it.estado] }}>{unid(it.valor, it.unidad)}</td>
-          <td className="px-3 py-2 text-right text-muted-foreground">{it.sentido === "menor" ? "≤ " : "≥ "}{unid(it.meta, it.unidad)}</td>
+          <td className={cn("lg-num px-3 py-2 text-right font-semibold", TEXTO_TONO[TONO_ESTADO[it.estado] ?? "neutro"])}>{unid(it.valor, it.unidad)}</td>
+          <td className="lg-num px-3 py-2 text-right text-muted-foreground">{it.sentido === "menor" ? "≤ " : "≥ "}{unid(it.meta, it.unidad)}</td>
           <td className="px-3 py-2 text-center">
-            <span className="inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold text-white" style={{ background: COL[it.estado] }}>
-              {EST_LABEL[it.estado]}
-            </span>
+            <Chip tono={TONO_ESTADO[it.estado] ?? "neutro"}>{EST_LABEL[it.estado]}</Chip>
           </td>
         </tr>
       ))}
@@ -107,7 +138,7 @@ function dentroDeRango(fechaISO: any, rango: Rango, hoyISO: string, limite7: str
 
 function RangoChips({ value, onChange }: { value: Rango; onChange: (r: Rango) => void }) {
   return (
-    <div className="inline-flex flex-wrap gap-1 rounded-lg bg-muted/60 p-1">
+    <div className="inline-flex flex-wrap gap-1.5" role="group" aria-label="Periodo">
       {RANGOS.map((r) => {
         const active = r.key === value
         return (
@@ -115,8 +146,8 @@ function RangoChips({ value, onChange }: { value: Rango; onChange: (r: Rango) =>
             key={r.key}
             type="button"
             onClick={() => onChange(r.key)}
-            className="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
-            style={active ? { background: SST_TOKENS.navy, color: "white" } : { color: SST_TOKENS.ink }}
+            aria-pressed={active}
+            className={cn("inline-flex h-7 items-center rounded-full border px-2.5 text-xs font-medium transition-colors", active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-foreground hover:bg-muted")}
           >
             {r.label}
           </button>
@@ -148,33 +179,29 @@ function TablaColapsable({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <Card className="mt-4 overflow-hidden p-0">
+    <div className="lg-card mt-4 overflow-hidden">
       <Collapsible open={open} onOpenChange={setOpen}>
         <CollapsibleTrigger asChild>
-          <button type="button" className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40">
-            <span className="flex items-center gap-2 text-base font-semibold" style={{ color: SST_TOKENS.ink }}>
-              <span className="inline-block h-4 w-1.5 rounded-full" style={{ background: `linear-gradient(${SST_TOKENS.navy}, ${SST_TOKENS.teal})` }} />
-              {title}
-            </span>
+          <button type="button" className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40" aria-expanded={open}>
+            <span className="text-sm font-semibold">{title}</span>
             <span className="flex items-center gap-3">
               {resumen && <span className="hidden text-xs text-muted-foreground sm:inline">{resumen}</span>}
-              <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold text-white" style={{ background: SST_TOKENS.navy }}>
-                {open ? badgeOpen : badgeClosed}
-              </span>
+              <Chip tono="info">{open ? badgeOpen : badgeClosed}</Chip>
               <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform" style={{ transform: open ? "rotate(180deg)" : "none" }} />
             </span>
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="border-t px-4 pb-4 pt-3">
+          <div className="border-t border-border px-4 pb-4 pt-3">
             <div className="mb-3">{filtro}</div>
             {children}
           </div>
         </CollapsibleContent>
       </Collapsible>
-    </Card>
+    </div>
   )
 }
+
 
 export function PanelOperacionLIP() {
   const { toast } = useToast()
@@ -297,63 +324,67 @@ export function PanelOperacionLIP() {
   const EST_LABEL = { ok: "En meta", warn: "Cerca", bad: "Fuera", nd: "Sin dato" }
 
   return (
-    <div className="space-y-5">
-      <SigHeader
-        Icon={Truck}
-        title="Tablero del Coordinador"
-        subtitle="Tu desempeño del servicio contra las metas de LIP: SLA, objetivos y facturación — por proyecto/sitio (ISO 9001 8.5 · 8.6 · 9.1)"
-      />
+    <div className="flex flex-col gap-4 p-3 sm:p-4">
+      {/* Cabecera (mismo título y subtítulo de siempre) */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <Eyebrow>Operación del día · Tablero del coordinador</Eyebrow>
+          <h1 className="text-xl font-bold leading-tight sm:text-2xl">Tablero del Coordinador</h1>
+          <p className="text-sm text-muted-foreground">Tu desempeño del servicio contra las metas de LIP: SLA, objetivos y facturación — por proyecto/sitio (ISO 9001 8.5 · 8.6 · 9.1)</p>
+        </div>
+      </div>
 
-      <SigFilterBar cliente={selectedEmpresaNombre}>
-        <SigField label="Desde">
-          <SigDatePicker value={desde} onChange={setDesde} />
-        </SigField>
-        <SigField label="Hasta">
-          <SigDatePicker value={hasta} onChange={setHasta} />
-        </SigField>
-        {(desde || hasta) && (
-          <Button variant="ghost" size="sm" onClick={() => { setDesde(""); setHasta("") }}>Limpiar</Button>
-        )}
-        {loading && <Loader2 className="h-4 w-4 animate-spin" style={{ color: SST_TOKENS.teal }} />}
-      </SigFilterBar>
+      <div className="lg-card p-3">
+        <SigFilterBar cliente={selectedEmpresaNombre}>
+          <SigField label="Desde">
+            <SigDatePicker value={desde} onChange={setDesde} />
+          </SigField>
+          <SigField label="Hasta">
+            <SigDatePicker value={hasta} onChange={setHasta} />
+          </SigField>
+          {(desde || hasta) && (
+            <Button variant="ghost" size="sm" onClick={() => { setDesde(""); setHasta("") }}>Limpiar</Button>
+          )}
+          {loading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+        </SigFilterBar>
+      </div>
 
       {!data ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin" style={{ color: SST_TOKENS.navy }} />
+        <div className="flex flex-col gap-4" aria-busy aria-label="Cargando el tablero">
+          <div className="lg-card p-5"><Esqueleto lineas={4} /></div>
+          <div className="grid gap-4 lg:grid-cols-2"><div className="lg-card p-5"><Esqueleto lineas={5} /></div><div className="lg-card p-5"><Esqueleto lineas={5} /></div></div>
         </div>
       ) : (
         <>
           {/* (A) TABLERO ÚNICO DEL COORDINADOR — scorecard vs metas (BSC + SLA) */}
           {scorecard && (
-            <div>
-              <h2 className="mb-1 flex items-center gap-2 text-base font-semibold" style={{ color: SST_TOKENS.ink }}>
-                <Target className="h-4 w-4" style={{ color: SST_TOKENS.teal }} />
+            <section aria-label="Tablero del coordinador">
+              <h2 className="mb-1 flex items-center gap-2 text-[15px] font-semibold">
+                <Target className="h-4 w-4 text-primary" aria-hidden />
                 Tablero del coordinador · desempeño vs metas (SLA + BSC + partes interesadas)
               </h2>
               <p className="mb-3 text-xs text-muted-foreground">
                 Una sola vista: cumplimiento global y cada indicador que depende del coordinador contra su meta, con semáforo. Baja al detalle de SLA para actuar.
               </p>
-              <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
+              <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
                 {/* Cumplimiento global */}
-                <Card className="flex flex-col items-center justify-center p-5 text-center">
-                  <Gauge className="h-7 w-7" style={{ color: COL[scorecard.global >= 90 ? "ok" : scorecard.global >= 75 ? "warn" : "bad"] }} />
-                  <span className="mt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cumplimiento global</span>
-                  <span className="text-5xl font-bold leading-none" style={{ color: COL[scorecard.global >= 90 ? "ok" : scorecard.global >= 75 ? "warn" : "bad"] }}>
-                    {scorecard.global}%
-                  </span>
-                  <span className="mt-2 rounded-full px-3 py-0.5 text-xs font-semibold text-white" style={{ background: SST_TOKENS.navy }}>
-                    {scorecard.enMeta}/{scorecard.total} indicadores en meta
-                  </span>
-                  <span className="mt-2 text-[11px] text-muted-foreground">
-                    {s.ordenes} órdenes · {s.toneladas.toLocaleString("es-CO")} ton en el periodo
-                  </span>
-                </Card>
+                <div className="lg-card flex flex-col justify-center gap-3 p-5">
+                  <Cifra
+                    label="Cumplimiento global"
+                    valor={`${scorecard.global}`}
+                    unidad="%"
+                    tono={scorecard.global >= 90 ? "ok" : scorecard.global >= 75 ? "atencion" : "critico"}
+                    progreso={Math.max(0, Math.min(100, scorecard.global))}
+                    chips={<Chip tono="info">{scorecard.enMeta}/{scorecard.total} indicadores en meta</Chip>}
+                    sub={`${s.ordenes} órdenes · ${s.toneladas.toLocaleString("es-CO")} ton en el periodo`}
+                  />
+                </div>
 
                 {/* Scorecard agrupado */}
-                <Card className="p-0">
+                <div className="lg-card overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b text-left lg-eyebrow">
+                      <tr className="lg-eyebrow border-b border-border text-left">
                         <th className="px-3 py-2">Indicador</th>
                         <th className="px-3 py-2 text-right">Resultado</th>
                         <th className="px-3 py-2 text-right">Meta</th>
@@ -366,21 +397,21 @@ export function PanelOperacionLIP() {
                       ))}
                     </tbody>
                   </table>
-                </Card>
+                </div>
               </div>
               <p className="mt-2 text-[11px] text-muted-foreground">
                 "Ausentismo médico" mide ausencias reales vs el headcount vinculado en el periodo (no cuenta en meta si no hay personal en headcount).
                 Capacidad de respuesta del equipo (programado vs real del control diario, informativo, no forma parte del cumplimiento global):{" "}
                 <strong>{p.capacidadRespuesta ?? 0}%</strong>.
               </p>
-            </div>
+            </section>
           )}
 
           {/* (A.2) CUMPLIMIENTO DE SLA DE TIEMPOS POR VEHÍCULO */}
           {sla && sla.total > 0 && (
-            <div>
-              <h2 className="mb-1 flex items-center gap-2 text-base font-semibold" style={{ color: SST_TOKENS.ink }}>
-                <Timer className="h-4 w-4" style={{ color: SST_TOKENS.teal }} />
+            <section aria-label="Cumplimiento de SLA">
+              <h2 className="mb-1 flex items-center gap-2 text-[15px] font-semibold">
+                <Timer className="h-4 w-4 text-primary" aria-hidden />
                 Cumplimiento de SLA de tiempos por vehículo
               </h2>
               <p className="mb-2 text-xs text-muted-foreground">
@@ -388,12 +419,12 @@ export function PanelOperacionLIP() {
               </p>
               <div className="grid gap-4 lg:grid-cols-2">
                 {/* Tabla por tipo de vehículo */}
-                <Card className="p-4">
+                <div className="lg-card p-4">
                   <SigSection title="Real vs SLA acordado por tipo de vehículo" />
                   <div className="mt-2 overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b text-left text-[11px] uppercase text-muted-foreground">
+                        <tr className="lg-eyebrow border-b border-border text-left">
                           <th className="px-2 py-2">Vehículo</th>
                           <th className="px-2 py-2 text-right">Real (min)</th>
                           <th className="px-2 py-2 text-right">SLA (min)</th>
@@ -405,22 +436,22 @@ export function PanelOperacionLIP() {
                         {sla.porTipo.map((t: any) => {
                           const critico = t.tipo === peorTipoSla
                           return (
-                            <tr key={t.tipo} className="border-b last:border-0" style={critico ? { background: `${SST_TOKENS.bad}0d` } : undefined}>
-                              <td className="px-2 py-2 font-medium" style={critico ? { boxShadow: `inset 3px 0 0 ${SST_TOKENS.bad}` } : undefined}>{t.tipo}</td>
-                              <td className="px-2 py-2 text-right" style={{ color: t.real <= t.sla ? SST_TOKENS.ok : SST_TOKENS.bad }}>{t.real}</td>
-                              <td className="px-2 py-2 text-right text-muted-foreground">{t.sla}</td>
-                              <td className="px-2 py-2 text-right font-semibold" style={{ color: colorPct(t.cumplimiento, 90) }}>{t.cumplimiento}%</td>
-                              <td className="px-2 py-2 text-right">{t.fuera}</td>
+                            <tr key={t.tipo} className={cn("border-b border-border last:border-0", critico && "bg-critico-bg/50")}>
+                              <td className="px-2 py-2 font-medium">{critico ? <span className="flex items-center gap-1.5"><Punto tono="critico" />{t.tipo}</span> : t.tipo}</td>
+                              <td className={cn("lg-num px-2 py-2 text-right", t.real <= t.sla ? "text-ok-fg" : "text-critico-fg")}>{t.real}</td>
+                              <td className="lg-num px-2 py-2 text-right text-muted-foreground">{t.sla}</td>
+                              <td className="px-2 py-2 text-right"><Chip tono={tonoDeColor(colorPct(t.cumplimiento, 90))}>{t.cumplimiento}%</Chip></td>
+                              <td className="lg-num px-2 py-2 text-right">{t.fuera}</td>
                             </tr>
                           )
                         })}
                       </tbody>
                     </table>
                   </div>
-                </Card>
+                </div>
 
                 {/* Evolución mensual del % SLA */}
-                <Card className="p-4">
+                <div className="lg-card p-4">
                   <SigSection title="Evolución del % de cumplimiento de SLA" />
                   <ResponsiveContainer width="100%" height={240}>
                     <ComposedChart data={sla.porMes} margin={{ top: 14, right: 8, left: -8, bottom: 0 }}>
@@ -438,7 +469,7 @@ export function PanelOperacionLIP() {
                       <Area type="monotone" dataKey="cumplimiento" name="% SLA" stroke={SST_TOKENS.teal} strokeWidth={2.5} fill="url(#slaFill)" dot={{ r: 3, fill: SST_TOKENS.teal }} activeDot={{ r: 5 }} />
                     </ComposedChart>
                   </ResponsiveContainer>
-                </Card>
+                </div>
               </div>
 
               {/* Órdenes fuera de SLA (para gestionar) — colapsable + filtro por periodo */}
@@ -453,7 +484,7 @@ export function PanelOperacionLIP() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b text-left text-[11px] uppercase text-muted-foreground">
+                        <tr className="lg-eyebrow border-b border-border text-left">
                           <th className="px-2 py-2">Fecha</th>
                           <th className="px-2 py-2">Vehículo</th>
                           <th className="px-2 py-2 text-right">Real (min)</th>
@@ -468,12 +499,12 @@ export function PanelOperacionLIP() {
                           </tr>
                         ) : (
                           fueraFiltradas.map((f: any, i: number) => (
-                            <tr key={i} className="border-b last:border-0">
-                              <td className="px-2 py-2">{f.fecha}</td>
+                            <tr key={i} className="border-b border-border last:border-0">
+                              <td className="lg-num px-2 py-2">{f.fecha}</td>
                               <td className="px-2 py-2">{f.tipo}</td>
-                              <td className="px-2 py-2 text-right">{f.real}</td>
-                              <td className="px-2 py-2 text-right text-muted-foreground">{f.sla}</td>
-                              <td className="px-2 py-2 text-right font-semibold" style={{ color: SST_TOKENS.bad }}>+{f.exceso}</td>
+                              <td className="lg-num px-2 py-2 text-right">{f.real}</td>
+                              <td className="lg-num px-2 py-2 text-right text-muted-foreground">{f.sla}</td>
+                              <td className="px-2 py-2 text-right"><Chip tono="critico">+{f.exceso}</Chip></td>
                             </tr>
                           ))
                         )}
@@ -482,14 +513,14 @@ export function PanelOperacionLIP() {
                   </div>
                 </TablaColapsable>
               )}
-            </div>
+            </section>
           )}
 
           {/* (A.3) FACTURACIÓN PENDIENTE POR SOLICITAR */}
           {fact && (
-            <div>
-              <h2 className="mb-1 flex items-center gap-2 text-base font-semibold" style={{ color: SST_TOKENS.ink }}>
-                <Receipt className="h-4 w-4" style={{ color: SST_TOKENS.teal }} />
+            <section aria-label="Facturación pendiente por solicitar">
+              <h2 className="mb-1 flex items-center gap-2 text-[15px] font-semibold">
+                <Receipt className="h-4 w-4 text-primary" aria-hidden />
                 Facturación pendiente por solicitar
               </h2>
               <p className="mb-2 text-xs text-muted-foreground">
@@ -513,7 +544,7 @@ export function PanelOperacionLIP() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b text-left lg-eyebrow">
+                        <tr className="lg-eyebrow border-b border-border text-left">
                           <th className="px-2 py-2">Orden</th>
                           <th className="px-2 py-2">Fecha cargue</th>
                           <th className="px-2 py-2">Cliente</th>
@@ -530,14 +561,14 @@ export function PanelOperacionLIP() {
                           </tr>
                         ) : (
                           pendFiltradas.map((o: any) => (
-                            <tr key={o.orden} className="border-b transition-colors last:border-0 hover:bg-muted/40">
-                              <td className="px-2 py-2 font-medium" style={{ color: SST_TOKENS.ink }}>{o.orden}</td>
-                              <td className="px-2 py-2">{o.fecha || "—"}</td>
+                            <tr key={o.orden} className="border-b border-border transition-colors last:border-0 hover:bg-muted/40">
+                              <td className="lg-num px-2 py-2 font-medium">{o.orden}</td>
+                              <td className="lg-num px-2 py-2">{o.fecha || "—"}</td>
                               <td className="px-2 py-2">{o.cliente || "—"}</td>
-                              <td className="px-2 py-2">{o.placa || "—"}</td>
-                              <td className="px-2 py-2 text-right">{Number(o.toneladas).toLocaleString("es-CO")}</td>
-                              <td className="px-2 py-2 text-right font-semibold">{fmtCOP(o.valor)}</td>
-                              <td className="px-2 py-2 text-right font-semibold" style={{ color: o.dias > 8 ? SST_TOKENS.bad : o.dias > 4 ? SST_TOKENS.warn : SST_TOKENS.ok }}>{o.dias}</td>
+                              <td className="lg-num px-2 py-2">{o.placa || "—"}</td>
+                              <td className="lg-num px-2 py-2 text-right">{Number(o.toneladas).toLocaleString("es-CO")}</td>
+                              <td className="lg-num px-2 py-2 text-right font-semibold">{fmtCOP(o.valor)}</td>
+                              <td className="px-2 py-2 text-right"><Chip tono={o.dias > 8 ? "critico" : o.dias > 4 ? "atencion" : "ok"}>{o.dias}</Chip></td>
                             </tr>
                           ))
                         )}
@@ -546,12 +577,12 @@ export function PanelOperacionLIP() {
                   </div>
                 </TablaColapsable>
               )}
-            </div>
+            </section>
           )}
 
           {/* (B) PERSONAS QUE PRESTAN EL SERVICIO */}
-          <div>
-            <h2 className="mb-2 text-base font-semibold" style={{ color: SST_TOKENS.ink }}>
+          <section aria-label="Talento que presta el servicio">
+            <h2 className="mb-2 text-[15px] font-semibold">
               Talento que presta el servicio
             </h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -560,11 +591,11 @@ export function PanelOperacionLIP() {
               <KPI label="Rotación" valor={p.rotacion} unidad="%" Icon={Users} color={p.rotacion <= 10 ? SST_TOKENS.ok : SST_TOKENS.warn} sub={`${p.inactivos} inactivos`} />
               <KPI label="Personal vinculado" valor={p.activos + p.inactivos} Icon={Users} color={SST_TOKENS.navy} sub="histórico" />
             </div>
-          </div>
+          </section>
 
           {/* (C) VALOR AGREGADO LIPgo */}
-          <div>
-            <h2 className="mb-1 text-base font-semibold" style={{ color: SST_TOKENS.ink }}>
+          <section aria-label="Valor agregado LIPgo">
+            <h2 className="mb-1 text-[15px] font-semibold">
               Valor agregado LIPgo (trazabilidad y soportes)
             </h2>
             <p className="mb-2 text-xs text-muted-foreground">
@@ -575,11 +606,11 @@ export function PanelOperacionLIP() {
                 <KPI key={x.k} label={x.k} valor={x.v} unidad="%" Icon={ShieldCheck} color={colorPct(x.v, 90)} sub={x.sub} />
               ))}
             </div>
-          </div>
+          </section>
 
           {/* GRÁFICAS */}
           <div className="grid gap-4 lg:grid-cols-2">
-            <Card className="p-4">
+            <div className="lg-card p-4">
               <SigSection title="Órdenes y toneladas por mes" />
               <ResponsiveContainer width="100%" height={260}>
                 <ComposedChart data={data.porMes} margin={{ top: 14, right: 8, left: -8, bottom: 0 }}>
@@ -599,9 +630,9 @@ export function PanelOperacionLIP() {
                   <Line yAxisId="r" type="monotone" dataKey="ordenes" name="Órdenes" stroke={SST_TOKENS.navy} strokeWidth={2.5} dot={{ r: 3, fill: SST_TOKENS.navy }} activeDot={{ r: 5 }} />
                 </ComposedChart>
               </ResponsiveContainer>
-            </Card>
+            </div>
 
-            <Card className="p-4">
+            <div className="lg-card p-4">
               <SigSection title="Operaciones por tipo" />
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={data.porTipo} layout="vertical" margin={{ top: 8, right: 28, left: 8, bottom: 0 }}>
@@ -620,16 +651,16 @@ export function PanelOperacionLIP() {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            </Card>
+            </div>
           </div>
 
           {data.verTodos && data.porCliente.length > 0 && (
-            <Card className="p-4">
+            <div className="lg-card p-4">
               <SigSection title="Operación por cliente / sitio" />
               <div className="mt-2 overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b text-left lg-eyebrow">
+                    <tr className="lg-eyebrow border-b border-border text-left">
                       <th className="px-3 py-2">Cliente / sitio</th>
                       <th className="px-3 py-2 text-right">Órdenes</th>
                       <th className="px-3 py-2 text-right">Toneladas</th>
@@ -638,19 +669,17 @@ export function PanelOperacionLIP() {
                   </thead>
                   <tbody>
                     {data.porCliente.map((c: any) => (
-                      <tr key={c.cliente} className="border-b transition-colors last:border-0 hover:bg-muted/40">
-                        <td className="px-3 py-2 font-medium" style={{ color: SST_TOKENS.ink }}>{c.cliente}</td>
-                        <td className="px-3 py-2 text-right">{Number(c.ordenes).toLocaleString("es-CO")}</td>
-                        <td className="px-3 py-2 text-right">{Number(c.toneladas).toLocaleString("es-CO")}</td>
-                        <td className="px-3 py-2 text-right font-semibold" style={{ color: colorPct(c.cumplimiento, 98) }}>
-                          {c.cumplimiento}%
-                        </td>
+                      <tr key={c.cliente} className="border-b border-border transition-colors last:border-0 hover:bg-muted/40">
+                        <td className="px-3 py-2 font-medium">{c.cliente}</td>
+                        <td className="lg-num px-3 py-2 text-right">{Number(c.ordenes).toLocaleString("es-CO")}</td>
+                        <td className="lg-num px-3 py-2 text-right">{Number(c.toneladas).toLocaleString("es-CO")}</td>
+                        <td className="px-3 py-2 text-right"><Chip tono={tonoDeColor(colorPct(c.cumplimiento, 98))}>{c.cumplimiento}%</Chip></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </Card>
+            </div>
           )}
         </>
       )}

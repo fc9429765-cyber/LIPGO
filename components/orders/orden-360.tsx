@@ -200,7 +200,7 @@ export function Orden360Dialog({
             {/* Pedidos que atendió */}
             <Seccion eyebrow="Pedidos que atendió esta orden" titulo={data.pedidos.length ? `${data.pedidos.length} pedido${data.pedidos.length === 1 ? "" : "s"}` : "Sin pedido ligado"} sinPadding>
               {data.pedidos.length === 0 ? (
-                <EstadoVacio titulo="Esta orden no tiene pedidos ligados" texto="Puede ser una orden creada directamente, sin pasar por un pedido." />
+                <EstadoVacio titulo="Esta orden no tiene pedidos ligados" texto="Toda orden se arma a partir de pedidos: si ves esto, el vínculo no quedó registrado. Avísale a LIP con el número de la orden." />
               ) : (
                 <ul className="divide-y divide-border">
                   {data.pedidos.map((p) => (

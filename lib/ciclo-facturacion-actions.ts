@@ -28,6 +28,8 @@
  */
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { CORTE_CICLO_SIIGO } from "@/lib/ciclo-facturacion-shared"
+import { segundoFactorPendiente } from "@/lib/seguridad-servidor"
 import { getAccessibleEmpresesFromPermisos } from "@/lib/orders-actions"
 import {
   getPrefactura,
@@ -87,6 +89,8 @@ export interface PrefacturaCiclo {
   periodo_hasta: string | null
   total: number
   estado_ciclo: EstadoCiclo
+  /** Factura de Siigo ya emitida para esta prefactura. Vacio = todavia no se facturo. */
+  numero_factura_siigo: string | null
   ciclo_actualizado_en: string | null
   ultimoEvento: EventoCiclo | null
   // Cartera (solo tiene sentido una vez cerrado)
@@ -151,7 +155,9 @@ async function verificarPermisoCiclo(rol: "jefe" | "coordinador"): Promise<strin
   if (!tienePermiso) {
     return `No tienes el permiso de ${rol === "jefe" ? "Jefe de Facturación" : "Coordinador"} en Ciclo de Facturación -- este paso no te corresponde.`
   }
-  return null
+  // Segundo factor (2026-10-05): si la cuenta lo tiene activado, esta sesión debe haberlo
+  // verificado. Quien no lo tiene activado sigue igual que hoy; ningún permiso cambia.
+  return segundoFactorPendiente(`ciclo-facturacion:${rol}`)
 }
 
 const LABEL_ETAPA: Record<EtapaCorregible, string> = {
@@ -191,7 +197,7 @@ export async function listarCicloFacturacion(filtros?: {
     let query = sb
       .from("prefacturas")
       .select(
-        "id, origen, idempresa, proyecto, periodo_desde, periodo_hasta, total, lineas, estado_ciclo, ciclo_actualizado_en, estado_cobro, valor_pagado, dias_plazo, fecha_vencimiento, advertencias",
+        "id, origen, idempresa, proyecto, periodo_desde, periodo_hasta, total, lineas, estado_ciclo, ciclo_actualizado_en, estado_cobro, valor_pagado, dias_plazo, fecha_vencimiento, advertencias, numero_factura_siigo",
       )
       .eq("estado", "aprobada")
       .in("idempresa", idsAccesibles)
@@ -200,6 +206,13 @@ export async function listarCicloFacturacion(filtros?: {
     if (filtros?.idempresa) query = query.eq("idempresa", filtros.idempresa)
     if (filtros?.estado_ciclo) query = query.eq("estado_ciclo", filtros.estado_ciclo)
     if (filtros?.estado_cobro) query = query.eq("estado_cobro", filtros.estado_cobro)
+    /*
+     * El corte. Se aplica SIEMPRE, antes que los filtros de la pantalla: una
+     * prefactura cuyo período terminó antes del 1 de octubre no se muestra ni
+     * aunque se limpien los filtros.
+     */
+    query = query.gte("periodo_hasta", CORTE_CICLO_SIIGO)
+
     if (filtros?.periodo_desde) query = query.gte("periodo_hasta", filtros.periodo_desde)
     if (filtros?.periodo_hasta) query = query.lte("periodo_desde", filtros.periodo_hasta)
 
@@ -235,6 +248,7 @@ export async function listarCicloFacturacion(filtros?: {
         periodo_hasta: r.periodo_hasta,
         total,
         estado_ciclo: r.estado_ciclo,
+        numero_factura_siigo: r.numero_factura_siigo ?? null,
         ciclo_actualizado_en: r.ciclo_actualizado_en,
         ultimoEvento: ultimosPorPrefactura.get(r.id) || null,
         estado_cobro: r.estado_cobro,
@@ -474,6 +488,9 @@ export async function registrarPago(
   prefacturaId: number,
   pago: { fecha: string; valor: number; observacion?: string; usuario: string },
 ): Promise<{ success: boolean; message?: string }> {
+  // Segundo factor (2026-10-05): solo detiene a quien lo tiene activado y no lo verificó.
+  const segundoFactor = await segundoFactorPendiente("ciclo-facturacion:registrarPago")
+  if (segundoFactor) return { success: false, message: segundoFactor }
   if (!(pago.valor > 0)) return { success: false, message: "El valor del pago debe ser mayor a 0." }
   try {
     const sb: any = await getSupabaseAdmin()
@@ -585,6 +602,8 @@ export async function actualizarCondicionEnvioAnexo(
   frecuencia: "diario" | "semanal",
   dia_semana: number | null,
 ): Promise<{ success: boolean; message?: string }> {
+  const segundoFactor = await segundoFactorPendiente("ciclo-facturacion:condicionEnvioAnexo")
+  if (segundoFactor) return { success: false, message: segundoFactor }
   if (!idempresa) return { success: false, message: "Falta el proyecto." }
   if (frecuencia === "semanal" && (dia_semana === null || dia_semana < 0 || dia_semana > 6)) {
     return { success: false, message: "Selecciona un día de la semana válido." }
@@ -665,6 +684,8 @@ export async function actualizarCondicionGeneracionPrefactura(
   fecha_inicio: string | null,
   dias_corte: number[] | null = null,
 ): Promise<{ success: boolean; message?: string }> {
+  const segundoFactor = await segundoFactorPendiente("ciclo-facturacion:condicionGeneracionPrefactura")
+  if (segundoFactor) return { success: false, message: segundoFactor }
   if (!idempresa) return { success: false, message: "Falta el proyecto." }
   if (frecuencia === "semanal" && (dia_semana === null || dia_semana < 0 || dia_semana > 6)) {
     return { success: false, message: "Selecciona un día de la semana válido." }
@@ -784,6 +805,9 @@ export async function generarPrefacturaAhora(
   usuario: string,
   rangoManual?: { desde: string; hasta: string },
 ): Promise<ResultadoGeneracionManual> {
+  // Segundo factor (2026-10-05): solo detiene a quien lo tiene activado y no lo verificó.
+  const segundoFactor = await segundoFactorPendiente("ciclo-facturacion:generarPrefacturaAhora")
+  if (segundoFactor) return { success: false, estado: "error", mensaje: segundoFactor, resultados: [] }
   try {
     if (rangoManual && rangoManual.desde > rangoManual.hasta) {
       return { success: false, estado: "error", mensaje: "La fecha 'Desde' no puede ser posterior a 'Hasta'.", resultados: [] }
@@ -900,7 +924,7 @@ export async function generarPrefacturaAhora(
       // Bloque por grupo (owner|||operación|||unidad) -- necesario para saber,
       // línea por línea del detalle, si pertenece a un grupo "producción" (sin
       // validación por-orden, ej. Tolva) o "operación" (exige que el
-      // Coordinador ya haya validado esa orden en Gestión de Facturas).
+      // Coordinador ya haya validado esa orden en Solicitar Facturas).
       const bloquePorGrupo = new Map(pref.resumen.map((r) => [`${r.owner}|||${r.operacion}|||${r.unidad}`, r.bloque]))
       const soporte = [
         ...pref.origen
@@ -938,7 +962,7 @@ export async function generarPrefacturaAhora(
         for (const al of ctrlR.data.produccionAlertas || []) advertencias.push({ tipo: "produccion_alerta", detalle: al })
       }
       // Órdenes de este owner/período que el Coordinador AÚN no ha validado en
-      // Gestión de Facturas -- se generó igual (con lo que sí está validado),
+      // Solicitar Facturas -- se generó igual (con lo que sí está validado),
       // pero esto queda sin facturar hasta que se valide y entre en un
       // próximo corte. Solo bloque "operación" -- Tolva/producción no aplica.
       const sinGestionar = pref.resumen.filter((r) => r.owner === owner && r.bloque === "operacion" && r.valorPorFacturar > 0)
@@ -949,7 +973,7 @@ export async function generarPrefacturaAhora(
         ).size
         advertencias.push({
           tipo: "ordenes_sin_gestionar",
-          detalle: `$${valorSinGestionar.toLocaleString("es-CO")} en ${numOrdenes} orden(es) de este período siguen sin validar por el Coordinador (Gestión de Facturas) y quedaron FUERA de este anexo.`,
+          detalle: `$${valorSinGestionar.toLocaleString("es-CO")} en ${numOrdenes} orden(es) de este período siguen sin validar por el Coordinador (Solicitar Facturas) y quedaron FUERA de este anexo.`,
         })
       }
       if (rangoManual && desdeAutomatico && desdeOwner !== desdeAutomatico) {
@@ -1010,7 +1034,7 @@ export interface ResultadoPendienteGestion {
  * Solo-lectura -- NO guarda nada. Para el período que le tocaría generar a
  * este proyecto AHORA MISMO (mismo cálculo de `desde` que usa
  * `generarPrefacturaAhora`), cuánto valor de bloque "operación" sigue SIN
- * validar por el Coordinador en Gestión de Facturas -- o sea, lo que
+ * validar por el Coordinador en Solicitar Facturas -- o sea, lo que
  * quedaría FUERA del próximo anexo si se generara ya. Pensado para el
  * aviso proactivo en la UI, pedido por el usuario 2026-09-14: "que informe
  * si se está quedando alguna de estas órdenes por fuera del corte por no
@@ -1071,6 +1095,8 @@ export async function previsualizarPendienteGestion(idempresa: number): Promise<
 }
 
 export async function actualizarCondicionPagoOwner(owner: string, dias_plazo: number): Promise<{ success: boolean; message?: string }> {
+  const segundoFactor = await segundoFactorPendiente("ciclo-facturacion:condicionPagoOwner")
+  if (segundoFactor) return { success: false, message: segundoFactor }
   if (!owner?.trim()) return { success: false, message: "Falta el owner." }
   if (!(dias_plazo > 0)) return { success: false, message: "Los días de plazo deben ser mayores a 0." }
   try {

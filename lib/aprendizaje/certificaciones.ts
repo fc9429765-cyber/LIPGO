@@ -608,4 +608,60 @@ export const APRENDIZAJE_CERTIFICACIONES: ContenidoAprendizaje[] = [
       }
     ]
   },
+  {
+    modulo: "Auditoría ISO 9001",
+    resumen: "Las auditorías internas de ISO 9001:2015, con su checklist de 28 requisitos y sus hallazgos.",
+    proposito:
+      "Reemplaza el libro de Excel con el que se llevaban las auditorías. Cada auditoría nace con el checklist completo de la norma ya puesto, se evalúa requisito por requisito dejando la evidencia, y de ahí salen los hallazgos con su causa y su acción correctiva. La diferencia de fondo con el Excel: la norma vive en un solo catálogo y las auditorías lo referencian, así que corregir la redacción de un requisito ya no obliga a tocar las auditorías pasadas ni deja a las viejas con un texto distinto del de las nuevas. Sigue el selector de empresa de la parte superior.",
+    puedes: [
+      "Crear una auditoría indicando proceso auditado, tipo (interna, externa o de certificación), fecha, auditor líder, equipo, objetivo, alcance, criterios y metodología. El checklist de los 28 requisitos queda listo solo.",
+      "Evaluar cada requisito como Conforme, No conforme, Observación, Oportunidad de mejora o No aplica, y dejarlo en Pendiente mientras no se haya revisado.",
+      "Registrar en cada requisito la evidencia que se vio, el documento revisado con su versión, un comentario y quién lo auditó.",
+      "Ver el checklist agrupado por capítulo de la norma, para avanzar en orden.",
+      "Registrar hallazgos: no conformidad, observación u oportunidad de mejora, ligados al requisito del que salieron.",
+      "Describir en el hallazgo qué se encontró, la corrección inmediata, la causa raíz y la acción correctiva.",
+      "Cerrar un hallazgo dejando escrito cómo se comprobó que la acción correctiva funcionó.",
+      "Cerrar la auditoría con sus conclusiones, y reabrirla si hace falta seguir trabajándola.",
+      "Consultar el cumplimiento del proceso auditado, en total y capítulo por capítulo.",
+    ],
+    noPuedes: [
+      "Cambiar el catálogo de requisitos de la norma desde aquí: es uno solo para todas las auditorías.",
+      "Editar las respuestas ni agregar hallazgos de una auditoría cerrada. Primero hay que reabrirla.",
+      "Borrar una auditoría cerrada.",
+      "Cerrar un hallazgo sin escribir la comprobación de la acción correctiva: es justo lo que un auditor pide ver.",
+      "Ver las auditorías de un proyecto al que no tienes acceso.",
+    ],
+    funcionalidades: [
+      {
+        nombre: "Listado de auditorías",
+        descripcion:
+          "Las auditorías del proyecto con su código, proceso, tipo, fecha, auditor líder y estado: borrador, en curso o cerrada.",
+      },
+      {
+        nombre: "Checklist por capítulo",
+        descripcion:
+          "Los 28 requisitos de ISO 9001:2015 agrupados por capítulo. Cada uno con su pregunta, el resultado, la evidencia, el documento revisado y el comentario.",
+      },
+      {
+        nombre: "Cumplimiento",
+        descripcion:
+          "El porcentaje se calcula como conformes sobre los requisitos evaluados, dejando fuera los que se marcaron No aplica. Los pendientes cuentan como todavía no conformes, así que el número sube a medida que se evalúa.",
+      },
+      {
+        nombre: "Hallazgos",
+        descripcion:
+          "Cada hallazgo guarda el requisito del que salió, su tipo, la condición encontrada, la corrección inmediata, la causa raíz, la acción correctiva, el responsable y su estado: abierto, en proceso o cerrado.",
+      },
+      {
+        nombre: "Cierre y reapertura",
+        descripcion:
+          "Al cerrar la auditoría se guardan las conclusiones y la fecha, y queda bloqueada para edición. Se puede reabrir si aparece algo por corregir.",
+      },
+    ],
+    consejos: [
+      "Marca No aplica en vez de dejar Pendiente cuando un requisito de verdad no corresponde al proceso: así el cumplimiento refleja lo que de verdad se auditó.",
+      "Escribe la evidencia como la pediría un auditor externo: qué registro se revisó, de qué fecha y a quién se entrevistó. Un Conforme sin evidencia no sostiene nada.",
+      "La causa raíz no es el síntoma. Si el hallazgo dice que faltó un registro, la causa no es que faltó el registro, sino por qué faltó.",
+    ],
+  },
 ]

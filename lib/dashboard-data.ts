@@ -307,10 +307,10 @@ export const groups: Group[] = [
           { name: "Lectura de QR estibas", icon: QrCode },
           { name: "Inventario por Estiba", icon: QrCode },
           // — Pantallas solas —
-          // "Gestión de Facturas" reubicado aquí desde Gestión Financiera: es
+          // "Solicitar Facturas" reubicado aquí desde Gestión Financiera: es
           // función operativa propia del coordinador/líder de LIP. Conserva su
           // nombre y permiso (gestionfacturas).
-          { name: "Gestión de Facturas", icon: Receipt },
+          { name: "Solicitar Facturas", icon: Receipt },
           // El coordinador es responsable de las partes interesadas (conductores
           // y cliente): gestiona aquí satisfacción y PQRSF. Mismo módulo del SIG,
           // permiso propio (satisfaccion_pqrsf).
@@ -373,7 +373,7 @@ export const groups: Group[] = [
           // Edición directa de cabeceraoc/detalleoc de una orden ya creada
           // (antes Facturación lo hacía a mano en Supabase). Permiso propio.
           { name: "Corrección de Órdenes", icon: FileEdit },
-          // "Gestión de Facturas" se MOVIÓ a Gestión LIP → Operación Lip (función
+          // "Solicitar Facturas" se MOVIÓ a Gestión LIP → Operación Lip (función
           // operativa del coordinador). Conserva su permiso (gestionfacturas).
         ],
       },
@@ -567,6 +567,7 @@ export const groups: Group[] = [
         modules: [
           { name: "Centro de Evidencia ISO 9001", icon: BadgeCheck, label: "Centro de Evidencia" },
           { name: "Repositorio ISO 9001", icon: FolderArchive, label: "Repositorio Documental" },
+          { name: "Auditoría ISO 9001", icon: ClipboardCheck, label: "Auditoría" },
         ],
       },
       {
@@ -693,9 +694,13 @@ export const groups: Group[] = [
       {
         title: "Seguridad y accesos",
         modules: [
-          { name: "Gestión de Usuarios", icon: Users },
-          { name: "Accesos de Usuario", icon: Lock },
-          { name: "Autorizaciones por clave", icon: KeyRound },
+          // UN SOLO MODULO (2026-10-07): usuarios, perfiles (empresas + owners +
+          // modulos + procesos que autoriza) y claves, en una pantalla con tres
+          // pestañas. `name` se conserva porque es la clave del permiso
+          // (gestion_usuarios) y de la ruta. "Accesos de Usuario" y
+          // "Autorizaciones por clave" salen del menu pero siguen ruteando a la
+          // misma pantalla, para que ningun enlace guardado se rompa.
+          { name: "Gestión de Usuarios", icon: KeyRound, label: "Autorizaciones" },
         ],
       },
       {
