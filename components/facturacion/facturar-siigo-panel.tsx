@@ -16,11 +16,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { DatePickerField } from "@/components/ui/date-picker-field"
 import { useToast } from "@/hooks/use-toast"
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Loader2, RefreshCw, Search } from "lucide-react"
 import BotonFacturarSiigo from "@/components/facturacion/boton-facturar-siigo"
 import { listarOrdenesParaFacturar } from "@/lib/facturar-siigo-actions"
+import { emitirFacturaOrden, getConfigEmision } from "@/lib/siigo-emision-actions"
 import { CORTE_CICLO_SIIGO } from "@/lib/ciclo-facturacion-shared"
 import type { OrdenFacturable } from "@/lib/facturar-siigo-tipos"
 
@@ -415,55 +417,184 @@ function Agrupacion({
 // ---------------------------------------------------------------------------
 
 function TablaContado({ ordenes, onEmitida }: { ordenes: OrdenFacturable[]; onEmitida: () => void }) {
+  const { toast } = useToast()
+  /*
+   * Selección múltiple. Solo se pueden marcar las órdenes LISTAS: marcar una
+   * con impedimento solo serviría para que el lote falle al pulsar.
+   */
+  const [sel, setSel] = useState<number[]>([])
+  const [lote, setLote] = useState<{ hechas: number; total: number } | null>(null)
+
+  const listas = useMemo(() => ordenes.filter((o) => o.facturable), [ordenes])
+  // Si cambian los filtros, la selección se queda solo con lo que sigue visible.
+  useEffect(() => {
+    setSel((prev) => prev.filter((id) => listas.some((o) => o.id === id)))
+  }, [listas])
+
+  const elegidas = useMemo(() => listas.filter((o) => sel.includes(o.id)), [listas, sel])
+  const totalSel = elegidas.reduce((s, o) => s + o.valor, 0)
+  const todas = listas.length > 0 && elegidas.length === listas.length
+
+  /*
+   * "Juntas" es UN documento para varias órdenes, así que solo tiene sentido
+   * si todas son del mismo cliente: facturarle a un cliente lo que pagó otro
+   * es el error más caro. En contado cada pagador suele ser distinto, por eso
+   * existe también "una por una".
+   */
+  const clientes = Array.from(new Set(elegidas.map((o) => String(o.cliente ?? o.owner).trim())))
+  const mismoCliente = clientes.length === 1
+
+  async function facturarUnaPorUna() {
+    if (!elegidas.length) return
+    const cfg = await getConfigEmision()
+    const oficial = cfg.data?.enviarDian === true
+    const ok = window.confirm(
+      `Vas a emitir ${elegidas.length} facturas en Siigo, una por orden, por ${money(totalSel)} en total.\n\n` +
+        (oficial
+          ? "Saldrán FIRMADAS Y OFICIALES ante la DIAN. No se pueden borrar: solo anular con nota crédito.\n\n"
+          : "Quedarán como borrador en Siigo.\n\n") +
+        "¿Continuar?",
+    )
+    if (!ok) return
+
+    /*
+     * En serie y sin parar al primer error: cada factura es independiente, y
+     * detener el lote dejaría al usuario sin saber cuáles salieron. Al final
+     * se dice exactamente cuáles fallaron y por qué.
+     */
+    const fallas: string[] = []
+    let exitosas = 0
+    setLote({ hechas: 0, total: elegidas.length })
+    for (let i = 0; i < elegidas.length; i++) {
+      const o = elegidas[i]
+      const r = await emitirFacturaOrden(o.id)
+      if (r.success) exitosas++
+      else fallas.push(`${o.ordendecargue}: ${r.message ?? "error"}`)
+      setLote({ hechas: i + 1, total: elegidas.length })
+    }
+    setLote(null)
+    setSel([])
+    toast({
+      title: `${exitosas} de ${elegidas.length} facturas emitidas`,
+      description: fallas.length ? `Fallaron: ${fallas.slice(0, 4).join(" · ")}${fallas.length > 4 ? " …" : ""}` : undefined,
+      variant: fallas.length ? "destructive" : undefined,
+    })
+    onEmitida()
+  }
+
   return (
-    <div className="overflow-x-auto rounded-md border">
-      <table className="w-full text-xs">
-        <thead className="bg-muted/50">
-          <tr>
-            <th className="p-2 text-left">Fecha</th>
-            <th className="p-2 text-left">Orden</th>
-            <th className="p-2 text-left">Proyecto</th>
-            <th className="p-2 text-left">Owner</th>
-            <th className="p-2 text-left">Placa</th>
-            <th className="p-2 text-left">Transporte</th>
-            <th className="p-2 text-right">Valor</th>
-            <th className="p-2 text-left">Estado</th>
-            <th className="p-2 text-center">Siigo</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ordenes.map((o) => (
-            <tr key={o.id} className="border-t">
-              <td className="p-2">{o.fechacargue ?? "—"}</td>
-              <td className="p-2 font-mono">{o.ordendecargue}</td>
-              <td className="p-2">{o.proyecto}</td>
-              <td className="p-2">
-                {o.owner}
-                {o.ownerMezclado && <span className="ml-1 text-[10px] text-amber-700">(mezclado)</span>}
-              </td>
-              <td className="p-2">{o.placa ?? "—"}</td>
-              <td className="p-2">{o.transporte ?? "—"}</td>
-              <td className={`p-2 text-right tabular-nums ${o.valor <= 0 ? "font-semibold text-red-700" : ""}`}>
-                {money(o.valor)}
-                {o.valor <= 0 && <span className="ml-1 text-[10px]">sin valor</span>}
-              </td>
-              <td className="p-2">
-                <Estado o={o} />
-              </td>
-              <td className="p-2 text-center">
-                <BotonFacturarSiigo
-                  ordenId={o.id}
-                  orden={o.ordendecargue}
-                  cliente={o.cliente ?? o.owner}
-                  valor={o.valor}
-                  facturaExistente={o.facturasiigo ?? o.emitidaSiigo}
-                  onEmitida={onEmitida}
+    <div className="space-y-2">
+      {elegidas.length > 0 && (
+        <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
+          <span className="text-xs">
+            <strong>{elegidas.length}</strong> orden(es) seleccionadas · <strong className="tabular-nums">{money(totalSel)}</strong>
+          </span>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {mismoCliente ? (
+              <BotonFacturarSiigo
+                ordenIds={elegidas.map((o) => o.id)}
+                orden={`${clientes[0]} · ${elegidas.length} órdenes de contado`}
+                cliente={clientes[0]}
+                valor={totalSel}
+                onEmitida={() => {
+                  setSel([])
+                  onEmitida()
+                }}
+              />
+            ) : (
+              <span className="text-[10px] text-muted-foreground" title={clientes.join(", ")}>
+                {clientes.length} clientes distintos: no se pueden juntar en un documento
+              </span>
+            )}
+            <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={facturarUnaPorUna} disabled={!!lote}>
+              {lote ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> {lote.hechas}/{lote.total}
+                </>
+              ) : (
+                <>Facturar una por una ({elegidas.length})</>
+              )}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSel([])} disabled={!!lote}>
+              Quitar selección
+            </Button>
+          </div>
+        </div>
+      )}
+      {elegidas.length > 0 && mismoCliente && (
+        <p className="text-[10px] text-muted-foreground">
+          El botón «Facturar» de arriba emite UN documento con todas las seleccionadas; «Facturar una por una» emite una factura por orden.
+        </p>
+      )}
+
+      <div className="overflow-x-auto rounded-md border">
+        <table className="w-full text-xs">
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="w-8 p-2">
+                <Checkbox
+                  checked={todas}
+                  disabled={listas.length === 0 || !!lote}
+                  onCheckedChange={(c) => setSel(c ? listas.map((o) => o.id) : [])}
+                  title="Seleccionar todas las listas"
                 />
-              </td>
+              </th>
+              <th className="p-2 text-left">Fecha</th>
+              <th className="p-2 text-left">Orden</th>
+              <th className="p-2 text-left">Proyecto</th>
+              <th className="p-2 text-left">Owner</th>
+              <th className="p-2 text-left">Placa</th>
+              <th className="p-2 text-left">Transporte</th>
+              <th className="p-2 text-right">Valor</th>
+              <th className="p-2 text-left">Estado</th>
+              <th className="p-2 text-center">Siigo</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {ordenes.map((o) => {
+              const marcada = sel.includes(o.id)
+              return (
+                <tr key={o.id} className={`border-t ${marcada ? "bg-primary/5" : ""}`}>
+                  <td className="p-2 text-center">
+                    <Checkbox
+                      checked={marcada}
+                      disabled={!o.facturable || !!lote}
+                      title={o.facturable ? undefined : o.motivo ?? undefined}
+                      onCheckedChange={(c) => setSel((prev) => (c ? [...prev, o.id] : prev.filter((x) => x !== o.id)))}
+                    />
+                  </td>
+                  <td className="p-2">{o.fechacargue ?? "—"}</td>
+                  <td className="p-2 font-mono">{o.ordendecargue}</td>
+                  <td className="p-2">{o.proyecto}</td>
+                  <td className="p-2">
+                    {o.owner}
+                    {o.ownerMezclado && <span className="ml-1 text-[10px] text-amber-700">(mezclado)</span>}
+                  </td>
+                  <td className="p-2">{o.placa ?? "—"}</td>
+                  <td className="p-2">{o.transporte ?? "—"}</td>
+                  <td className={`p-2 text-right tabular-nums ${o.valor <= 0 ? "font-semibold text-red-700" : ""}`}>
+                    {money(o.valor)}
+                    {o.valor <= 0 && <span className="ml-1 text-[10px]">sin valor</span>}
+                  </td>
+                  <td className="p-2">
+                    <Estado o={o} />
+                  </td>
+                  <td className="p-2 text-center">
+                    <BotonFacturarSiigo
+                      ordenId={o.id}
+                      orden={o.ordendecargue}
+                      cliente={o.cliente ?? o.owner}
+                      valor={o.valor}
+                      facturaExistente={o.facturasiigo ?? o.emitidaSiigo}
+                      onEmitida={onEmitida}
+                    />
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
