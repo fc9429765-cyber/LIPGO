@@ -206,19 +206,20 @@ const CHK_LIBRO = {
 }
 
 /**
- * Líneas históricas que gerencia ya revisó una por una y dio por cerradas
- * (2026-10-07, al cerrar el cruce pedidos ↔ órdenes de cargue). Siguen
- * incumpliendo la regla, pero ya tienen explicación y decisión, así que repetir
- * la alerta todas las noches solo enseña a ignorar las alertas.
+ * Líneas históricas que gerencia revisó una por una y dio por cerradas AUNQUE sigan
+ * incumpliendo la regla. Sirve para no repetir todas las noches una alerta ya decidida,
+ * que es la mejor forma de enseñarle a la gente a ignorar las alertas.
+ *
+ * HOY ESTÁ VACÍO, y es lo correcto: una excepción solo se justifica mientras el dato
+ * siga mal. La única que hubo, la línea 260 del pedido 147 de ID1, dejó de hacer falta
+ * el 2026-10-07 cuando gerencia ordenó corregir el dato en vez de taparlo: la línea
+ * decía 2 unidades pedidas y 2.000 cargadas, y se corrigió a 2.000 pedidas con el
+ * script 246. Dejar la excepción puesta habría escondido cualquier recaída de esa
+ * misma línea.
  *
  * Una línea nueva que incumpla SÍ salta, que es para lo que sirve el control.
  */
-const PEDIDO_MAS_REVISADOS: Record<number, string> = {
-  // ID1 pedido 147 (1-ago-2026, Comercial de Víveres San Andrés): se digitaron 2
-  // unidades y salieron 2.000 en una sola orden. El pedido está entregado y
-  // cerrado; gerencia lo dio por cerrado porque a hoy no tiene validez.
-  260: "Digitación del 1-ago-2026 (pidió 2, salieron 2.000); pedido entregado y cerrado.",
-}
+const PEDIDO_MAS_REVISADOS: Record<number, string> = {}
 
 export async function checkPedidos(sb: SB): Promise<ResultadoCheck[]> {
   const out: ResultadoCheck[] = []
