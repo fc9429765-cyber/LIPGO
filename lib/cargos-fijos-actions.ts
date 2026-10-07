@@ -22,6 +22,24 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { segundoFactorPendiente } from "@/lib/seguridad-servidor"
+import { exigirModulo } from "@/lib/puerta-modulo"
+
+/**
+ * PUERTA DE PERMISO (2026-10-07). Una server action es una URL: cualquiera con sesión
+ * puede llamarla aunque la pantalla esté escondida para él. Aquí se exige el MISMO módulo
+ * que la pantalla ya exige para mostrarse, así que quien puede ver Cargos Fijos pasa igual
+ * que siempre, y quien no, nunca debió poder llamarla.
+ *
+ * Va en el accesor al cliente porque TODAS las acciones de este archivo pasan por él, y
+ * porque sus `catch` ya devuelven `e.message`: el motivo le llega limpio al usuario.
+ *
+ * Comprobado antes de ponerla: el único que importa este archivo es
+ * `components/cargos-fijos.tsx`, su propia pantalla. No rompe a nadie más.
+ */
+async function clienteConPermiso(): Promise<any> {
+  await exigirModulo(["Cargos Fijos"], "cargos-fijos")
+  return await getSupabaseAdmin()
+}
 
 const num = (v: any) => {
   const n = Number(String(v ?? "").replace(/,/g, ""))
@@ -52,7 +70,7 @@ export async function getEquiposMontacargas(): Promise<{
   message?: string
 }> {
   try {
-    const sb: any = await getSupabaseAdmin()
+    const sb: any = await clienteConPermiso()
     const { data, error } = await sb
       .from("sst_equipos")
       .select("id, idempresa, identificacion")
@@ -88,7 +106,7 @@ export async function getMontacargasAlquiler(): Promise<{
   message?: string
 }> {
   try {
-    const sb: any = await getSupabaseAdmin()
+    const sb: any = await clienteConPermiso()
     const { data, error } = await sb
       .from("montacargas_alquiler")
       .select("id, equipo_id, proveedor, valor_pagado, valor_facturado, fechainicio, fechafin, sst_equipos(idempresa, identificacion)")
@@ -123,7 +141,7 @@ export async function guardarMontacargasAlquiler(payload: {
   const segundoFactor = await segundoFactorPendiente("cargos-fijos:guardarMontacargasAlquiler")
   if (segundoFactor) return { success: false, message: segundoFactor }
   try {
-    const sb: any = await getSupabaseAdmin()
+    const sb: any = await clienteConPermiso()
     const row = {
       equipo_id: payload.equipo_id,
       proveedor: payload.proveedor.trim(),
@@ -165,7 +183,7 @@ export async function getCargosFijosProyecto(): Promise<{
   message?: string
 }> {
   try {
-    const sb: any = await getSupabaseAdmin()
+    const sb: any = await clienteConPermiso()
     const { data, error } = await sb
       .from("cargos_fijos_proyecto")
       .select("*")
@@ -203,7 +221,7 @@ export async function guardarCargoFijoProyecto(payload: {
   const segundoFactor = await segundoFactorPendiente("cargos-fijos:guardarCargoFijoProyecto")
   if (segundoFactor) return { success: false, message: segundoFactor }
   try {
-    const sb: any = await getSupabaseAdmin()
+    const sb: any = await clienteConPermiso()
     const row = {
       idempresa: payload.idempresa,
       concepto: payload.concepto.trim(),
@@ -242,7 +260,7 @@ export async function generarCargosDelMes(
   if (segundoFactor) return { success: false, message: segundoFactor }
   try {
     const mes = inicioMes(periodo)
-    const sb: any = await getSupabaseAdmin()
+    const sb: any = await clienteConPermiso()
     let creados = 0
     let yaExistian = 0
 
@@ -355,7 +373,7 @@ export async function getCargosFijosGenerados(
   periodo: string,
 ): Promise<{ success: boolean; data: CargoFijoGenerado[]; message?: string }> {
   try {
-    const sb: any = await getSupabaseAdmin()
+    const sb: any = await clienteConPermiso()
     const mes = inicioMes(periodo)
     let q = sb.from("cargos_fijos_generados").select("*").eq("periodo", mes)
     if (idempresa) q = q.eq("idempresa", idempresa)
@@ -396,7 +414,7 @@ export async function getComparativoToneladasFijas(
   periodo: string, // YYYY-MM-01
 ): Promise<{ success: boolean; data?: ComparativoToneladasFijas; message?: string }> {
   try {
-    const sb: any = await getSupabaseAdmin()
+    const sb: any = await clienteConPermiso()
     const mes = inicioMes(periodo)
     const [anioStr, mesStr] = mes.split("-")
     const ultimoDia = new Date(Number(anioStr), Number(mesStr), 0).getDate()
@@ -436,7 +454,7 @@ export async function getComparativoToneladasFijas(
 
 export async function marcarCargoSolicitado(id: number): Promise<{ success: boolean; message?: string }> {
   try {
-    const sb: any = await getSupabaseAdmin()
+    const sb: any = await clienteConPermiso()
     const { error } = await sb
       .from("cargos_fijos_generados")
       .update({ estadofactura: "CF - Factura solicitada" })
@@ -454,7 +472,7 @@ export async function adjuntarFacturaSiigoCargo(
   url: string,
 ): Promise<{ success: boolean; message?: string }> {
   try {
-    const sb: any = await getSupabaseAdmin()
+    const sb: any = await clienteConPermiso()
     const { error } = await sb
       .from("cargos_fijos_generados")
       .update({ facturasiigo: url, estadofactura: "CF - Cerrado" })
@@ -468,7 +486,7 @@ export async function adjuntarFacturaSiigoCargo(
 
 export async function quitarFacturaSiigoCargo(id: number): Promise<{ success: boolean; message?: string }> {
   try {
-    const sb: any = await getSupabaseAdmin()
+    const sb: any = await clienteConPermiso()
     const { error } = await sb
       .from("cargos_fijos_generados")
       .update({ facturasiigo: null, estadofactura: "CF - Factura solicitada" })

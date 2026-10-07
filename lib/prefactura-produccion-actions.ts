@@ -28,6 +28,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { segundoFactorPendiente } from "@/lib/seguridad-servidor"
+import { exigirModulo } from "@/lib/puerta-modulo"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
 import { getConciliacionAvimol, type AlertaAvimol } from "@/lib/conciliacion-avimol-actions"
 import { getReversosPorIdempresa } from "@/lib/transacciones-codigo-actions"
@@ -275,8 +276,25 @@ const TOLERANCIA_LOTE_FECHAPROD_DIAS = 2
  * Tolva vs Tolva f: domingo de la fecha del LOTE (mismo criterio que
  * `tipoOperacionTolva` en lib/liquidacion-tolva-actions.ts).
  */
+/**
+ * PUERTA DE PERMISO (2026-10-07). Una server action es una URL: cualquiera con sesión
+ * puede llamarla aunque la pantalla esté escondida para él. Aquí se exige el MISMO módulo
+ * que la pantalla ya exige para mostrarse, así que quien puede ver Prefactura de Producción
+ * pasa igual que siempre, y quien no, nunca debió poder llamarla.
+ *
+ * Va en el accesor al cliente porque TODAS las acciones de este archivo pasan por él, y
+ * porque sus `catch` ya devuelven `e.message`: el motivo le llega limpio al usuario.
+ *
+ * Comprobado antes de ponerla: el único que importa este archivo es
+ * `components/prefactura-produccion.tsx`, su propia pantalla. No rompe a nadie más.
+ */
+async function clienteConPermiso(): Promise<any> {
+  await exigirModulo(["Prefactura de Producción"], "prefactura-produccion")
+  return await getSupabaseAdmin()
+}
+
 async function armarIndupan(desde: string, hasta: string) {
-  const admin: any = await getSupabaseAdmin()
+  const admin: any = await clienteConPermiso()
 
   const { data: tarifas, error: errT } = await admin
     .from("tarifasoperacion")
@@ -731,7 +749,7 @@ async function armarIndupan(desde: string, hasta: string) {
 
 /** Prefacturas APROBADAS del mismo proyecto y origen que se cruzan con el rango. */
 async function buscarSolapes(idempresa: number, desde: string, hasta: string) {
-  const admin: any = await getSupabaseAdmin()
+  const admin: any = await clienteConPermiso()
   const { data } = await admin
     .from("prefacturas")
     .select("id, periodo_desde, periodo_hasta, total, aprobado_por")
@@ -847,7 +865,7 @@ export async function guardarPrefacturaProduccion(payload: {
       }
     }
 
-    const admin: any = await getSupabaseAdmin()
+    const admin: any = await clienteConPermiso()
     const usuario = payload.usuarioOverride || (await getCurrentUsuarioForInsert())
     const { data, error } = await admin
       .from("prefacturas")
@@ -893,7 +911,7 @@ export async function listarPrefacturasProduccion(
   idempresa?: number | null,
 ): Promise<{ success: boolean; data: PrefacturaProduccionGuardada[]; message?: string }> {
   try {
-    const admin: any = await getSupabaseAdmin()
+    const admin: any = await clienteConPermiso()
     let q = admin
       .from("prefacturas")
       .select("*")
@@ -916,7 +934,7 @@ export async function aprobarPrefacturaProduccion(id: number): Promise<{ success
   const segundoFactor = await segundoFactorPendiente("prefactura-produccion:aprobar")
   if (segundoFactor) return { success: false, message: segundoFactor }
   try {
-    const admin: any = await getSupabaseAdmin()
+    const admin: any = await clienteConPermiso()
     const usuario = await getCurrentUsuarioForInsert()
     const { data, error } = await admin
       .from("prefacturas")
@@ -944,7 +962,7 @@ export async function aprobarPrefacturaProduccion(id: number): Promise<{ success
 export async function reabrirPrefacturaProduccion(id: number, forzar?: boolean): Promise<{ success: boolean; message?: string }> {
   if (!id) return { success: false, message: "Prefactura inválida." }
   try {
-    const admin: any = await getSupabaseAdmin()
+    const admin: any = await clienteConPermiso()
     if (!forzar) {
       const { data: actual } = await admin.from("prefacturas").select("estado_ciclo").eq("id", id).maybeSingle()
       if (actual && actual.estado_ciclo && actual.estado_ciclo !== "pendiente_anexo") {
@@ -974,7 +992,7 @@ export async function eliminarPrefacturaProduccion(id: number): Promise<{ succes
   const segundoFactor = await segundoFactorPendiente("prefactura-produccion:eliminar")
   if (segundoFactor) return { success: false, message: segundoFactor }
   try {
-    const admin: any = await getSupabaseAdmin()
+    const admin: any = await clienteConPermiso()
     const { data, error } = await admin
       .from("prefacturas")
       .delete()
