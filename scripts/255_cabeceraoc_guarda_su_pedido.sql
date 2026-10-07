@@ -28,12 +28,12 @@
 -- nació. La relación se escribe solo del lado del pedido, en `pedidoscabecera.ocargue`,
 -- que es UN SOLO código de texto.
 --
--- Y un código no alcanza, porque de 7.821 órdenes de cargue:
+-- Y un código no alcanza, porque de 7.822 órdenes de cargue:
 --   · 5.570 (71,2 %) atienden a UN solo pedido
---   · 2.007 (25,7 %) atienden a VARIOS (la mayor, MOL20260116136, atiende a 22)
---   ·   244 ( 3,1 %) no tienen pedido conocido, y 243 de ellas son anteriores al 26-jul,
+--   · 2.008 (25,7 %) atienden a VARIOS (la mayor, MOL20260116136, atiende a 22)
+--   ·   244 ( 3,1 %) no tienen pedido conocido, y 243 de ellas son de enero a julio,
 --     cuando aún no existía la bitácora de auditoría de donde se reconstruyó el libro.
---     En septiembre y octubre: CERO órdenes sin pedido. El flujo de hoy está limpio.
+--     La última es de agosto. En septiembre y octubre: CERO. El flujo de hoy está limpio.
 --
 -- LA RELACIÓN ES DE MUCHOS A MUCHOS, Y VA EN LAS DOS DIRECCIONES
 --
@@ -41,9 +41,9 @@
 -- siempre que la suma de todas las órdenes no supere el pedido" — el tope que ya quedó en
 -- el código el 4 de octubre. Medidas las dos direcciones ese mismo día:
 --
---   un PEDIDO sale en varias ÓRDENES:    181 de 11.029 pedidos (1,6 %). El mayor, el
+--   un PEDIDO sale en varias ÓRDENES:    181 de 11.033 pedidos (1,6 %). El mayor, el
 --                                        pedido 9899, salió en 8 órdenes.
---   una ORDEN atiende a varios PEDIDOS:  2.007 de 7.821 órdenes (25,7 %). La mayor,
+--   una ORDEN atiende a varios PEDIDOS:  2.008 de 7.822 órdenes (25,7 %). La mayor,
 --                                        MOL20260116136, atiende a 22 pedidos.
 --
 -- Por eso el registro oficial de la relación tiene que vivir en una tabla aparte, línea
@@ -68,6 +68,29 @@
 -- LOS OTROS TIPOS DE ORDEN NO LLEVAN PEDIDO, Y ESTÁ BIEN: Descargue (686), Distribución
 -- (592), Tolva (377+14) y proyección (40) no son despachos contra un pedido. Quedan con
 -- `pedidos_n = 0` y no se cuentan como anomalía.
+--
+-- UNA ORDEN DE UN PROYECTO SÍ PUEDE ATENDER EL PEDIDO DE OTRO (corregido el 2026-10-07)
+--
+-- La primera versión de este script tenía un candado que lo prohibía, y por eso se negó a
+-- correr: "hay ordenes ligadas a un pedido de OTRO proyecto". El candado estaba mal, no
+-- los datos. Al revisarlo:
+--
+--   · Hay 473 vínculos entre proyectos distintos. De ellos, 470 son ID1 ↔ ID3, y esos
+--     DOS PROYECTOS SON LA MISMA EMPRESA: Harinera Indupan y Cedi Funza comparten NIT
+--     (800.161.555-8), dirección y logo. Son el molino y el CEDI. Que un pedido del CEDI
+--     se cargue en el molino es la operación normal, no un error.
+--   · Verificado línea por línea en tres casos recientes: la orden y el pedido coinciden
+--     en producto, cantidad y cliente. Por ejemplo IND202610079962 (ID1, 7-oct, placa
+--     LWY409) contra el pedido 11815 (ID3): los dos dicen PT LA NIEVE 25LB, 1.400
+--     unidades, cliente ORJUELA CALDERON MODESTO. Es el mismo despacho.
+--   · Solo 3 vínculos son entre empresas DE VERDAD distintas (ID3/ID4 contra ID2), y los
+--     tres son de febrero a abril de 2026. Quedan listados en el paso 3b para mirarlos;
+--     no se corrigen aquí.
+--
+-- Por eso el vínculo se guarda tal como lo dicen los datos, y lo que era un candado pasa
+-- a ser un aviso con la cuenta. Quien use `idpedido` en una pantalla tiene que filtrar por
+-- proyecto por su cuenta, como ya lo hace todo lo demás: la columna dice la verdad del
+-- despacho, no reemplaza el control de acceso.
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
@@ -95,9 +118,11 @@ create index if not exists idx_cabeceraoc_idpedido on public.cabeceraoc (idpedid
 
 do $ligar$
 declare
-  v_uno    int;
-  v_varios int;
-  v_cero   int;
+  v_uno           int;
+  v_varios        int;
+  v_cero          int;
+  v_mismo_nit     int;
+  v_otra_empresa  int;
 begin
   -- Los pedidos de cada orden, de las DOS fuentes que existen hoy: el codigo que guarda
   -- el propio pedido y el libro linea por linea. Se unen porque ninguna sola es completa:
@@ -145,12 +170,39 @@ begin
     raise exception 'Hay ordenes con idpedido lleno que atienden a un numero de pedidos distinto de 1: se deshace todo.';
   end if;
 
-  -- CANDADO 3. La orden y el pedido tienen que ser del MISMO proyecto.
-  if exists (select 1 from public.cabeceraoc c
-             join public.pedidoscabecera p on p.idpedido = c.idpedido
-             where c.idpedido is not null and c.idempresa is distinct from p.id_empresa) then
-    raise exception 'Hay ordenes ligadas a un pedido de OTRO proyecto: se deshace todo.';
-  end if;
+  -- AVISO (no es candado). Una orden de un proyecto SI puede atender el pedido de otro:
+  -- ID1 e ID3 son el molino y el CEDI de la misma empresa (mismo NIT). Lo que si hay que
+  -- ver con ojos son los vinculos entre empresas de verdad distintas, que se listan en el
+  -- paso 3b. Aqui solo se cuentan.
+  -- Se cuenta desde las FUENTES, no desde la columna que se acaba de llenar: `idpedido`
+  -- solo queda puesto cuando la orden atiende a UNO, asi que mirar la columna dejaria
+  -- fuera los cruces de las ordenes que atienden a varios.
+  create temporary table _cruces on commit drop as
+  select c.id              as orden_id,
+         c.ordendecargue,
+         c.idempresa       as proyecto_orden,
+         c.fechacargue,
+         v.idpedido,
+         p.id_empresa      as proyecto_pedido,
+         p.cliente
+  from (
+    select btrim(ocargue) as oc, idpedido
+      from public.pedidoscabecera
+     where ocargue is not null and btrim(ocargue) <> ''
+    union
+    select btrim(ocargue) as oc, idpedido
+      from public.pedidodetalle_ocargue
+     where ocargue is not null and btrim(ocargue) <> ''
+  ) v
+  join public.cabeceraoc     c on btrim(c.ordendecargue) = v.oc
+  join public.pedidoscabecera p on p.idpedido = v.idpedido
+  where c.idempresa is distinct from p.id_empresa;
+
+  select count(*) into v_mismo_nit    from _cruces
+   where least(proyecto_orden, proyecto_pedido) = 1 and greatest(proyecto_orden, proyecto_pedido) = 3;
+  select count(*) into v_otra_empresa from _cruces
+   where not (least(proyecto_orden, proyecto_pedido) = 1 and greatest(proyecto_orden, proyecto_pedido) = 3);
+  raise notice 'Ordenes que atienden el pedido de otro proyecto -> ID1<->ID3 (misma empresa, esperado 470): % · entre empresas distintas (esperado 3, ver paso 3b): %', v_mismo_nit, v_otra_empresa;
 
   raise notice 'LISTO. Ninguna cifra cambio: solo se agrego de que pedido nacio cada orden.';
 end
@@ -171,18 +223,52 @@ select tipooperacion,
 from public.cabeceraoc
 group by tipooperacion
 order by 2 desc;
--- Esperado en Cargue: ~5.570 con uno · ~2.007 con varios · ~244 sin pedido.
--- En Descargue, Distribucion, Tolva y proyeccion casi todo en "sin pedido": es lo correcto.
+-- Medido el 2026-10-07, justo antes de correrlo:
+--   Cargue        7.822 órdenes · 5.570 con uno · 2.008 con varios · 244 sin pedido
+--   Descargue       686 · 4 con uno · 682 sin pedido
+--   Distribucion    592 · 6 con uno · 3 con varios · 583 sin pedido
+--   Tolva 377 · proyeccion 40 · Tolva f 14 · todas sin pedido
+-- En Descargue, Distribucion, Tolva y proyeccion es lo correcto: no son despachos
+-- contra un pedido.
 
--- 3b. Las órdenes de CARGUE sin pedido, que es la anomalía de la que hablamos.
+-- 3b. Los vínculos entre empresas DE VERDAD distintas. Son los únicos que hay que mirar
+--     con ojos: ID1 ↔ ID3 es la misma empresa (molino y CEDI) y no cuenta.
+with vinculos as (
+  select btrim(ocargue) as oc, idpedido
+    from public.pedidoscabecera
+   where ocargue is not null and btrim(ocargue) <> ''
+  union
+  select btrim(ocargue) as oc, idpedido
+    from public.pedidodetalle_ocargue
+   where ocargue is not null and btrim(ocargue) <> ''
+)
+select c.id            as orden_id,
+       c.ordendecargue,
+       c.idempresa     as proyecto_de_la_orden,
+       c.fechacargue,
+       v.idpedido,
+       p.id_empresa    as proyecto_del_pedido,
+       p.cliente       as cliente_del_pedido
+from vinculos v
+join public.cabeceraoc      c on btrim(c.ordendecargue) = v.oc
+join public.pedidoscabecera p on p.idpedido = v.idpedido
+where c.idempresa is distinct from p.id_empresa
+  and not (least(c.idempresa, p.id_empresa) = 1 and greatest(c.idempresa, p.id_empresa) = 3)
+order by c.fechacargue;
+-- Esperado: 3 filas, todas de febrero a abril de 2026 (órdenes 814 y 2862 de ID3 y la
+-- 2436 de ID4, las tres contra pedidos de ID2). Ninguna reciente. Se informan, no se
+-- corrigen aquí.
+
+-- 3c. Las órdenes de CARGUE sin pedido, que es la anomalía de la que hablamos.
 select to_char(fechacargue, 'YYYY-MM') as mes, count(*) as ordenes
 from public.cabeceraoc
 where tipooperacion = 'Cargue' and coalesce(pedidos_n, 0) = 0
 group by 1
 order by 1 desc;
--- Esperado: nada en septiembre ni octubre. El flujo de hoy esta limpio.
+-- Esperado: 244 en total, la última en agosto (1 caso) y el resto de enero a julio.
+-- CERO en septiembre y octubre: el flujo de hoy está limpio.
 
--- 3c. Una muestra, para verla con ojos.
+-- 3d. Una muestra, para verla con ojos.
 select c.id, c.ordendecargue, c.idempresa, c.fechacargue, c.pedidos_n, c.idpedido,
        p.cliente as cliente_del_pedido
 from public.cabeceraoc c
