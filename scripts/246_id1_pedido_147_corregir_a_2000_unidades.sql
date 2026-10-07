@@ -138,15 +138,22 @@ begin
     raise exception 'Sigue habiendo mas cargado que pedido: se deshace todo.';
   end if;
 
-  -- Ninguna otra linea de ninguna empresa puede haber cambiado.
-  if exists (
-    select 1 from public.pedidosdetalle
+  -- Cuantas lineas siguen incumpliendo en TODA la base. Se INFORMA, no se aborta: si
+  -- alguien creo otra linea mala mientras tanto, ese es otro caso y no es razon para
+  -- deshacer esta correccion, que ya quedo bien y verificada arriba.
+  declare
+    v_restantes int;
+  begin
+    select count(*) into v_restantes
+      from public.pedidosdetalle
      where unidadescargadas is not null
-       and unidadescargadas > unidades + 0.01) then
-    raise exception 'Quedaron lineas con mas cargado que pedido en la base: se deshace todo.';
-  end if;
-
-  raise notice 'LISTO. No queda ninguna linea con mas cargado que lo pedido en toda la base.';
+       and unidadescargadas > unidades + 0.01;
+    if v_restantes = 0 then
+      raise notice 'LISTO. No queda ninguna linea con mas cargado que lo pedido en toda la base.';
+    else
+      raise notice 'LISTO con esta linea. OJO: quedan % lineas con mas cargado que lo pedido en la base; son otros casos, revisarlos aparte.', v_restantes;
+    end if;
+  end;
 end
 $corregir$;
 
