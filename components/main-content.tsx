@@ -90,7 +90,10 @@ const UserPermissionsManagement = dynamic(() => import("@/components/configurati
 const BitacoraAuditoria = dynamic(() => import("@/components/configuration/bitacora-auditoria"), { loading: ModuleLoading })
 const PlacasDistribucion = dynamic(() => import("@/components/configuration/placas-distribucion"), { loading: ModuleLoading })
 const MuellesEmpresaConfig = dynamic(() => import("@/components/configuration/muelles-empresa"), { loading: ModuleLoading })
-const UserAccessModule = dynamic(() => import("@/components/user-access-module").then((m) => m.UserAccessModule), { loading: ModuleLoading })
+// "Accesos de Usuario" conserva su `name` (es la clave del permiso y de la
+// ruta) pero abre Perfiles de acceso: la grilla usuarios x empresas se retiro
+// porque la asignacion por persona ya vive en Gestion de Usuarios > Accesos.
+const PerfilesAcceso = dynamic(() => import("@/components/configuration/perfiles-acceso").then((m) => m.PerfilesAcceso), { loading: ModuleLoading })
 const AutorizacionesClave = dynamic(() => import("@/components/configuration/autorizaciones-clave"), { loading: ModuleLoading })
 const HeadcountManagement = dynamic(() => import("@/components/headcount-management"), { loading: ModuleLoading })
 const Tolva = dynamic(() => import("@/components/tolva").then((m) => m.Tolva), { loading: ModuleLoading })
@@ -698,7 +701,7 @@ export function MainContent({
             </PermissionGuard>
           ) : name === "Accesos de Usuario" ? (
             <PermissionGuard moduleName="Accesos de Usuario">
-              <UserAccessModule />
+              <PerfilesAcceso />
             </PermissionGuard>
           ) : name === "Autorizaciones por clave" ? (
             <PermissionGuard moduleName="Autorizaciones por clave">

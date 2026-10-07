@@ -695,7 +695,9 @@ export const groups: Group[] = [
         title: "Seguridad y accesos",
         modules: [
           { name: "Gestión de Usuarios", icon: Users },
-          { name: "Accesos de Usuario", icon: Lock },
+          // `name` se conserva: es la clave del permiso (accesos_usuario) y de la
+          // ruta. Lo que cambia es lo que abre: Perfiles de acceso.
+          { name: "Accesos de Usuario", icon: Lock, label: "Perfiles de acceso" },
           { name: "Autorizaciones por clave", icon: KeyRound },
         ],
       },

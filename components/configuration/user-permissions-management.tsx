@@ -50,10 +50,11 @@ import {
 // "use server"): Next.js no permite exportar valores no async desde archivos
 // con la directiva "use server".
 import type { UserPermissions } from "@/lib/permissions-map"
-import { MODULE_PERMISSION_MAP } from "@/lib/permissions-map"
 import { PROCESOS } from "@/lib/mapa-procesos-tipos"
 import { getProcesosDeUsuario, guardarProcesosDeUsuario } from "@/lib/permisos-mapa-actions"
-import { groups } from "@/lib/dashboard-data"
+import { PERMISSION_TREE, filtrarArbol, type PermGroup, type PermItem } from "@/lib/permisos-arbol"
+import { listarPerfilesAcceso, getPerfilesDeUsuario, asignarPerfilesUsuario } from "@/lib/acceso-perfiles-actions"
+import type { PerfilAcceso } from "@/lib/acceso-perfiles-tipos"
 import {
   Loader2,
   Save,
@@ -73,6 +74,7 @@ import {
   Clock,
   CheckCircle2,
   ArrowRight,
+  LayoutTemplate,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/components/auth-provider"
@@ -84,60 +86,9 @@ interface UserWithPermissions {
   permisos_usuarios: UserPermissions | UserPermissions[] | null
 }
 
-// ---------------------------------------------------------------------------
-// El arbol de permisos se DERIVA de la estructura de navegacion real
-// (`groups` en lib/dashboard-data.ts) usando `MODULE_PERMISSION_MAP`. Asi la
-// pantalla refleja SIEMPRE los mismos grupos, subgrupos y modulos que ve el
-// usuario en el sidebar, sin listas paralelas que se desincronicen.
-// ---------------------------------------------------------------------------
-type PermItem = { key: keyof UserPermissions; label: string }
-type PermSection = { title: string | null; permissions: PermItem[] }
-type PermGroup = { title: string; sections: PermSection[] }
-
-function collectPerms(modules: { name: string; label?: string }[]): PermItem[] {
-  const seen = new Set<string>()
-  const out: PermItem[] = []
-  for (const m of modules) {
-    const key = MODULE_PERMISSION_MAP[m.name] as keyof UserPermissions | undefined
-    if (!key) continue
-    if (seen.has(key as string)) continue
-    seen.add(key as string)
-    out.push({ key, label: m.label ?? m.name })
-  }
-  return out
-}
-
-// Permisos que NO son modulos del menu pero deben poder otorgarse aqui (SIG por norma).
-const EXTRA_PERMS_POR_SUBGRUPO: Record<string, PermItem[]> = {
-  "Sistema Integrado (SIG)": [
-    { key: "sig_iso9001", label: "— Pestaña ISO 9001:2015" },
-    { key: "sig_iso14001", label: "— Pestaña ISO 14001:2015" },
-    { key: "sig_iso45001", label: "— Pestaña ISO 45001:2018" },
-  ],
-  // Roles DENTRO de Ciclo de Facturación -- `ciclo_facturacion` (arriba, auto-
-  // derivado del menú) solo da acceso a VER el módulo; sin estos 2, nadie
-  // podía dar de alta un Jefe o un Coordinador reales (no existía el checkbox
-  // -- bug real encontrado 2026-09-11, ver lib/permissions-map.ts:358-361).
-  Facturación: [
-    { key: "ciclo_facturacion_jefe", label: "— Ciclo de Facturación: rol Jefe (enviar anexo/factura, cerrar)" },
-    { key: "ciclo_facturacion_coordinador", label: "— Ciclo de Facturación: rol Coordinador (subir firmado por el cliente)" },
-  ],
-}
-
-const PERMISSION_TREE: PermGroup[] = groups
-  .map((g) => {
-    const sections: PermSection[] = []
-    if (g.modules?.length) {
-      const perms = collectPerms(g.modules)
-      if (perms.length) sections.push({ title: null, permissions: perms })
-    }
-    for (const sg of g.subgroups ?? []) {
-      const perms = [...collectPerms(sg.modules), ...(EXTRA_PERMS_POR_SUBGRUPO[sg.title] ?? [])]
-      if (perms.length) sections.push({ title: sg.title, permissions: perms })
-    }
-    return { title: g.title, sections }
-  })
-  .filter((g) => g.sections.length > 0)
+// El árbol de permisos vive en lib/permisos-arbol.ts: lo dibujan esta
+// pantalla y Perfiles de acceso, y un árbol duplicado se desincroniza en
+// silencio. Se deriva del menú real (`groups`) con MODULE_PERMISSION_MAP.
 
 // Genera una contraseña segura (14 caracteres, sin caracteres ambiguos) con el CSPRNG.
 function generarPasswordSegura(): string {
@@ -216,6 +167,13 @@ export function UserPermissionsManagement() {
   const [loadingAccess, setLoadingAccess] = useState(false)
   const [savingAccess, setSavingAccess] = useState(false)
 
+  // Perfiles de acceso (las plantillas) y los que tiene el usuario seleccionado
+  const [perfilesCatalogo, setPerfilesCatalogo] = useState<PerfilAcceso[]>([])
+  const [faltaScriptPerfiles, setFaltaScriptPerfiles] = useState(false)
+  const [perfilesUsuario, setPerfilesUsuario] = useState<number[]>([])
+  const [perfilesOriginal, setPerfilesOriginal] = useState<number[]>([])
+  const [savingPerfiles, setSavingPerfiles] = useState(false)
+
   // Crear usuario
   const [createOpen, setCreateOpen] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -250,16 +208,19 @@ export function UserPermissionsManagement() {
 
   const loadAll = async () => {
     setLoading(true)
-    const [result, meta, emp, own] = await Promise.all([
+    const [result, meta, emp, own, perf] = await Promise.all([
       getAllUsersWithPermissions(selectedEmpresaId),
       getAuthMetaUsuarios(),
       empresas.length ? Promise.resolve(empresas) : getAllEmpresas(),
       owners.length ? Promise.resolve(owners) : getAllOwners(),
+      listarPerfilesAcceso(),
     ])
     if (result.success && result.data) setUsers(result.data as UserWithPermissions[])
     if (meta.success && meta.data) setAuthMeta(meta.data)
     setEmpresas(emp)
     setOwners(own)
+    setPerfilesCatalogo(perf.data)
+    setFaltaScriptPerfiles(!!perf.faltaMigracion)
     setLoading(false)
   }
 
@@ -280,10 +241,11 @@ export function UserPermissionsManagement() {
 
     // Accesos
     setLoadingAccess(true)
-    const [emp, own, proc] = await Promise.all([
+    const [emp, own, proc, perf] = await Promise.all([
       getUserAccess(u.id),
       getUserOwnerAccess(u.id),
       getProcesosDeUsuario(u.id),
+      getPerfilesDeUsuario(u.id),
     ])
     setEmpresaAccess(emp)
     setEmpresaOriginal(emp)
@@ -292,6 +254,8 @@ export function UserPermissionsManagement() {
     setProcesos(proc.procesos)
     setProcesosOriginal(proc.procesos)
     setFaltaScriptMapa(!!proc.faltaMigracion)
+    setPerfilesUsuario(perf)
+    setPerfilesOriginal(perf)
     setLoadingAccess(false)
   }
 
@@ -314,24 +278,7 @@ export function UserPermissionsManagement() {
     return { total: users.length, activos, inactivos: users.length - activos, nunca }
   }, [users, authMeta])
 
-  const filteredTree = useMemo(() => {
-    const q = permSearch.trim().toLowerCase()
-    if (!q) return PERMISSION_TREE
-    return PERMISSION_TREE.map((g) => {
-      const sections = g.sections
-        .map((s) => ({
-          ...s,
-          permissions: s.permissions.filter(
-            (p) =>
-              p.label.toLowerCase().includes(q) ||
-              (s.title ?? "").toLowerCase().includes(q) ||
-              g.title.toLowerCase().includes(q),
-          ),
-        }))
-        .filter((s) => s.permissions.length > 0)
-      return { ...g, sections }
-    }).filter((g) => g.sections.length > 0)
-  }, [permSearch])
+  const filteredTree = useMemo(() => filtrarArbol(permSearch), [permSearch])
 
   // Al buscar, expandimos automáticamente los grupos con coincidencias.
   useEffect(() => {
@@ -353,6 +300,13 @@ export function UserPermissionsManagement() {
       a.length === b.length && a.every((x) => b.includes(x))
     return !eqSet(empresaAccess, empresaOriginal) || !eqSet(ownerAccess, ownerOriginal)
   }, [empresaAccess, empresaOriginal, ownerAccess, ownerOriginal])
+
+  const perfilesDirty = useMemo(
+    () =>
+      perfilesUsuario.length !== perfilesOriginal.length ||
+      perfilesUsuario.some((id) => !perfilesOriginal.includes(id)),
+    [perfilesUsuario, perfilesOriginal],
+  )
 
   const groupCount = (g: PermGroup) => {
     let total = 0
@@ -457,6 +411,52 @@ export function UserPermissionsManagement() {
       toast({ title: "Error", description: "No se pudieron guardar todos los accesos.", variant: "destructive" })
     } finally {
       setSavingAccess(false)
+    }
+  }
+
+  /*
+   * Aplica los perfiles marcados. El servidor recalcula y ESCRIBE empresas,
+   * owners y módulos del usuario, así que después hay que volver a leer las
+   * tres cosas: lo que se ve en las otras pestañas acaba de cambiar.
+   */
+  const handleSavePerfiles = async () => {
+    if (!selectedUser) return
+    setSavingPerfiles(true)
+    const r = await asignarPerfilesUsuario(selectedUser.id, perfilesUsuario)
+    setSavingPerfiles(false)
+    if (!r.success) {
+      toast({ title: "No se pudieron aplicar los perfiles", description: r.message, variant: "destructive" })
+      return
+    }
+    setPerfilesOriginal(perfilesUsuario)
+    const c = r.cambios
+    toast({
+      title: "Perfiles aplicados",
+      description: c
+        ? `Empresas +${c.empresas.agregadas} / -${c.empresas.retiradas} · Owners +${c.owners.agregadas} / -${c.owners.retiradas} · Módulos +${c.permisos.agregados} / -${c.permisos.retirados}`
+        : undefined,
+    })
+    const [emp, own, result, perf] = await Promise.all([
+      getUserAccess(selectedUser.id),
+      getUserOwnerAccess(selectedUser.id),
+      getAllUsersWithPermissions(selectedEmpresaId),
+      listarPerfilesAcceso(),
+    ])
+    setEmpresaAccess(emp)
+    setEmpresaOriginal(emp)
+    setOwnerAccess(own)
+    setOwnerOriginal(own)
+    setPerfilesCatalogo(perf.data)
+    if (result.success && result.data) {
+      const lista = result.data as UserWithPermissions[]
+      setUsers(lista)
+      const fresco = lista.find((x) => x.id === selectedUser.id)
+      if (fresco) {
+        setSelectedUser(fresco)
+        const p = permsDeUsuario(fresco)
+        setPermissions(p)
+        setPermOriginal(p)
+      }
     }
   }
 
@@ -734,6 +734,26 @@ export function UserPermissionsManagement() {
                             {estadoSel.relativo}
                           </span>
                         </div>
+                        {perfilesUsuario.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                            {perfilesUsuario.map((id) => {
+                              const p = perfilesCatalogo.find((x) => x.id === id)
+                              return p ? (
+                                <span
+                                  key={id}
+                                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                                    p.activo
+                                      ? "border-primary/30 bg-primary/10 text-primary"
+                                      : "border-border bg-muted text-muted-foreground line-through"
+                                  }`}
+                                >
+                                  <LayoutTemplate className="h-3 w-3" />
+                                  {p.nombre}
+                                </span>
+                              ) : null
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -1009,6 +1029,88 @@ export function UserPermissionsManagement() {
                         </div>
                       ) : (
                         <>
+                          {/* Perfiles de acceso */}
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <LayoutTemplate className="h-4 w-4 text-primary" />
+                              <h3 className="text-sm font-bold">Perfiles de acceso</h3>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button type="button" className="text-xs text-muted-foreground underline decoration-dotted">
+                                    ¿qué controla?
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs text-xs leading-relaxed">
+                                  Un perfil trae empresas, owners y módulos de una vez; el usuario recibe la unión de
+                                  sus perfiles activos. Lo que marques a mano más abajo se conserva aunque quites el
+                                  perfil. Los perfiles se crean en Configuración → Perfiles de acceso.
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
+                            {faltaScriptPerfiles ? (
+                              <p className="rounded-xl border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
+                                Falta correr <code>scripts/247_acceso_perfiles.sql</code> para poder usar perfiles.
+                              </p>
+                            ) : perfilesCatalogo.length === 0 ? (
+                              <p className="rounded-xl border border-border/60 bg-card p-2.5 text-xs text-muted-foreground">
+                                Todavía no hay perfiles. Se crean en <strong>Configuración → Perfiles de acceso</strong>;
+                                mientras tanto, los accesos se marcan a mano aquí abajo.
+                              </p>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 rounded-xl border border-border/60 bg-card p-2.5">
+                                {perfilesCatalogo.map((p) => {
+                                  const checked = perfilesUsuario.includes(p.id)
+                                  return (
+                                    <label
+                                      key={p.id}
+                                      className={`flex items-start gap-2 text-sm cursor-pointer p-1.5 rounded hover:bg-accent/50 ${!p.activo ? "opacity-60" : ""}`}
+                                    >
+                                      <Checkbox
+                                        className="mt-0.5"
+                                        checked={checked}
+                                        onCheckedChange={(c) =>
+                                          setPerfilesUsuario((prev) => (c ? [...prev, p.id] : prev.filter((id) => id !== p.id)))
+                                        }
+                                      />
+                                      <span className="min-w-0">
+                                        <span className="block truncate font-medium">
+                                          {p.nombre}
+                                          {!p.activo && <span className="ml-1 text-[10px] font-normal text-muted-foreground">(inactivo)</span>}
+                                        </span>
+                                        <span className="block text-[11px] text-muted-foreground">
+                                          {p.empresas.length} empresas · {p.owners.length} owners · {p.permisos.length} módulos
+                                        </span>
+                                      </span>
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                            )}
+                            {perfilesCatalogo.length > 0 && (
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs text-muted-foreground">
+                                  {perfilesDirty
+                                    ? "Perfiles sin aplicar"
+                                    : perfilesUsuario.length
+                                      ? `${perfilesUsuario.length} perfil(es) aplicados`
+                                      : "Sin perfil: todo marcado a mano"}
+                                </span>
+                                <Button
+                                  size="sm"
+                                  variant={perfilesDirty ? "default" : "outline"}
+                                  onClick={handleSavePerfiles}
+                                  disabled={savingPerfiles || !perfilesDirty}
+                                  className="gap-2 h-8"
+                                >
+                                  {savingPerfiles ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LayoutTemplate className="h-3.5 w-3.5" />}
+                                  Aplicar perfiles
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+
+                          <Separator />
+
                           {/* Empresas */}
                           <div className="space-y-2">
                             <div className="flex items-center gap-2">

@@ -1714,21 +1714,21 @@ Maestro de vendedores, resuelto por la tabla genérica sobre `vendedores`.
 
 #### Gestión de Usuarios
 
-Alta y mantenimiento de usuarios, con sus 142 permisos de módulo y los proyectos a los que tiene acceso. Permite copiar los permisos de otro usuario como punto de partida. Escribe en `permisos_usuarios`, `perfil_acceso_empresas` y `perfil_acceso_owners`.
+Alta y mantenimiento de usuarios, con sus permisos de módulo y los proyectos a los que tiene acceso. En la pestaña Accesos se le asignan **perfiles de acceso** (ver el módulo siguiente): al aplicarlos, el servidor recalcula y escribe las empresas, owners y módulos del usuario; lo marcado a mano se conserva. También permite copiar los permisos de otro usuario como punto de partida.
 
 - **Archivo:** `components/configuration/user-permissions-management.tsx`
 - **Permiso:** `gestion_usuarios`
-- **Escribe en:** `perfil_acceso_empresas`, `perfil_acceso_owners`, `permisos_usuarios`, `profiles`
-- **Lee de:** `empresas_permisos`, `owners`
+- **Escribe en:** `perfil_acceso_empresas`, `perfil_acceso_owners`, `permisos_usuarios`, `profiles`, `acceso_perfil_usuarios`, `acceso_perfil_materializado`
+- **Lee de:** `empresas_permisos`, `owners`, `acceso_perfiles`
 
-#### Accesos de Usuario
+#### Perfiles de acceso (antes "Accesos de Usuario")
 
-Gestiona a qué proyectos y owners puede acceder cada usuario, que es lo que filtra toda la información del sistema.
+Plantillas con nombre que juntan empresas, owners y permisos de módulo ("Coordinador Indupan"). Aquí se crean, editan, duplican y desactivan; la asignación a cada persona se hace en Gestión de Usuarios. Un perfil se puede arrancar a partir del acceso que un usuario ya tiene. Al editar un perfil se recalcula el acceso de todos los usuarios que lo tienen. Reemplazó a la grilla usuarios × empresas (2026-10-07); conserva el `name` y el permiso de aquella.
 
-- **Archivo:** `components/user-access-module.tsx`
+- **Archivo:** `components/configuration/perfiles-acceso.tsx`
 - **Permiso:** `accesos_usuario`
-- **Escribe en:** `perfil_acceso_empresas`, `perfil_acceso_owners`
-- **Lee de:** `empresas_permisos`, `owners`, `profiles`
+- **Escribe en:** `acceso_perfiles`, `acceso_perfil_empresas`, `acceso_perfil_owners`, `acceso_perfil_permisos` y, vía recálculo, `perfil_acceso_empresas`, `perfil_acceso_owners`, `permisos_usuarios`, `acceso_perfil_materializado`
+- **Lee de:** `empresas_permisos`, `owners`, `profiles`, `acceso_perfil_usuarios`
 
 #### Bitácora de Auditoría
 

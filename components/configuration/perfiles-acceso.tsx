@@ -1,0 +1,831 @@
+"use client"
+
+// PERFILES DE ACCESO
+//
+// Un perfil es un paquete con nombre: las empresas que abre, los owners a los
+// que limita Pedidos y los módulos que enciende. Aquí se CREAN y EDITAN; la
+// asignación a cada usuario se hace en Gestión de Usuarios → Accesos.
+//
+// Reemplaza a la grilla "Accesos de Usuario" (usuarios × empresas con
+// checkboxes), que obligaba a repetir ~140 clics por cada persona nueva y no
+// podía responder "¿qué tiene un coordinador?" sin abrir a uno y mirar.
+//
+// Misma composición que Gestión de Usuarios --cabecera con indicadores, lista
+// a la izquierda, detalle con pestañas a la derecha-- para que quien
+// administra no tenga que aprender dos pantallas distintas.
+
+import { useEffect, useMemo, useState } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
+import { Separator } from "@/components/ui/separator"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { useToast } from "@/hooks/use-toast"
+import {
+  AlertTriangle,
+  ArrowRight,
+  Building2,
+  Copy,
+  LayoutTemplate,
+  Loader2,
+  Plus,
+  Save,
+  Search,
+  ShieldCheck,
+  Tags,
+  Trash2,
+  UserPlus,
+  Users,
+} from "lucide-react"
+import { getAllEmpresas, getAllOwners, type Empresa, type Owner } from "@/lib/user-access-actions"
+import {
+  eliminarPerfilAcceso,
+  guardarPerfilAcceso,
+  listarPerfilesAcceso,
+  plantillaDesdeUsuario,
+  usuariosDePerfil,
+  usuariosParaPlantilla,
+} from "@/lib/acceso-perfiles-actions"
+import type { PerfilAcceso, UsuarioDePerfil } from "@/lib/acceso-perfiles-tipos"
+import { PERMISSION_TREE, filtrarArbol, type PermGroup, type PermItem } from "@/lib/permisos-arbol"
+
+type Form = {
+  nombre: string
+  descripcion: string
+  activo: boolean
+  empresas: number[]
+  owners: string[]
+  permisos: string[]
+}
+
+const FORM_VACIO: Form = { nombre: "", descripcion: "", activo: true, empresas: [], owners: [], permisos: [] }
+
+function mismoConjunto<T>(a: T[], b: T[]): boolean {
+  if (a.length !== b.length) return false
+  const s = new Set(a)
+  return b.every((x) => s.has(x))
+}
+
+function formDesde(p: PerfilAcceso): Form {
+  return {
+    nombre: p.nombre,
+    descripcion: p.descripcion ?? "",
+    activo: p.activo,
+    empresas: [...p.empresas],
+    owners: [...p.owners],
+    permisos: [...p.permisos],
+  }
+}
+
+export function PerfilesAcceso() {
+  const { toast } = useToast()
+
+  const [perfiles, setPerfiles] = useState<PerfilAcceso[]>([])
+  const [usuariosCubiertos, setUsuariosCubiertos] = useState(0)
+  const [faltaMigracion, setFaltaMigracion] = useState(false)
+  const [empresas, setEmpresas] = useState<Empresa[]>([])
+  const [owners, setOwners] = useState<Owner[]>([])
+  const [usuarios, setUsuarios] = useState<UsuarioDePerfil[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState("")
+
+  // Edición. `sel` es el id del perfil abierto, "nuevo" para uno sin guardar.
+  const [sel, setSel] = useState<number | "nuevo" | null>(null)
+  const [form, setForm] = useState<Form>(FORM_VACIO)
+  const [original, setOriginal] = useState<Form>(FORM_VACIO)
+  const [asignados, setAsignados] = useState<UsuarioDePerfil[]>([])
+  const [saving, setSaving] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [desdeUsuario, setDesdeUsuario] = useState("")
+
+  const cargar = async () => {
+    setLoading(true)
+    const [lista, emp, own, usu] = await Promise.all([
+      listarPerfilesAcceso(),
+      empresas.length ? Promise.resolve(empresas) : getAllEmpresas(),
+      owners.length ? Promise.resolve(owners) : getAllOwners(),
+      usuarios.length ? Promise.resolve(usuarios) : usuariosParaPlantilla(),
+    ])
+    if (lista.success) {
+      setPerfiles(lista.data)
+      setUsuariosCubiertos(lista.usuariosCubiertos)
+      setFaltaMigracion(!!lista.faltaMigracion)
+    } else {
+      toast({ title: "No se pudieron cargar los perfiles", description: lista.message, variant: "destructive" })
+    }
+    setEmpresas(emp)
+    setOwners(own)
+    setUsuarios(usu)
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    cargar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const seleccionar = async (p: PerfilAcceso) => {
+    setSel(p.id)
+    const f = formDesde(p)
+    setForm(f)
+    setOriginal(f)
+    setAsignados(await usuariosDePerfil(p.id))
+  }
+
+  const nuevo = () => {
+    setSel("nuevo")
+    setForm(FORM_VACIO)
+    setOriginal(FORM_VACIO)
+    setAsignados([])
+    setDesdeUsuario("")
+  }
+
+  /*
+   * Arrancar un perfil con lo que un usuario ya tiene. Es la forma rápida de
+   * ordenar lo existente: se toma al coordinador que ya está bien configurado
+   * y de ahí en adelante los nuevos reciben el perfil en vez de 140 clics.
+   */
+  const nuevoDesdeUsuario = async (uid: string) => {
+    setDesdeUsuario(uid)
+    const u = usuarios.find((x) => x.id === uid)
+    const r = await plantillaDesdeUsuario(uid)
+    if (!r.success || !r.data) {
+      toast({ title: "No se pudo leer al usuario", description: r.message, variant: "destructive" })
+      return
+    }
+    setSel("nuevo")
+    const f: Form = {
+      nombre: u ? `Perfil de ${u.usuario}` : "",
+      descripcion: u ? `Creado a partir del acceso de ${u.usuario}.` : "",
+      activo: true,
+      ...r.data,
+    }
+    setForm(f)
+    setOriginal(FORM_VACIO)
+    setAsignados([])
+    toast({
+      title: "Plantilla cargada",
+      description: `${r.data.empresas.length} empresas, ${r.data.owners.length} owners y ${r.data.permisos.length} módulos de ${u?.usuario ?? "ese usuario"}. Revisa, ponle nombre y guarda.`,
+    })
+  }
+
+  const duplicar = () => {
+    setSel("nuevo")
+    const f = { ...form, nombre: `Copia de ${form.nombre}`.trim() }
+    setForm(f)
+    setOriginal(FORM_VACIO)
+    setAsignados([])
+  }
+
+  const dirty = useMemo(
+    () =>
+      form.nombre !== original.nombre ||
+      form.descripcion !== original.descripcion ||
+      form.activo !== original.activo ||
+      !mismoConjunto(form.empresas, original.empresas) ||
+      !mismoConjunto(form.owners, original.owners) ||
+      !mismoConjunto(form.permisos, original.permisos),
+    [form, original],
+  )
+
+  const guardar = async () => {
+    if (!form.nombre.trim()) {
+      toast({ title: "Falta el nombre", description: "Ponle un nombre al perfil, por ejemplo «Coordinador Indupan»." })
+      return
+    }
+    setSaving(true)
+    const r = await guardarPerfilAcceso({
+      id: sel === "nuevo" || sel === null ? undefined : sel,
+      nombre: form.nombre,
+      descripcion: form.descripcion,
+      activo: form.activo,
+      empresas: form.empresas,
+      owners: form.owners,
+      permisos: form.permisos,
+    })
+    setSaving(false)
+    if (!r.success) {
+      toast({ title: "No se pudo guardar", description: r.message, variant: "destructive" })
+      return
+    }
+    const rc = r.recalculo
+    toast({
+      title: "Perfil guardado",
+      description:
+        rc && rc.usuarios > 0
+          ? `Se recalculó el acceso de ${rc.usuarios} usuario(s) que lo tienen.${rc.errores.length ? ` ${rc.errores.length} con error.` : ""}`
+          : "Todavía no lo tiene ningún usuario. Asígnalo desde Gestión de Usuarios → Accesos.",
+    })
+    await cargar()
+    if (r.id) {
+      const lista = await listarPerfilesAcceso()
+      const p = lista.data.find((x) => x.id === r.id)
+      if (p) await seleccionar(p)
+    }
+  }
+
+  const eliminar = async () => {
+    if (sel === "nuevo" || sel === null) return
+    setDeleting(true)
+    const r = await eliminarPerfilAcceso(sel)
+    setDeleting(false)
+    setDeleteOpen(false)
+    if (!r.success) {
+      toast({ title: "No se pudo eliminar", description: r.message, variant: "destructive" })
+      return
+    }
+    toast({
+      title: "Perfil eliminado",
+      description:
+        r.recalculo && r.recalculo.usuarios > 0
+          ? `A ${r.recalculo.usuarios} usuario(s) se les retiró lo que este perfil traía.`
+          : undefined,
+    })
+    setSel(null)
+    await cargar()
+  }
+
+  const togglear = <T,>(campo: "empresas" | "owners" | "permisos", valor: T, on: boolean) =>
+    setForm((f) => {
+      const actual = f[campo] as unknown as T[]
+      const siguiente = on ? [...new Set([...actual, valor])] : actual.filter((x) => x !== valor)
+      return { ...f, [campo]: siguiente }
+    })
+
+  const togglearVarios = (claves: string[], on: boolean) =>
+    setForm((f) => ({
+      ...f,
+      permisos: on ? [...new Set([...f.permisos, ...claves])] : f.permisos.filter((k) => !claves.includes(k)),
+    }))
+
+  const filtrados = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return perfiles
+    return perfiles.filter(
+      (p) => p.nombre.toLowerCase().includes(q) || (p.descripcion ?? "").toLowerCase().includes(q),
+    )
+  }, [perfiles, search])
+
+  const stats = useMemo(
+    () => ({
+      total: perfiles.length,
+      activos: perfiles.filter((p) => p.activo).length,
+      cubiertos: usuariosCubiertos,
+      sinUsuarios: perfiles.filter((p) => p.usuarios === 0).length,
+    }),
+    [perfiles, usuariosCubiertos],
+  )
+
+  const editando = sel !== null
+  const esNuevo = sel === "nuevo"
+  const perfilSel = typeof sel === "number" ? perfiles.find((p) => p.id === sel) : undefined
+
+  return (
+    <div className="space-y-6">
+      {/* ---------- Cabecera ---------- */}
+      <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card shadow-sm">
+        <div className="pointer-events-none absolute -top-16 -right-10 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
+        <div className="relative flex flex-wrap items-center justify-between gap-4 p-5">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-md">
+              <LayoutTemplate className="h-6 w-6" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight text-foreground">Perfiles de acceso</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Un perfil junta empresas, owners y módulos. Se asigna a un usuario y queda listo para trabajar.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={desdeUsuario} onValueChange={nuevoDesdeUsuario}>
+              <SelectTrigger className="h-10 w-[230px] bg-card">
+                <div className="flex items-center gap-1.5">
+                  <UserPlus className="h-4 w-4" />
+                  <SelectValue placeholder="A partir de un usuario…" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                {usuarios.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.usuario}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button onClick={nuevo} size="lg" className="gap-2 shadow-md">
+              <Plus className="h-4 w-4" />
+              Nuevo perfil
+            </Button>
+          </div>
+        </div>
+        <div className="relative grid grid-cols-2 sm:grid-cols-4 gap-px bg-border/60 border-t border-border/60">
+          {[
+            { label: "Perfiles", value: stats.total, icon: LayoutTemplate, tone: "text-primary" },
+            { label: "Activos", value: stats.activos, icon: ShieldCheck, tone: "text-emerald-600" },
+            { label: "Usuarios con perfil", value: stats.cubiertos, icon: Users, tone: "text-sky-600" },
+            { label: "Sin usuarios", value: stats.sinUsuarios, icon: AlertTriangle, tone: "text-amber-600" },
+          ].map((s) => (
+            <div key={s.label} className="flex items-center gap-2.5 bg-card px-4 py-3">
+              <s.icon className={`h-4 w-4 ${s.tone}`} />
+              <div className="leading-none">
+                <p className="text-xl font-bold tabular-nums text-foreground">{s.value}</p>
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground mt-1">{s.label}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {faltaMigracion && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            Las tablas de perfiles no existen todavía. Hay que correr{" "}
+            <code className="rounded bg-amber-100 px-1">scripts/247_acceso_perfiles.sql</code> en la base de datos.
+          </p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* ---------- Lista ---------- */}
+        <Card className="lg:col-span-1 overflow-hidden border-border/60 shadow-md bg-gradient-to-br from-card to-muted/20">
+          <CardHeader className="pb-3 bg-gradient-to-r from-primary/10 via-muted/40 to-transparent border-b border-border/60">
+            <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-sm">
+                  <LayoutTemplate className="h-3.5 w-3.5" />
+                </span>
+                Perfiles
+              </span>
+              <Badge className="bg-primary/15 text-primary hover:bg-primary/15 border-0 h-5 px-1.5 text-[11px] tabular-nums">
+                {filtrados.length}
+              </Badge>
+            </CardTitle>
+            <div className="relative mt-2">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar perfil…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-8 h-9 bg-card"
+              />
+            </div>
+          </CardHeader>
+          <CardContent className="p-2.5">
+            {loading ? (
+              <div className="flex items-center justify-center h-40">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : perfiles.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-10 text-center px-3">
+                <LayoutTemplate className="h-9 w-9 text-muted-foreground/40" />
+                <p className="text-sm font-medium">Todavía no hay perfiles</p>
+                <p className="text-xs text-muted-foreground">
+                  Lo más rápido es crear el primero <strong>a partir de un usuario</strong> que ya esté bien
+                  configurado, con el selector de arriba.
+                </p>
+              </div>
+            ) : filtrados.length === 0 ? (
+              <p className="py-8 text-center text-xs text-muted-foreground">Ningún perfil coincide con «{search}».</p>
+            ) : (
+              <div className="space-y-1.5">
+                {filtrados.map((p) => {
+                  const activo = sel === p.id
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => seleccionar(p)}
+                      className={`w-full rounded-xl border p-2.5 text-left transition-colors ${
+                        activo
+                          ? "border-primary/40 bg-primary/10 shadow-sm"
+                          : "border-transparent bg-card hover:border-border hover:bg-accent/40"
+                      } ${!p.activo ? "opacity-60" : ""}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold">{p.nombre}</p>
+                          {p.descripcion && (
+                            <p className="truncate text-[11px] text-muted-foreground">{p.descripcion}</p>
+                          )}
+                        </div>
+                        {!p.activo && (
+                          <Badge variant="outline" className="shrink-0 text-[10px]">
+                            Inactivo
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap gap-1 text-[10px] text-muted-foreground">
+                        <span className="rounded-full bg-muted px-1.5 py-0.5">{p.empresas.length} empresas</span>
+                        <span className="rounded-full bg-muted px-1.5 py-0.5">{p.owners.length} owners</span>
+                        <span className="rounded-full bg-muted px-1.5 py-0.5">{p.permisos.length} módulos</span>
+                        <span
+                          className={`rounded-full px-1.5 py-0.5 ${
+                            p.usuarios > 0 ? "bg-primary/15 text-primary font-medium" : "bg-muted"
+                          }`}
+                        >
+                          {p.usuarios} usuario{p.usuarios === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ---------- Detalle ---------- */}
+        <Card className="lg:col-span-2 overflow-hidden border-border/60 shadow-md bg-gradient-to-br from-card to-muted/20">
+          {!editando ? (
+            <div className="flex flex-col items-center justify-center h-[420px] text-center px-6">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 mb-4">
+                <LayoutTemplate className="h-8 w-8 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground">Selecciona un perfil</h3>
+              <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+                Elige uno de la lista para ver qué trae y quién lo tiene, o crea uno nuevo. La asignación a cada
+                persona se hace en <strong>Gestión de Usuarios → Accesos</strong>.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="relative overflow-hidden border-b border-border/60 bg-gradient-to-r from-primary/10 via-card to-card p-5">
+                <div className="pointer-events-none absolute -top-12 right-8 h-40 w-40 rounded-full bg-primary/10 blur-3xl" />
+                <div className="relative space-y-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex-1 min-w-[240px] space-y-2">
+                      <Input
+                        value={form.nombre}
+                        onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+                        placeholder="Nombre del perfil, p. ej. «Coordinador Indupan»"
+                        className="h-11 text-lg font-bold bg-card"
+                      />
+                      <Textarea
+                        value={form.descripcion}
+                        onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
+                        placeholder="Para quién es y qué le permite hacer"
+                        className="min-h-[52px] text-sm bg-card"
+                      />
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" className="gap-1.5 bg-card" onClick={duplicar} disabled={esNuevo}>
+                          <Copy className="h-3.5 w-3.5" />
+                          Duplicar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 bg-card text-destructive hover:text-destructive hover:bg-destructive/10 hover:border-destructive/40"
+                          onClick={() => setDeleteOpen(true)}
+                          disabled={esNuevo}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Eliminar
+                        </Button>
+                      </div>
+                      <label className="flex items-center gap-2 text-sm">
+                        <Switch checked={form.activo} onCheckedChange={(v) => setForm({ ...form, activo: v })} />
+                        <span className={form.activo ? "font-medium" : "text-muted-foreground"}>
+                          {form.activo ? "Activo" : "Inactivo"}
+                        </span>
+                      </label>
+                      {/* Inactivo no es borrado: la asignacion queda como rastro y
+                          se puede reactivar. Pero lo que traia se retira. */}
+                      {!form.activo && (
+                        <p className="max-w-[260px] text-right text-[11px] text-muted-foreground">
+                          Sigue asignado a sus usuarios, pero no les aporta nada hasta que se reactive.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <CardContent className="pt-5">
+                <Tabs defaultValue="empresas" className="w-full">
+                  <TabsList className="grid w-full grid-cols-4 h-11 p-1 bg-muted/60">
+                    <TabsTrigger value="empresas" className="gap-1.5 data-[state=active]:shadow-sm">
+                      <Building2 className="h-4 w-4" />
+                      <span className="hidden sm:inline">Empresas</span>
+                      <Contador n={form.empresas.length} />
+                    </TabsTrigger>
+                    <TabsTrigger value="owners" className="gap-1.5 data-[state=active]:shadow-sm">
+                      <Tags className="h-4 w-4" />
+                      <span className="hidden sm:inline">Owners</span>
+                      <Contador n={form.owners.length} />
+                    </TabsTrigger>
+                    <TabsTrigger value="permisos" className="gap-1.5 data-[state=active]:shadow-sm">
+                      <ShieldCheck className="h-4 w-4" />
+                      <span className="hidden sm:inline">Módulos</span>
+                      <Contador n={form.permisos.length} />
+                    </TabsTrigger>
+                    <TabsTrigger value="usuarios" className="gap-1.5 data-[state=active]:shadow-sm">
+                      <Users className="h-4 w-4" />
+                      <span className="hidden sm:inline">Usuarios</span>
+                      <Contador n={asignados.length} />
+                    </TabsTrigger>
+                  </TabsList>
+
+                  {/* ===== Empresas ===== */}
+                  <TabsContent value="empresas" className="mt-4 space-y-3">
+                    <Nota icon={Building2}>
+                      <strong>Es el permiso maestro.</strong> Define qué empresas ve el usuario en el selector global
+                      y, con ello, qué datos puede ver y gestionar en casi todo el sistema. Cada módulo filtra por la
+                      empresa seleccionada.
+                    </Nota>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 rounded-xl border border-border/60 bg-card p-2.5">
+                      {empresas.map((e) => {
+                        const checked = form.empresas.includes(e.id)
+                        return (
+                          <label key={e.id} className="flex items-center gap-2 text-sm cursor-pointer p-1.5 rounded hover:bg-accent/50">
+                            <Checkbox checked={checked} onCheckedChange={(c) => togglear("empresas", e.id, !!c)} />
+                            <span className="truncate">{e.nombre}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </TabsContent>
+
+                  {/* ===== Owners ===== */}
+                  <TabsContent value="owners" className="mt-4 space-y-3">
+                    <Nota icon={Tags}>
+                      <strong>Filtro adicional solo para Pedidos.</strong> Limita la Gestión y el Dashboard de Pedidos
+                      a la razón social que factura. Sin owners marcados no hay límite por owner. No cambia el
+                      selector de empresa ni afecta a los demás módulos.
+                    </Nota>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 rounded-xl border border-border/60 bg-card p-2.5">
+                      {owners.map((o) => {
+                        const checked = form.owners.includes(o.nombre)
+                        return (
+                          <label key={o.id} className="flex items-center gap-2 text-sm cursor-pointer p-1.5 rounded hover:bg-accent/50">
+                            <Checkbox checked={checked} onCheckedChange={(c) => togglear("owners", o.nombre, !!c)} />
+                            <span className="truncate">{o.nombre}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </TabsContent>
+
+                  {/* ===== Módulos ===== */}
+                  <TabsContent value="permisos" className="mt-4">
+                    <ArbolPermisos
+                      seleccion={form.permisos}
+                      onToggle={(k, on) => togglear("permisos", k, on)}
+                      onToggleVarios={togglearVarios}
+                    />
+                  </TabsContent>
+
+                  {/* ===== Usuarios ===== */}
+                  <TabsContent value="usuarios" className="mt-4 space-y-3">
+                    <Nota icon={Users}>
+                      Quién tiene este perfil hoy. Para asignarlo o quitárselo a alguien, ve a{" "}
+                      <strong>Gestión de Usuarios → Accesos</strong>: así cada decisión sobre una persona se toma
+                      mirando a esa persona.
+                    </Nota>
+                    {esNuevo ? (
+                      <p className="py-6 text-center text-xs text-muted-foreground">Guarda el perfil para poder asignarlo.</p>
+                    ) : asignados.length === 0 ? (
+                      <p className="py-6 text-center text-xs text-muted-foreground">Nadie tiene este perfil todavía.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 rounded-xl border border-border/60 bg-card p-2.5">
+                        {asignados.map((u) => (
+                          <div key={u.id} className="flex items-center gap-2 p-1.5 text-sm">
+                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-[11px] font-bold text-primary">
+                              {u.usuario.slice(0, 2).toUpperCase()}
+                            </span>
+                            <span className="truncate">{u.usuario}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
+
+                <div className="flex items-center justify-between pt-4 mt-4 border-t">
+                  <span className="text-xs text-muted-foreground">
+                    {dirty ? "Tienes cambios sin guardar" : esNuevo ? "Perfil nuevo" : "Todo guardado"}
+                    {!esNuevo && perfilSel && perfilSel.usuarios > 0 && dirty && (
+                      <> · al guardar se recalcula el acceso de {perfilSel.usuarios} usuario(s)</>
+                    )}
+                  </span>
+                  <Button onClick={guardar} disabled={saving || !dirty} className="gap-2">
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    {esNuevo ? "Crear perfil" : "Guardar cambios"}
+                  </Button>
+                </div>
+              </CardContent>
+            </>
+          )}
+        </Card>
+      </div>
+
+      {/* ---------- Confirmar eliminación ---------- */}
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar el perfil «{form.nombre}»?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                {asignados.length > 0 ? (
+                  <p>
+                    Lo tienen <strong>{asignados.length} usuario(s)</strong>. Al eliminarlo se les retira lo que este
+                    perfil les traía: empresas, owners y módulos. Lo que tengan marcado a mano se conserva.
+                  </p>
+                ) : (
+                  <p>Nadie lo tiene asignado, así que no cambia el acceso de ningún usuario.</p>
+                )}
+                <p className="text-muted-foreground">
+                  Si solo quieres que deje de aplicarse por un tiempo, es mejor desactivarlo.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                eliminar()
+              }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Piezas
+// ---------------------------------------------------------------------------
+
+function Contador({ n }: { n: number }) {
+  return (
+    <Badge className="ml-1 h-5 px-1.5 text-[11px] bg-primary/15 text-primary hover:bg-primary/15 border-0 tabular-nums">
+      {n}
+    </Badge>
+  )
+}
+
+function Nota({ icon: Icon, children }: { icon: typeof Building2; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground leading-relaxed">
+      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+      <p>{children}</p>
+    </div>
+  )
+}
+
+/**
+ * El mismo árbol de módulos que dibuja Gestión de Usuarios, con buscador y
+ * "todo / nada" por grupo. Reusa `PERMISSION_TREE` para que un módulo nuevo
+ * aparezca aquí sin tocar esta pantalla.
+ */
+function ArbolPermisos({
+  seleccion,
+  onToggle,
+  onToggleVarios,
+}: {
+  seleccion: string[]
+  onToggle: (key: string, on: boolean) => void
+  onToggleVarios: (keys: string[], on: boolean) => void
+}) {
+  const [q, setQ] = useState("")
+  const [abiertos, setAbiertos] = useState<string[]>([])
+  const marcados = useMemo(() => new Set(seleccion), [seleccion])
+  const arbol = useMemo(() => filtrarArbol(q), [q])
+
+  useEffect(() => {
+    if (q.trim()) setAbiertos(arbol.map((g) => g.title))
+  }, [q, arbol])
+
+  const todasLasClaves = useMemo(
+    () => PERMISSION_TREE.flatMap((g) => g.sections.flatMap((s) => s.permissions.map((p) => p.key as string))),
+    [],
+  )
+  const clavesDe = (g: PermGroup) => g.sections.flatMap((s) => s.permissions.map((p) => p.key as string))
+  const cuenta = (items: PermItem[]) => items.filter((p) => marcados.has(p.key as string)).length
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Filtrar módulos…" value={q} onChange={(e) => setQ(e.target.value)} className="pl-8 h-9" />
+        </div>
+        <Button variant="outline" size="sm" className="h-9" onClick={() => onToggleVarios(todasLasClaves, true)}>
+          Todo
+        </Button>
+        <Button variant="outline" size="sm" className="h-9" onClick={() => onToggleVarios(todasLasClaves, false)}>
+          Nada
+        </Button>
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {seleccion.length} de {todasLasClaves.length}
+        </span>
+      </div>
+
+      <div className="max-h-[460px] overflow-y-auto pr-2 -mr-2">
+        {arbol.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8">Ningún módulo coincide con «{q}».</p>
+        ) : (
+          <Accordion type="multiple" value={abiertos} onValueChange={setAbiertos} className="space-y-2">
+            {arbol.map((g) => {
+              const claves = clavesDe(g)
+              const activos = claves.filter((k) => marcados.has(k)).length
+              return (
+                <AccordionItem
+                  key={g.title}
+                  value={g.title}
+                  className="rounded-xl border border-border/60 bg-card px-3 data-[state=open]:border-primary/30 data-[state=open]:shadow-sm transition-colors"
+                >
+                  <AccordionTrigger className="hover:no-underline py-3">
+                    <div className="flex items-center gap-2 flex-1 pr-2">
+                      <span className="text-sm font-semibold">{g.title}</span>
+                      <Badge
+                        variant="outline"
+                        className={`ml-auto h-5 px-1.5 text-[11px] tabular-nums ${
+                          activos === claves.length
+                            ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                            : activos > 0
+                              ? "border-primary/30 bg-primary/10 text-primary"
+                              : ""
+                        }`}
+                      >
+                        {activos}/{claves.length}
+                      </Badge>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="pb-3 space-y-3">
+                    <div className="flex gap-1.5">
+                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => onToggleVarios(claves, true)}>
+                        Todo el grupo
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => onToggleVarios(claves, false)}>
+                        Nada
+                      </Button>
+                    </div>
+                    {g.sections.map((s, i) => (
+                      <div key={s.title ?? `s${i}`} className="space-y-1">
+                        {s.title && (
+                          <div className="flex items-center justify-between">
+                            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                              {s.title}
+                            </p>
+                            <span className="text-[10px] text-muted-foreground tabular-nums">
+                              {cuenta(s.permissions)}/{s.permissions.length}
+                            </span>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-1 pl-3 border-l-2 border-border">
+                          {s.permissions.map((p) => {
+                            const k = p.key as string
+                            return (
+                              <label key={k} className="flex items-center gap-2 text-sm cursor-pointer p-1 rounded hover:bg-accent/50">
+                                <Checkbox checked={marcados.has(k)} onCheckedChange={(c) => onToggle(k, !!c)} />
+                                <span className="truncate">{p.label}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </AccordionContent>
+                </AccordionItem>
+              )
+            })}
+          </Accordion>
+        )}
+      </div>
+
+      <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+        <ArrowRight className="h-3 w-3" />
+        Son los mismos módulos del menú: uno nuevo aparece aquí solo.
+      </p>
+    </div>
+  )
+}

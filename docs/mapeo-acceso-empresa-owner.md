@@ -1,7 +1,9 @@
 # Mapeo de acceso: EMPRESA vs OWNER (LIPgo)
 
 Referencia de qué controla cada tipo de acceso que se administra en
-**Configuración → Accesos de Usuario** (`components/user-access-module.tsx`), para
+**Configuración → Gestión de Usuarios → pestaña Accesos**
+(`components/configuration/user-permissions-management.tsx`) y, como plantillas, en
+**Configuración → Perfiles de acceso** (`components/configuration/perfiles-acceso.tsx`, ver §4), para
 que al asignar permisos se entienda su impacto real. Son **dos mecanismos
 independientes** que se combinan.
 
@@ -80,3 +82,23 @@ Por eso, para que alguien vea correctamente los pedidos de una razón social, su
 necesitar **ambos**: acceso a la(s) empresa(s) del sitio **y** al owner de facturación.
 El acceso por **empresa** es el permiso amplio (todo el sistema); el de **owner** es un
 recorte fino, exclusivo de Pedidos/facturación.
+
+---
+
+## 4. Perfiles de acceso (2026-10-07)
+**Tablas:** `acceso_perfiles` + `acceso_perfil_empresas` / `_owners` / `_permisos` (qué trae
+cada perfil), `acceso_perfil_usuarios` (quién lo tiene) y `acceso_perfil_materializado`
+(qué filas puso cada perfil en cada usuario). Script `scripts/247_acceso_perfiles.sql`.
+
+Un **perfil** es un paquete con nombre de **empresas + owners + permisos de módulo**
+("Coordinador Indupan"). Un usuario puede tener varios; su acceso es la **unión** de los
+activos. Se crean en *Perfiles de acceso* y se asignan en *Gestión de Usuarios → Accesos*.
+
+**No cambia la semántica de §1 ni §2.** Los módulos siguen leyendo `perfil_acceso_empresas`,
+`perfil_acceso_owners` y `permisos_usuarios`. El perfil es la fuente: al asignarlo o editarlo,
+`recalcularAccesoUsuario` (`lib/acceso-perfiles-actions.ts`) escribe el acceso efectivo en esas
+tres tablas. `acceso_perfil_materializado` recuerda qué filas vinieron de perfiles, así que al
+quitar un perfil se retira **solo lo que trajo**; lo marcado a mano se conserva.
+
+> Nombres: `perfil_acceso_*` (singular, viejo) = acceso POR USUARIO; `acceso_perfil*` (nuevo)
+> = el PERFIL como plantilla.
