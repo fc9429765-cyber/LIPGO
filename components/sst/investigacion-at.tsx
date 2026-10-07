@@ -19,7 +19,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { SST_TOKENS } from "@/components/sst/sst-utils"
 import { SoportesDocumentales } from "@/components/sst/soportes-documentales"
-import { listSoportes, subirYRegistrarSoporte, eliminarSoporte } from "@/lib/soportes-actions"
+import { listSoportes, eliminarSoporte } from "@/lib/soportes-actions"
+import { subirSoporteDirecto } from "@/lib/subir-soporte-directo"
 import type { SoporteRow } from "@/lib/soportes-types"
 import { EspinaPescado, CuadrosCausas } from "@/components/sst/espina-pescado"
 import type { IshikawaData, CuadrosCausasData } from "@/components/sst/espina-pescado"
@@ -1805,18 +1806,28 @@ function CierreArlArchivo({
   }, [refId, empresaId])
 
   async function onFile(file: File) {
-    // Aviso antes de subir: el Server Action corta en 50 MB y esperar el viaje
-    // completo para avisarlo es tiempo perdido con un escaneo grande.
-    if (file.size > 50 * 1024 * 1024) {
+    /*
+     * El archivo sube DIRECTO del navegador al almacenamiento, sin pasar por
+     * el servidor, asi que el tope ya no es el del Server Action --que la
+     * plataforma cortaba mucho antes de los 50 MB declarados-- sino el del
+     * bucket.
+     *
+     * Se deja un tope alto por cordura: un expediente escaneado de mas de
+     * 200 MB casi siempre es un error de digitalizacion (300 dpi a color en
+     * vez de 150 en gris), y subirlo tarda tanto que el operador cree que la
+     * pantalla se colgo.
+     */
+    if (file.size > 200 * 1024 * 1024) {
       toast({
         title: "Archivo muy grande",
-        description: "El máximo son 50 MB. Comprime el documento o súbelo por partes.",
+        description:
+          "El máximo son 200 MB. Si es un escaneo, revisa la resolución: a 150 dpi en escala de grises un expediente completo rara vez pasa de 30 MB.",
       })
       return
     }
     setSubiendo(true)
     try {
-      const res = await subirYRegistrarSoporte(
+      const res = await subirSoporteDirecto(
         file,
         {
           norma: "SST 0312",
