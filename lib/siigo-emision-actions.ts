@@ -764,10 +764,12 @@ export async function getHistorialEmision(limite = 50): Promise<{
 /**
  * ¿Se puede facturar esta prefactura?
  *
- * Se puede en cualquier etapa del ciclo menos `cerrado`. Las prefacturas no
- * pasan por Solicitar Facturas --son otra vía--, así que aquí no hay una
- * aprobación previa que comprobar: quien factura decide, y la pantalla le
- * advierte cuando el cliente todavía no ha firmado el anexo.
+ * SOLO con el anexo firmado (`pendiente_factura`). El ciclo es obligatorio:
+ * anexo enviado -> anexo firmado por el cliente -> factura. La firma es la
+ * prueba de que el cliente aceptó el monto; facturar antes significa que si
+ * objeta, corregir ya no es editar una prefactura sino emitir una nota
+ * crédito. (Del 2026-10-06 al 07 se permitió en cualquier etapa; el negocio
+ * lo revirtió: la factura sale del ciclo, no por fuera de él.)
  *
  * Lo que esta función protege de verdad es emitir DOS VECES la misma
  * prefactura, que es el error irreversible: una factura electrónica aceptada
@@ -786,22 +788,18 @@ export async function puedeFacturarPrefactura(prefacturaId: number): Promise<Ver
 
     if (!p) return { puede: false, motivo: "No se encontró la prefactura." }
 
-    /*
-     * Se puede facturar en CUALQUIER etapa menos `cerrado`, por decisión del
-     * negocio. Antes se exigía `pendiente_factura` --el estado justo después
-     * de firmar el anexo-- porque esa firma es la prueba de que el cliente
-     * aceptó el monto; facturar antes significa que si él objeta, corregir ya
-     * no es editar una prefactura sino emitir una nota crédito.
-     *
-     * `cerrado` sí se mantiene bloqueado: ahí el ciclo ya terminó y la
-     * facturación de ese período se gestionó por otra vía. Emitir encima
-     * duplicaría el cobro.
-     *
-     * Lo que impide facturar dos veces NO es la etapa, son los dos candados
-     * de abajo: `numero_factura_siigo` y la bitácora de emisión.
-     */
-    if (p.estado_ciclo === "cerrado") {
-      return { puede: false, motivo: "El ciclo ya está cerrado." }
+    if (p.estado_ciclo !== "pendiente_factura") {
+      const explicacion: Record<string, string> = {
+        pendiente_anexo: "todavía no se le ha enviado el anexo al cliente",
+        pendiente_firma_anexo: "el cliente aún no ha firmado el anexo",
+        pendiente_firma_factura: "la factura ya se envió",
+        pendiente_cierre: "la factura ya está firmada",
+        cerrado: "el ciclo ya está cerrado",
+      }
+      return {
+        puede: false,
+        motivo: `Solo se factura con el anexo firmado: ${explicacion[p.estado_ciclo] ?? p.estado_ciclo}.`,
+      }
     }
 
     if (String(p.numero_factura_siigo ?? "").trim() !== "") {
@@ -1013,6 +1011,31 @@ export async function emitirFacturaPrefactura(
       .from("prefacturas")
       .update({ numero_factura_siigo: r.data.name ?? r.data.id })
       .eq("id", prefacturaId)
+
+    /*
+     * Emitir en Siigo ES el paso "Factura enviada" del ciclo: la prefactura
+     * avanza a "pendiente_firma_factura" y el evento queda en su historial
+     * con el número del comprobante. Si no avanzara, seguiría pidiendo que
+     * alguien suba a mano una factura que ya existe.
+     *
+     * Sin archivo adjunto: el documento vive en Siigo y se identifica por su
+     * número. Si el evento no se puede guardar, el estado avanza igual (la
+     * factura ya es oficial) y el fallo queda en el log.
+     */
+    const nombreFactura = String(r.data.name ?? r.data.id)
+    const { error: errEv } = await sb.from("prefactura_ciclo_eventos").insert({
+      prefactura_id: prefacturaId,
+      evento: "factura_enviada",
+      archivo_url: null,
+      archivo_nombre: `Factura Siigo ${nombreFactura}`,
+      usuario: usuario ?? "siigo",
+    })
+    if (errEv) console.error("[v0] evento factura_enviada:", errEv.message)
+    await sb
+      .from("prefacturas")
+      .update({ estado_ciclo: "pendiente_firma_factura", ciclo_actualizado_en: new Date().toISOString() })
+      .eq("id", prefacturaId)
+      .eq("estado_ciclo", "pendiente_factura")
 
     return {
       success: true,
