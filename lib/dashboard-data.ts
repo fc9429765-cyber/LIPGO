@@ -567,6 +567,7 @@ export const groups: Group[] = [
         modules: [
           { name: "Centro de Evidencia ISO 9001", icon: BadgeCheck, label: "Centro de Evidencia" },
           { name: "Repositorio ISO 9001", icon: FolderArchive, label: "Repositorio Documental" },
+          { name: "Auditoría ISO 9001", icon: ClipboardCheck, label: "Auditoría" },
         ],
       },
       {

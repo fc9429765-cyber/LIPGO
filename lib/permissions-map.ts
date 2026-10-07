@@ -472,6 +472,10 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   "Actividades y Comités": "sst_actividades",
   // --- Certificaciones LIP · ISO 9001 ---
   "Repositorio ISO 9001": "iso_repositorio",
+  // Auditoría ISO 9001 reusa el permiso del repositorio: quien gestiona la
+  // documentación del sistema es quien audita contra ella. Un permiso propio
+  // obligaría a otorgarlo por separado a las mismas personas.
+  "Auditoría ISO 9001": "iso_repositorio",
   // --- Sistema Integrado de Gestión (SIG) ---
   "Dashboard SIG": "sig_matriz",
   "Análisis de Contexto DOFA": "sig_matriz",

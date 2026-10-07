@@ -142,6 +142,7 @@ const Auditoria0312 = dynamic(() => import("@/components/sst/auditoria-0312").th
 const Matriz60Estandares = dynamic(() => import("@/components/sst/matriz-60-estandares").then((m) => m.Matriz60Estandares), { loading: ModuleLoading })
 const RepositorioSoportes = dynamic(() => import("@/components/sst/repositorio-soportes").then((m) => m.RepositorioSoportes), { loading: ModuleLoading })
 const RepositorioISO9001 = dynamic(() => import("@/components/iso9001/repositorio-iso9001").then((m) => m.RepositorioISO9001), { loading: ModuleLoading })
+const AuditoriaISO = dynamic(() => import("@/components/certificaciones/auditoria-iso"), { loading: ModuleLoading })
 const InvestigacionAT = dynamic(() => import("@/components/sst/investigacion-at").then((m) => m.InvestigacionAT), { loading: ModuleLoading })
 const AlertasAT = dynamic(() => import("@/components/sst/alertas-at").then((m) => m.AlertasAT), { loading: ModuleLoading })
 const InvestigacionesRepositorio = dynamic(() => import("@/components/sst/investigaciones-repositorio").then((m) => m.InvestigacionesRepositorio), { loading: ModuleLoading })
@@ -1089,6 +1090,10 @@ export function MainContent({
           ) : name === "Repositorio ISO 9001" ? (
             <PermissionGuard moduleName="Repositorio ISO 9001">
               <RepositorioISO9001 />
+            </PermissionGuard>
+          ) : name === "Auditoría ISO 9001" ? (
+            <PermissionGuard moduleName="Auditoría ISO 9001">
+              <AuditoriaISO />
             </PermissionGuard>
           ) : name === "Asistente IA" ? (
             <PermissionGuard moduleName="Asistente IA">
