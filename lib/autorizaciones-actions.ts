@@ -220,22 +220,37 @@ export async function getMiEstadoClave(): Promise<EstadoMiClave | null> {
  * (perfil o excepción) pero aún no creó su clave personal, o tiene una
  * provisional. Tres consultas mínimas; nada de esto requiere permisos de módulo.
  */
-export async function getAvisoMiClave(): Promise<{ motivo: "sin_clave" | "provisional" | null }> {
+/**
+ * Aviso de clave pendiente para la persona en sesión.
+ *
+ * Devuelve además la FECHA en que vencen las claves compartidas y el día de hoy en Bogotá,
+ * para que la franja pueda decir cuántos días faltan. Sin esa cuenta regresiva el aviso es
+ * "pendiente" a secas, y eso no mueve a nadie: medido el 2026-10-07, el aviso llevaba desde
+ * el 27 de septiembre dentro del menú del avatar y 19 de 21 personas seguían sin clave.
+ */
+export async function getAvisoMiClave(): Promise<{
+  motivo: "sin_clave" | "provisional" | null
+  transicionHasta: string | null
+  hoy: string
+}> {
+  const hoy = hoyColombiaISO()
   try {
     const user = await getCurrentUser()
-    if (!user) return { motivo: null }
+    if (!user) return { motivo: null, transicionHasta: null, hoy }
     const sb: any = await getSupabaseAdminAsSystem()
-    const [{ data: clave }, { count: nPerf }, { count: nExc }] = await Promise.all([
+    const [{ data: clave }, { count: nPerf }, { count: nExc }, { data: cfg }] = await Promise.all([
       sb.from("autorizacion_claves").select("provisional").eq("usuario_id", user.id).maybeSingle(),
       sb.from("autorizacion_usuario_perfiles").select("id", { count: "exact", head: true }).eq("usuario_id", user.id),
       sb.from("autorizacion_usuario_procesos").select("id", { count: "exact", head: true }).eq("usuario_id", user.id).eq("permitir", true),
+      sb.from("autorizacion_config").select("valor").eq("clave", "transicion_claves_compartidas_hasta").maybeSingle(),
     ])
-    if (Number(nPerf || 0) + Number(nExc || 0) === 0) return { motivo: null }
-    if (!clave) return { motivo: "sin_clave" }
-    if (clave.provisional) return { motivo: "provisional" }
-    return { motivo: null }
+    const transicionHasta = typeof cfg?.valor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(cfg.valor) ? cfg.valor : null
+    if (Number(nPerf || 0) + Number(nExc || 0) === 0) return { motivo: null, transicionHasta, hoy }
+    if (!clave) return { motivo: "sin_clave", transicionHasta, hoy }
+    if (clave.provisional) return { motivo: "provisional", transicionHasta, hoy }
+    return { motivo: null, transicionHasta, hoy }
   } catch {
-    return { motivo: null }
+    return { motivo: null, transicionHasta: null, hoy }
   }
 }
 
