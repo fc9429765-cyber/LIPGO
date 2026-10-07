@@ -85,14 +85,20 @@ recorte fino, exclusivo de Pedidos/facturación.
 
 ---
 
-## 4. Perfiles de acceso (2026-10-07)
-**Tablas:** `acceso_perfiles` + `acceso_perfil_empresas` / `_owners` / `_permisos` (qué trae
-cada perfil), `acceso_perfil_usuarios` (quién lo tiene) y `acceso_perfil_materializado`
-(qué filas puso cada perfil en cada usuario). Script `scripts/247_acceso_perfiles.sql`.
+## 4. Perfiles (2026-10-07; unificados el mismo día con los de autorizaciones)
+**Tablas:** `autorizacion_perfiles` (EL perfil: el puesto) + `acceso_perfil_empresas` /
+`_owners` / `_permisos` (qué abre) + `autorizacion_perfil_procesos` (qué autoriza con clave),
+`autorizacion_usuario_perfiles` (quién lo tiene, con alcance) y `acceso_perfil_materializado`
+(qué filas puso cada perfil en cada usuario). Scripts `247` (nació aparte) y `249` (se fundió
+con autorizaciones: `acceso_perfiles` ya no existe).
 
-Un **perfil** es un paquete con nombre de **empresas + owners + permisos de módulo**
+Un **perfil** es el puesto: **empresas + owners + permisos de módulo + procesos autorizables**
 ("Coordinador Indupan"). Un usuario puede tener varios; su acceso es la **unión** de los
-activos. Se crean en *Perfiles de acceso* y se asignan en *Gestión de Usuarios → Accesos*.
+activos. Todo vive en la pantalla única *Autorizaciones* (Configuración → Seguridad y accesos):
+pestaña *Perfiles* para el puesto, *Usuarios* para asignarlo a cada persona, *Claves* para la
+clave personal. **El alcance de la clave sigue a las empresas del perfil** cuando este las
+define (una fila de asignación por empresa); un perfil sin empresas se asigna como antes, con
+el alcance que diga la administración, para no ampliar nada por accidente.
 
 **No cambia la semántica de §1 ni §2.** Los módulos siguen leyendo `perfil_acceso_empresas`,
 `perfil_acceso_owners` y `permisos_usuarios`. El perfil es la fuente: al asignarlo o editarlo,

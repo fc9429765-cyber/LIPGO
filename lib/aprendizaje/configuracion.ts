@@ -407,7 +407,7 @@ export const APRENDIZAJE_CONFIGURACION: ContenidoAprendizaje[] = [
   {
     modulo: "Gestión de Usuarios",
     resumen:
-      "Crea usuarios, asigna permisos modulo por modulo y otorga accesos por empresa y owner, todo en un solo lugar.",
+      "Pantalla única de seguridad (pestañas Usuarios · Perfiles · Claves): a cada persona se le asigna un perfil que trae empresas, owners, módulos y procesos que autoriza, y se ajusta lo fino a mano.",
     proposito:
       "Es la columna vertebral de que ve cada quien en la aplicacion. Desde aqui se crean, resetean y eliminan usuarios, y a cada uno se le definen dos cosas: sus permisos (que modulos puede abrir, marcados uno a uno y agrupados por area) y sus accesos (a que empresas y owners puede entrar). Ademas muestra la ultima conexion de cada usuario y un semaforo de actividad.",
     puedes: [
@@ -441,9 +441,9 @@ export const APRENDIZAJE_CONFIGURACION: ContenidoAprendizaje[] = [
           "Arbol de modulos agrupado por area con casillas una a una, buscador para filtrar modulos, botones Todo/Nada, seleccion completa por grupo y la opcion de copiar los permisos de otro usuario. Los cambios se aplican al presionar Guardar.",
       },
       {
-        nombre: "Pestaña Accesos",
+        nombre: "Pestaña Perfil (primera, por defecto) y ajuste fino",
         descripcion:
-          "Marca a que empresas y a que owners puede entrar el usuario; se guarda con su propio boton. Es lo mismo que administra el modulo Accesos de Usuario, pero visto usuario por usuario.",
+          "Muestra el acceso efectivo de la persona (empresas, owners y módulos; cuánto viene de perfiles y cuánto a mano) y los perfiles como tarjetas para marcar y aplicar. Las pestañas Módulos y Empresas y owners quedan como ajuste fino: cada casilla que trae un perfil lleva la etiqueta perfil, y lo marcado a mano se conserva aunque el perfil cambie.",
       },
       {
         nombre: "Resetear contraseña y eliminar",
@@ -462,7 +462,7 @@ export const APRENDIZAJE_CONFIGURACION: ContenidoAprendizaje[] = [
   // ==========================================================================
   {
     modulo: "Accesos de Usuario",
-    resumen: "Cuadro de chequeo que define a que empresas y owners entra cada usuario.",
+    resumen: "Hoy es la pestaña Perfiles de la pantalla única de Autorizaciones: el puesto, con las empresas, owners, módulos y procesos autorizables que trae.",
     proposito:
       "Administra el permiso maestro de datos: que empresas ve cada usuario en el selector global (y con ello que informacion ve en casi todo el sistema) y, como filtro adicional, que owners puede consultar en Pedidos. Se trabaja sobre una tabla de usuarios contra empresas u owners, marcando casillas.",
     puedes: [
@@ -623,7 +623,7 @@ export const APRENDIZAJE_CONFIGURACION: ContenidoAprendizaje[] = [
   // Guías agregadas 2026-09-30 (reorg de navegación: el buscador global usa este texto).
   {
     modulo: "Autorizaciones por clave",
-    resumen: "Permisos por proceso y por puesto, autorizados con la clave personal de cada usuario. Exclusivo de LIPgo.",
+    resumen: "Hoy es la pestaña Claves de la pantalla única de Autorizaciones: la clave personal de cada usuario, su alcance fino, excepciones y bitácora. Qué autoriza cada puesto se define en la pestaña Perfiles.",
     proposito: "Gestión de Usuarios dice qué pantallas ve cada uno; aquí se define quién puede autorizar qué proceso (aprobar un 702, liberar una cuarentena, anular un pedido…) mediante perfiles por puesto con alcance por proyecto. La clave con la que se autoriza es personal: cada usuario la crea desde su menú y la recupera por correo.",
     puedes: [
       "Crear y editar perfiles (Gerencia de proyecto, Calidad, Cartera, Coordinador LIP…) y qué procesos autoriza cada uno.",

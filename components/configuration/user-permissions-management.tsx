@@ -931,14 +931,14 @@ export function UserPermissionsManagement() {
                             </div>
                             {faltaScriptPerfiles ? (
                               <p className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-                                Falta correr <code>scripts/247_acceso_perfiles.sql</code> para poder usar perfiles.
+                                Falta correr <code>scripts/249_perfiles_unificados.sql</code> para poder usar perfiles.
                               </p>
                             ) : perfilesCatalogo.length === 0 ? (
                               <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border p-6 text-center">
                                 <LayoutTemplate className="h-8 w-8 text-muted-foreground/40" />
                                 <p className="text-sm font-medium">Todavía no hay perfiles</p>
                                 <p className="max-w-sm text-xs text-muted-foreground">
-                                  Se crean en <strong>Configuración → Perfiles de acceso</strong>. Lo más rápido: «A partir de un
+                                  Se crean en <strong>la pestaña Perfiles</strong>. Lo más rápido: «A partir de un
                                   usuario» con alguien que ya esté bien configurado. Mientras tanto, los módulos y empresas se
                                   marcan a mano en las otras pestañas.
                                 </p>
@@ -986,6 +986,7 @@ export function UserPermissionsManagement() {
                                         <span className="rounded-full bg-muted px-1.5 py-0.5">{p.empresas.length} empresas</span>
                                         <span className="rounded-full bg-muted px-1.5 py-0.5">{p.owners.length} owners</span>
                                         <span className="rounded-full bg-muted px-1.5 py-0.5">{p.permisos.length} módulos</span>
+                                        <span className="rounded-full bg-muted px-1.5 py-0.5">{p.procesos.length} autoriza</span>
                                         <span className="rounded-full bg-muted px-1.5 py-0.5">
                                           {p.usuarios} usuario{p.usuarios === 1 ? "" : "s"}
                                         </span>

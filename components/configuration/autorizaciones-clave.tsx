@@ -131,7 +131,13 @@ const RESULTADO_INTERNO_LABEL: Record<string, string> = {
   fecha_actualizada: "Fecha de transición actualizada",
 }
 
-export default function AutorizacionesClave() {
+/**
+ * `soloClaves`: dentro de la pantalla única (Usuarios · Perfiles · Claves) los
+ * perfiles se editan en su propia pestaña, así que aquí se esconde la de
+ * "Perfiles y procesos" y queda lo que es de la clave: estado, alcance fino,
+ * excepciones, correo, transición y bitácora.
+ */
+export default function AutorizacionesClave({ soloClaves = false }: { soloClaves?: boolean } = {}) {
   const { toast } = useToast()
   // El selector GLOBAL de proyecto (ID) gobierna la pantalla, como en el resto
   // de LIPgo: usuarios del proyecto, alcance por defecto y bitácora.
@@ -180,15 +186,24 @@ export default function AutorizacionesClave() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-            <KeyRound className="h-7 w-7" /> Autorizaciones por clave
+            <KeyRound className="h-7 w-7" /> {soloClaves ? "Claves de autorización" : "Autorizaciones por clave"}
           </h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            <b className="text-foreground">Gestión de Usuarios</b> dice qué pantallas ve cada usuario. <b className="text-foreground">Aquí</b> se
-            define qué <b className="text-foreground">procesos</b> puede <b className="text-foreground">autorizar</b> con su clave personal
-            (aprobar un 702, liberar cuarentena, anular un pedido, cartera, financiera…) y en qué proyectos. Los permisos se dan por{" "}
-            <b className="text-foreground">puesto</b> (perfil) y, si hace falta, con excepciones por persona. Cada usuario crea y recupera su
-            propia clave desde el menú de usuario › “Mi clave de autorización”.
-          </p>
+          {soloClaves ? (
+            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+              Qué <b className="text-foreground">procesos</b> autoriza cada puesto se define en la pestaña{" "}
+              <b className="text-foreground">Perfiles</b>; a quién se le da el perfil, en <b className="text-foreground">Usuarios</b>. Aquí
+              queda lo que es de la <b className="text-foreground">clave personal</b>: su estado, el alcance fino por proyecto, las
+              excepciones por persona, el correo de recuperación, la transición de claves compartidas y la bitácora de quién autorizó qué.
+            </p>
+          ) : (
+            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+              <b className="text-foreground">Gestión de Usuarios</b> dice qué pantallas ve cada usuario. <b className="text-foreground">Aquí</b> se
+              define qué <b className="text-foreground">procesos</b> puede <b className="text-foreground">autorizar</b> con su clave personal
+              (aprobar un 702, liberar cuarentena, anular un pedido, cartera, financiera…) y en qué proyectos. Los permisos se dan por{" "}
+              <b className="text-foreground">puesto</b> (perfil) y, si hace falta, con excepciones por persona. Cada usuario crea y recupera su
+              propia clave desde el menú de usuario › “Mi clave de autorización”.
+            </p>
+          )}
           <p className="mt-2 max-w-3xl text-xs text-muted-foreground">
             <Lock className="mr-1 inline h-3.5 w-3.5" />
             <b className="text-foreground">Lo financiero es propiedad de LIP.</b> Los procesos del grupo “Financiera” solo pueden otorgarse y
@@ -292,9 +307,11 @@ export default function AutorizacionesClave() {
               <TabsTrigger value="usuarios" className="gap-1.5">
                 <Users className="h-4 w-4" /> Usuarios
               </TabsTrigger>
-              <TabsTrigger value="perfiles" className="gap-1.5">
-                <ShieldCheck className="h-4 w-4" /> Perfiles y procesos
-              </TabsTrigger>
+              {!soloClaves && (
+                <TabsTrigger value="perfiles" className="gap-1.5">
+                  <ShieldCheck className="h-4 w-4" /> Perfiles y procesos
+                </TabsTrigger>
+              )}
               <TabsTrigger value="bitacora" className="gap-1.5">
                 <History className="h-4 w-4" /> Bitácora
               </TabsTrigger>
@@ -302,9 +319,11 @@ export default function AutorizacionesClave() {
             <TabsContent value="usuarios" className="mt-4">
               <UsuariosTab data={data} recargar={cargar} empresaId={selectedEmpresaId} nombreProyecto={nombreProyecto} />
             </TabsContent>
-            <TabsContent value="perfiles" className="mt-4">
-              <PerfilesTab data={data} recargar={cargar} />
-            </TabsContent>
+            {!soloClaves && (
+              <TabsContent value="perfiles" className="mt-4">
+                <PerfilesTab data={data} recargar={cargar} />
+              </TabsContent>
+            )}
             <TabsContent value="bitacora" className="mt-4">
               <BitacoraTab data={data} empresaId={selectedEmpresaId} nombreProyecto={nombreProyecto} />
             </TabsContent>

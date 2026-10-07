@@ -86,15 +86,12 @@ const PalletInventoryView = dynamic(() => import("@/components/pallet-inventory-
 const MaterialExplosion = dynamic(() => import("@/components/material-explosion"), { loading: ModuleLoading })
 const MontacargasDia = dynamic(() => import("@/components/inventario/montacargas-dia"), { loading: ModuleLoading })
 const Bitacora = dynamic(() => import("@/components/lip/bitacora"), { loading: ModuleLoading })
-const UserPermissionsManagement = dynamic(() => import("@/components/configuration/user-permissions-management").then((m) => m.UserPermissionsManagement), { loading: ModuleLoading })
+// Seguridad y accesos es UNA pantalla (Usuarios · Perfiles · Claves) desde el
+// 2026-10-07; los tres nombres de modulo viejos abren la misma.
+const SeguridadAccesos = dynamic(() => import("@/components/configuration/seguridad-accesos").then((m) => m.SeguridadAccesos), { loading: ModuleLoading })
 const BitacoraAuditoria = dynamic(() => import("@/components/configuration/bitacora-auditoria"), { loading: ModuleLoading })
 const PlacasDistribucion = dynamic(() => import("@/components/configuration/placas-distribucion"), { loading: ModuleLoading })
 const MuellesEmpresaConfig = dynamic(() => import("@/components/configuration/muelles-empresa"), { loading: ModuleLoading })
-// "Accesos de Usuario" conserva su `name` (es la clave del permiso y de la
-// ruta) pero abre Perfiles de acceso: la grilla usuarios x empresas se retiro
-// porque la asignacion por persona ya vive en Gestion de Usuarios > Accesos.
-const PerfilesAcceso = dynamic(() => import("@/components/configuration/perfiles-acceso").then((m) => m.PerfilesAcceso), { loading: ModuleLoading })
-const AutorizacionesClave = dynamic(() => import("@/components/configuration/autorizaciones-clave"), { loading: ModuleLoading })
 const HeadcountManagement = dynamic(() => import("@/components/headcount-management"), { loading: ModuleLoading })
 const Tolva = dynamic(() => import("@/components/tolva").then((m) => m.Tolva), { loading: ModuleLoading })
 const VerTolva = dynamic(() => import("@/components/ver-tolva"), { loading: ModuleLoading })
@@ -695,17 +692,9 @@ export function MainContent({
             <PermissionGuard moduleName="Explosión de materiales">
               <MaterialExplosion />
             </PermissionGuard>
-          ) : name === "Gestión de Usuarios" ? (
+          ) : name === "Gestión de Usuarios" || name === "Accesos de Usuario" || name === "Autorizaciones por clave" ? (
             <PermissionGuard moduleName="Gestión de Usuarios">
-              <UserPermissionsManagement />
-            </PermissionGuard>
-          ) : name === "Accesos de Usuario" ? (
-            <PermissionGuard moduleName="Accesos de Usuario">
-              <PerfilesAcceso />
-            </PermissionGuard>
-          ) : name === "Autorizaciones por clave" ? (
-            <PermissionGuard moduleName="Autorizaciones por clave">
-              <AutorizacionesClave />
+              <SeguridadAccesos />
             </PermissionGuard>
           ) : name === "Bitácora de Auditoría" ? (
             <PermissionGuard moduleName="Bitácora de Auditoría">

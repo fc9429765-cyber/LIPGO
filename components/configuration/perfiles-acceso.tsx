@@ -4,7 +4,7 @@
 //
 // Un perfil es un paquete con nombre: las empresas que abre, los owners a los
 // que limita Pedidos y los módulos que enciende. Aquí se CREAN y EDITAN; la
-// asignación a cada usuario se hace en Gestión de Usuarios → Accesos.
+// asignación a cada usuario se hace en la pestaña Usuarios.
 //
 // Reemplaza a la grilla "Accesos de Usuario" (usuarios × empresas con
 // checkboxes), que obligaba a repetir ~140 clics por cada persona nueva y no
@@ -43,6 +43,7 @@ import {
   ArrowRight,
   Building2,
   Copy,
+  KeyRound,
   LayoutTemplate,
   Loader2,
   Plus,
@@ -65,6 +66,8 @@ import {
   usuariosParaPlantilla,
 } from "@/lib/acceso-perfiles-actions"
 import type { PerfilAcceso, UsuarioDePerfil } from "@/lib/acceso-perfiles-tipos"
+import { adminListarProcesos } from "@/lib/autorizaciones-actions"
+import type { ProcesoAutorizable } from "@/lib/autorizaciones"
 import { PERMISSION_TREE, filtrarArbol, type PermGroup, type PermItem } from "@/lib/permisos-arbol"
 
 type Form = {
@@ -74,9 +77,11 @@ type Form = {
   empresas: number[]
   owners: string[]
   permisos: string[]
+  /** Procesos que autoriza con clave personal. */
+  procesos: string[]
 }
 
-const FORM_VACIO: Form = { nombre: "", descripcion: "", activo: true, empresas: [], owners: [], permisos: [] }
+const FORM_VACIO: Form = { nombre: "", descripcion: "", activo: true, empresas: [], owners: [], permisos: [], procesos: [] }
 
 function mismoConjunto<T>(a: T[], b: T[]): boolean {
   if (a.length !== b.length) return false
@@ -92,6 +97,7 @@ function formDesde(p: PerfilAcceso): Form {
     empresas: [...p.empresas],
     owners: [...p.owners],
     permisos: [...p.permisos],
+    procesos: [...p.procesos],
   }
 }
 
@@ -104,6 +110,7 @@ export function PerfilesAcceso() {
   const [empresas, setEmpresas] = useState<Empresa[]>([])
   const [owners, setOwners] = useState<Owner[]>([])
   const [usuarios, setUsuarios] = useState<UsuarioDePerfil[]>([])
+  const [procesosCat, setProcesosCat] = useState<ProcesoAutorizable[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
 
@@ -125,12 +132,14 @@ export function PerfilesAcceso() {
 
   const cargar = async () => {
     setLoading(true)
-    const [lista, emp, own, usu] = await Promise.all([
+    const [lista, emp, own, usu, pro] = await Promise.all([
       listarPerfilesAcceso(),
       empresas.length ? Promise.resolve(empresas) : getAllEmpresas(),
       owners.length ? Promise.resolve(owners) : getAllOwners(),
       usuarios.length ? Promise.resolve(usuarios) : usuariosParaPlantilla(),
+      procesosCat.length ? Promise.resolve({ success: true, data: procesosCat }) : adminListarProcesos(),
     ])
+    if (pro.success && pro.data) setProcesosCat(pro.data)
     if (lista.success) {
       setPerfiles(lista.data)
       setUsuariosCubiertos(lista.usuariosCubiertos)
@@ -215,7 +224,8 @@ export function PerfilesAcceso() {
       form.activo !== original.activo ||
       !mismoConjunto(form.empresas, original.empresas) ||
       !mismoConjunto(form.owners, original.owners) ||
-      !mismoConjunto(form.permisos, original.permisos),
+      !mismoConjunto(form.permisos, original.permisos) ||
+      !mismoConjunto(form.procesos, original.procesos),
     [form, original],
   )
 
@@ -238,6 +248,7 @@ export function PerfilesAcceso() {
       empresas: form.empresas,
       owners: form.owners,
       permisos: form.permisos,
+      procesos: form.procesos,
     })
     setSaving(false)
     if (!r.success) {
@@ -250,7 +261,7 @@ export function PerfilesAcceso() {
       description:
         rc && rc.usuarios > 0
           ? `Se recalculó el acceso de ${rc.usuarios} usuario(s) que lo tienen.${rc.errores.length ? ` ${rc.errores.length} con error.` : ""}`
-          : "Todavía no lo tiene ningún usuario. Asígnalo desde Gestión de Usuarios → Accesos.",
+          : "Todavía no lo tiene ningún usuario. Asígnalo desde la pestaña Usuarios.",
     })
     await cargar()
     if (r.id) {
@@ -312,7 +323,7 @@ export function PerfilesAcceso() {
     }
   }
 
-  const togglear = <T,>(campo: "empresas" | "owners" | "permisos", valor: T, on: boolean) =>
+  const togglear = <T,>(campo: "empresas" | "owners" | "permisos" | "procesos", valor: T, on: boolean) =>
     setForm((f) => {
       const actual = f[campo] as unknown as T[]
       const siguiente = on ? [...new Set([...actual, valor])] : actual.filter((x) => x !== valor)
@@ -360,7 +371,8 @@ export function PerfilesAcceso() {
             <div>
               <h2 className="text-2xl font-bold tracking-tight text-foreground">Perfiles de acceso</h2>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Un perfil junta empresas, owners y módulos. Se asigna a un usuario y queda listo para trabajar.
+                El puesto: qué empresas, owners y módulos abre, y qué procesos autoriza con su clave. Se asigna a
+                una persona y queda lista para trabajar.
               </p>
             </div>
           </div>
@@ -409,7 +421,7 @@ export function PerfilesAcceso() {
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
             Las tablas de perfiles no existen todavía. Hay que correr{" "}
-            <code className="rounded bg-amber-100 px-1">scripts/247_acceso_perfiles.sql</code> en la base de datos.
+            <code className="rounded bg-amber-100 px-1">scripts/249_perfiles_unificados.sql</code> en la base de datos.
           </p>
         </div>
       )}
@@ -487,6 +499,7 @@ export function PerfilesAcceso() {
                         <span className="rounded-full bg-muted px-1.5 py-0.5">{p.empresas.length} empresas</span>
                         <span className="rounded-full bg-muted px-1.5 py-0.5">{p.owners.length} owners</span>
                         <span className="rounded-full bg-muted px-1.5 py-0.5">{p.permisos.length} módulos</span>
+                        <span className="rounded-full bg-muted px-1.5 py-0.5">{p.procesos.length} autoriza</span>
                         <span
                           className={`rounded-full px-1.5 py-0.5 ${
                             p.usuarios > 0 ? "bg-primary/15 text-primary font-medium" : "bg-muted"
@@ -512,8 +525,8 @@ export function PerfilesAcceso() {
               </div>
               <h3 className="text-lg font-semibold text-foreground">Selecciona un perfil</h3>
               <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-                Elige uno de la lista para ver qué trae y quién lo tiene, o crea uno nuevo. La asignación a cada
-                persona se hace en <strong>Gestión de Usuarios → Accesos</strong>.
+                Elige uno de la lista para ver qué trae y quién lo tiene, o crea uno nuevo. A cada persona se le
+                asigna desde <strong>la pestaña Usuarios</strong>, o desde la pestaña Usuarios del propio perfil.
               </p>
             </div>
           ) : (
@@ -573,7 +586,7 @@ export function PerfilesAcceso() {
 
               <CardContent className="pt-5">
                 <Tabs defaultValue="empresas" className="w-full">
-                  <TabsList className="grid w-full grid-cols-4 h-11 p-1 bg-muted/60">
+                  <TabsList className="grid w-full grid-cols-5 h-11 p-1 bg-muted/60">
                     <TabsTrigger value="empresas" className="gap-1.5 data-[state=active]:shadow-sm">
                       <Building2 className="h-4 w-4" />
                       <span className="hidden sm:inline">Empresas</span>
@@ -588,6 +601,11 @@ export function PerfilesAcceso() {
                       <ShieldCheck className="h-4 w-4" />
                       <span className="hidden sm:inline">Módulos</span>
                       <Contador n={form.permisos.length} />
+                    </TabsTrigger>
+                    <TabsTrigger value="autorizaciones" className="gap-1.5 data-[state=active]:shadow-sm">
+                      <KeyRound className="h-4 w-4" />
+                      <span className="hidden sm:inline">Autoriza</span>
+                      <Contador n={form.procesos.length} />
                     </TabsTrigger>
                     <TabsTrigger value="usuarios" className="gap-1.5 data-[state=active]:shadow-sm">
                       <Users className="h-4 w-4" />
@@ -645,12 +663,94 @@ export function PerfilesAcceso() {
                     />
                   </TabsContent>
 
+                  {/* ===== Autorizaciones por clave ===== */}
+                  <TabsContent value="autorizaciones" className="mt-4 space-y-3">
+                    <Nota icon={KeyRound}>
+                      <strong>Qué puede autorizar con su clave personal</strong> quien tenga este perfil: aprobar un ajuste,
+                      liberar una cuarentena, anular un pedido… El alcance por proyecto sigue a las empresas del perfil; si
+                      el perfil no define empresas, vale en todos. Los procesos del grupo Financiera solo se pueden dar a
+                      usuarios con módulos de Gestión Financiera: el servidor lo rechaza si no.
+                    </Nota>
+                    {procesosCat.length === 0 ? (
+                      <p className="py-6 text-center text-xs text-muted-foreground">No hay procesos autorizables cargados.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {Array.from(new Set(procesosCat.map((p) => p.grupo))).map((grupo) => {
+                          const del = procesosCat.filter((p) => p.grupo === grupo)
+                          const marcados = del.filter((p) => form.procesos.includes(p.codigo)).length
+                          return (
+                            <div key={grupo} className="rounded-xl border border-border/60 bg-card p-2.5">
+                              <div className="mb-1.5 flex items-center justify-between">
+                                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{grupo}</p>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] tabular-nums text-muted-foreground">
+                                    {marcados}/{del.length}
+                                  </span>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-1.5 text-[10px]"
+                                    onClick={() =>
+                                      setForm((f) => ({
+                                        ...f,
+                                        procesos: Array.from(new Set([...f.procesos, ...del.map((p) => p.codigo)])),
+                                      }))
+                                    }
+                                  >
+                                    Todo
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-1.5 text-[10px]"
+                                    onClick={() =>
+                                      setForm((f) => ({ ...f, procesos: f.procesos.filter((c) => !del.some((p) => p.codigo === c)) }))
+                                    }
+                                  >
+                                    Nada
+                                  </Button>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-1 gap-1 md:grid-cols-2">
+                                {del.map((p) => {
+                                  const checked = form.procesos.includes(p.codigo)
+                                  return (
+                                    <label
+                                      key={p.codigo}
+                                      className={`flex items-start gap-2 rounded p-1.5 text-sm cursor-pointer hover:bg-accent/50 ${
+                                        checked ? "bg-primary/5" : ""
+                                      }`}
+                                    >
+                                      <Checkbox
+                                        className="mt-0.5"
+                                        checked={checked}
+                                        onCheckedChange={(c) => togglear("procesos", p.codigo, !!c)}
+                                      />
+                                      <span className="min-w-0">
+                                        <span className={`block leading-tight ${checked ? "font-medium" : ""}`}>{p.nombre}</span>
+                                        <span className="block text-[10px] text-muted-foreground">
+                                          <span className="font-mono">{p.codigo}</span>
+                                          {p.descripcion ? ` · ${p.descripcion}` : ""}
+                                          {!p.con_alcance ? " · sin alcance por proyecto" : ""}
+                                        </span>
+                                      </span>
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </TabsContent>
+
                   {/* ===== Usuarios ===== */}
                   <TabsContent value="usuarios" className="mt-4 space-y-3">
                     <Nota icon={Users}>
                       Marca quién tiene este perfil. Al aplicar, a cada persona que entra o sale se le recalcula el
                       acceso de inmediato. Lo mismo se puede hacer desde{" "}
-                      <strong>Gestión de Usuarios → Accesos</strong>, mirando a la persona.
+                      <strong>la pestaña Usuarios</strong>, mirando a la persona.
                     </Nota>
                     {esNuevo ? (
                       <p className="py-6 text-center text-xs text-muted-foreground">Guarda el perfil para poder asignarlo.</p>

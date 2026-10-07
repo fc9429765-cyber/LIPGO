@@ -694,11 +694,13 @@ export const groups: Group[] = [
       {
         title: "Seguridad y accesos",
         modules: [
-          { name: "Gestión de Usuarios", icon: Users },
-          // `name` se conserva: es la clave del permiso (accesos_usuario) y de la
-          // ruta. Lo que cambia es lo que abre: Perfiles de acceso.
-          { name: "Accesos de Usuario", icon: Lock, label: "Perfiles de acceso" },
-          { name: "Autorizaciones por clave", icon: KeyRound },
+          // UN SOLO MODULO (2026-10-07): usuarios, perfiles (empresas + owners +
+          // modulos + procesos que autoriza) y claves, en una pantalla con tres
+          // pestañas. `name` se conserva porque es la clave del permiso
+          // (gestion_usuarios) y de la ruta. "Accesos de Usuario" y
+          // "Autorizaciones por clave" salen del menu pero siguen ruteando a la
+          // misma pantalla, para que ningun enlace guardado se rompa.
+          { name: "Gestión de Usuarios", icon: KeyRound, label: "Autorizaciones" },
         ],
       },
       {

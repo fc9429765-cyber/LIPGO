@@ -1712,23 +1712,18 @@ Maestro de vendedores, resuelto por la tabla genérica sobre `vendedores`.
 - **Escribe en:** `vendedores`
 - **Lee de:** —
 
-#### Gestión de Usuarios
+#### Autorizaciones (antes Gestión de Usuarios + Accesos de Usuario + Autorizaciones por clave)
 
-Alta y mantenimiento de usuarios, con sus permisos de módulo y los proyectos a los que tiene acceso. La pestaña **Perfil** (la primera, por defecto) muestra el acceso efectivo de la persona y le asigna **perfiles de acceso** como tarjetas; Módulos y Empresas quedan como ajuste fino, con una etiqueta en cada casilla que venga de un perfil. Al aplicar perfiles (ver el módulo siguiente), el servidor recalcula y escribe las empresas, owners y módulos del usuario; lo marcado a mano se conserva. También permite copiar los permisos de otro usuario como punto de partida.
+Desde el 2026-10-07 es **una sola pantalla** con tres pestañas y **un solo perfil** (`autorizacion_perfiles`, script 249), que es el puesto: las empresas, owners y módulos que abre, y los procesos que autoriza con clave personal.
 
-- **Archivo:** `components/configuration/user-permissions-management.tsx`
-- **Permiso:** `gestion_usuarios`
-- **Escribe en:** `perfil_acceso_empresas`, `perfil_acceso_owners`, `permisos_usuarios`, `profiles`, `acceso_perfil_usuarios`, `acceso_perfil_materializado`
-- **Lee de:** `empresas_permisos`, `owners`, `acceso_perfiles`
+- **Usuarios** (`components/configuration/user-permissions-management.tsx`): cada persona. Su pestaña Perfil muestra el acceso efectivo (cuánto viene de perfiles y cuánto a mano) y los perfiles como tarjetas para marcar y aplicar; Módulos y Empresas y owners quedan como ajuste fino, con etiqueta en lo que trae un perfil. Al aplicar, el servidor recalcula y escribe el acceso efectivo; lo marcado a mano se conserva.
+- **Perfiles** (`components/configuration/perfiles-acceso.tsx`): el puesto. Se crean, duplican, desactivan y se arrancan "a partir de un usuario". Pestañas Empresas, Owners, Módulos, Autoriza (procesos) y Usuarios (quién lo tiene). Al editar un perfil se recalcula a todos los que lo tienen. El alcance de la clave sigue a las empresas del perfil cuando las define.
+- **Claves** (`components/configuration/autorizaciones-clave.tsx` con `soloClaves`): la clave personal de cada uno, alcance fino, excepciones, correo de recuperación, transición y bitácora.
 
-#### Perfiles de acceso (antes "Accesos de Usuario")
-
-Plantillas con nombre que juntan empresas, owners y permisos de módulo ("Coordinador Indupan"). Aquí se crean, editan, duplican y desactivan; la asignación a cada persona se hace en Gestión de Usuarios. Un perfil se puede arrancar a partir del acceso que un usuario ya tiene. Al editar un perfil se recalcula el acceso de todos los usuarios que lo tienen. Reemplazó a la grilla usuarios × empresas (2026-10-07); conserva el `name` y el permiso de aquella.
-
-- **Archivo:** `components/configuration/perfiles-acceso.tsx`
-- **Permiso:** `accesos_usuario`
-- **Escribe en:** `acceso_perfiles`, `acceso_perfil_empresas`, `acceso_perfil_owners`, `acceso_perfil_permisos` y, vía recálculo, `perfil_acceso_empresas`, `perfil_acceso_owners`, `permisos_usuarios`, `acceso_perfil_materializado`
-- **Lee de:** `empresas_permisos`, `owners`, `profiles`, `acceso_perfil_usuarios`
+- **Archivo contenedor:** `components/configuration/seguridad-accesos.tsx`
+- **Permiso:** `gestion_usuarios` (las acciones de autorizaciones aceptan también `autorizaciones_clave`)
+- **Escribe en:** `autorizacion_perfiles`, `autorizacion_perfil_procesos`, `autorizacion_usuario_perfiles`, `acceso_perfil_empresas`, `acceso_perfil_owners`, `acceso_perfil_permisos`, `acceso_perfil_materializado` y, vía recálculo, `perfil_acceso_empresas`, `perfil_acceso_owners`, `permisos_usuarios`; además `profiles`, `autorizacion_claves`, `autorizacion_usuario_procesos`, `autorizacion_log`
+- **Lee de:** `empresas_permisos`, `owners`, `autorizacion_procesos`, `profiles`
 
 #### Bitácora de Auditoría
 
