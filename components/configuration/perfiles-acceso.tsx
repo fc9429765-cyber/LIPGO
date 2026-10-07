@@ -56,6 +56,7 @@ import {
 } from "lucide-react"
 import { getAllEmpresas, getAllOwners, type Empresa, type Owner } from "@/lib/user-access-actions"
 import {
+  asignarUsuariosAPerfil,
   eliminarPerfilAcceso,
   guardarPerfilAcceso,
   listarPerfilesAcceso,
@@ -116,6 +117,12 @@ export function PerfilesAcceso() {
   const [deleting, setDeleting] = useState(false)
   const [desdeUsuario, setDesdeUsuario] = useState("")
 
+  // Quién tiene el perfil: copia de trabajo para marcar y desmarcar, y
+  // aplicar aparte del guardado del perfil (asignar recalcula de inmediato).
+  const [asignadosSel, setAsignadosSel] = useState<string[]>([])
+  const [asigSearch, setAsigSearch] = useState("")
+  const [savingAsig, setSavingAsig] = useState(false)
+
   const cargar = async () => {
     setLoading(true)
     const [lista, emp, own, usu] = await Promise.all([
@@ -147,7 +154,10 @@ export function PerfilesAcceso() {
     const f = formDesde(p)
     setForm(f)
     setOriginal(f)
-    setAsignados(await usuariosDePerfil(p.id))
+    const a = await usuariosDePerfil(p.id)
+    setAsignados(a)
+    setAsignadosSel(a.map((u) => u.id))
+    setAsigSearch("")
   }
 
   const nuevo = () => {
@@ -155,6 +165,7 @@ export function PerfilesAcceso() {
     setForm(FORM_VACIO)
     setOriginal(FORM_VACIO)
     setAsignados([])
+    setAsignadosSel([])
     setDesdeUsuario("")
   }
 
@@ -181,6 +192,7 @@ export function PerfilesAcceso() {
     setForm(f)
     setOriginal(FORM_VACIO)
     setAsignados([])
+    setAsignadosSel([])
     toast({
       title: "Plantilla cargada",
       description: `${r.data.empresas.length} empresas, ${r.data.owners.length} owners y ${r.data.permisos.length} módulos de ${u?.usuario ?? "ese usuario"}. Revisa, ponle nombre y guarda.`,
@@ -193,6 +205,7 @@ export function PerfilesAcceso() {
     setForm(f)
     setOriginal(FORM_VACIO)
     setAsignados([])
+    setAsignadosSel([])
   }
 
   const dirty = useMemo(
@@ -204,6 +217,11 @@ export function PerfilesAcceso() {
       !mismoConjunto(form.owners, original.owners) ||
       !mismoConjunto(form.permisos, original.permisos),
     [form, original],
+  )
+
+  const asigDirty = useMemo(
+    () => !mismoConjunto(asignadosSel, asignados.map((u) => u.id)),
+    [asignadosSel, asignados],
   )
 
   const guardar = async () => {
@@ -261,6 +279,37 @@ export function PerfilesAcceso() {
     })
     setSel(null)
     await cargar()
+  }
+
+  /*
+   * Asigna o quita este perfil a los usuarios marcados y recalcula el acceso
+   * de cada uno de inmediato. Por eso exige que el perfil esté guardado: si el
+   * formulario tiene cambios sin guardar, lo que se les aplicaría sería la
+   * versión vieja del perfil.
+   */
+  const aplicarUsuarios = async () => {
+    if (sel === "nuevo" || sel === null) return
+    setSavingAsig(true)
+    const r = await asignarUsuariosAPerfil(sel, asignadosSel)
+    setSavingAsig(false)
+    if (!r.success) {
+      toast({ title: "No se pudo asignar", description: r.message, variant: "destructive" })
+      return
+    }
+    toast({
+      title: "Usuarios actualizados",
+      description: `${r.agregados} asignado(s), ${r.retirados} retirado(s).${
+        r.errores.length ? ` ${r.errores.length} con error al recalcular.` : ""
+      }`,
+    })
+    const a = await usuariosDePerfil(sel)
+    setAsignados(a)
+    setAsignadosSel(a.map((u) => u.id))
+    const lista = await listarPerfilesAcceso()
+    if (lista.success) {
+      setPerfiles(lista.data)
+      setUsuariosCubiertos(lista.usuariosCubiertos)
+    }
   }
 
   const togglear = <T,>(campo: "empresas" | "owners" | "permisos", valor: T, on: boolean) =>
@@ -543,7 +592,7 @@ export function PerfilesAcceso() {
                     <TabsTrigger value="usuarios" className="gap-1.5 data-[state=active]:shadow-sm">
                       <Users className="h-4 w-4" />
                       <span className="hidden sm:inline">Usuarios</span>
-                      <Contador n={asignados.length} />
+                      <Contador n={asignadosSel.length} />
                     </TabsTrigger>
                   </TabsList>
 
@@ -599,25 +648,80 @@ export function PerfilesAcceso() {
                   {/* ===== Usuarios ===== */}
                   <TabsContent value="usuarios" className="mt-4 space-y-3">
                     <Nota icon={Users}>
-                      Quién tiene este perfil hoy. Para asignarlo o quitárselo a alguien, ve a{" "}
-                      <strong>Gestión de Usuarios → Accesos</strong>: así cada decisión sobre una persona se toma
-                      mirando a esa persona.
+                      Marca quién tiene este perfil. Al aplicar, a cada persona que entra o sale se le recalcula el
+                      acceso de inmediato. Lo mismo se puede hacer desde{" "}
+                      <strong>Gestión de Usuarios → Accesos</strong>, mirando a la persona.
                     </Nota>
                     {esNuevo ? (
                       <p className="py-6 text-center text-xs text-muted-foreground">Guarda el perfil para poder asignarlo.</p>
-                    ) : asignados.length === 0 ? (
-                      <p className="py-6 text-center text-xs text-muted-foreground">Nadie tiene este perfil todavía.</p>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 rounded-xl border border-border/60 bg-card p-2.5">
-                        {asignados.map((u) => (
-                          <div key={u.id} className="flex items-center gap-2 p-1.5 text-sm">
-                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-[11px] font-bold text-primary">
-                              {u.usuario.slice(0, 2).toUpperCase()}
-                            </span>
-                            <span className="truncate">{u.usuario}</span>
+                      <>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="relative flex-1 min-w-[180px]">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              placeholder="Buscar usuario…"
+                              value={asigSearch}
+                              onChange={(e) => setAsigSearch(e.target.value)}
+                              className="pl-8 h-9"
+                            />
                           </div>
-                        ))}
-                      </div>
+                          <span className="text-xs text-muted-foreground tabular-nums">
+                            {asignadosSel.length} de {usuarios.length}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 rounded-xl border border-border/60 bg-card p-2.5 max-h-[380px] overflow-y-auto">
+                          {usuarios
+                            .filter((u) => !asigSearch.trim() || u.usuario.toLowerCase().includes(asigSearch.trim().toLowerCase()))
+                            .map((u) => {
+                              const checked = asignadosSel.includes(u.id)
+                              return (
+                                <label
+                                  key={u.id}
+                                  className={`flex items-center gap-2 p-1.5 rounded text-sm cursor-pointer hover:bg-accent/50 ${
+                                    checked ? "bg-primary/5" : ""
+                                  }`}
+                                >
+                                  <Checkbox
+                                    checked={checked}
+                                    onCheckedChange={(c) =>
+                                      setAsignadosSel((prev) => (c ? [...prev, u.id] : prev.filter((id) => id !== u.id)))
+                                    }
+                                  />
+                                  <span
+                                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                                      checked ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
+                                    }`}
+                                  >
+                                    {u.usuario.slice(0, 2).toUpperCase()}
+                                  </span>
+                                  <span className="truncate">{u.usuario}</span>
+                                </label>
+                              )
+                            })}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">
+                            {dirty
+                              ? "Guarda primero los cambios del perfil"
+                              : asigDirty
+                                ? "Cambios de usuarios sin aplicar"
+                                : asignados.length
+                                  ? `${asignados.length} usuario(s) con este perfil`
+                                  : "Nadie tiene este perfil todavía"}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant={asigDirty && !dirty ? "default" : "outline"}
+                            onClick={aplicarUsuarios}
+                            disabled={savingAsig || !asigDirty || dirty}
+                            className="gap-2 h-8"
+                          >
+                            {savingAsig ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Users className="h-3.5 w-3.5" />}
+                            Aplicar a usuarios
+                          </Button>
+                        </div>
+                      </>
                     )}
                   </TabsContent>
                 </Tabs>

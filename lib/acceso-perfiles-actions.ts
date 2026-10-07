@@ -481,3 +481,61 @@ export async function asignarPerfilesUsuario(
     return { success: false, message: mensajeDe(e) }
   }
 }
+
+/**
+ * El otro sentido de `asignarPerfilesUsuario`: deja el PERFIL exactamente con
+ * los usuarios indicados, y recalcula a cada uno que entró o salió.
+ *
+ * Existe porque la asignación se decide desde dos lugares distintos y los dos
+ * son legítimos: mirando a la persona ("¿qué perfiles tiene Juan?") o mirando
+ * al perfil ("¿quiénes son coordinadores?"). Obligar a ir usuario por usuario
+ * para dar de alta un perfil nuevo a diez personas sería repetir el problema
+ * que los perfiles vinieron a resolver.
+ */
+export async function asignarUsuariosAPerfil(
+  perfilId: number,
+  profileIds: string[],
+): Promise<{ success: boolean; message?: string; agregados: number; retirados: number; errores: string[] }> {
+  const vacio = { agregados: 0, retirados: 0, errores: [] as string[] }
+  const motivo = await exigirAdministradorUsuarios("acceso-perfiles.asignar-usuarios")
+  if (motivo) return { success: false, message: motivo, ...vacio }
+  if (!perfilId) return { success: false, message: "Perfil no especificado.", ...vacio }
+  try {
+    const sb: any = await getSupabaseAdmin()
+    const usuario = await getCurrentUsuarioForInsert().catch(() => null)
+
+    const nuevos = new Set((profileIds ?? []).map((x) => String(x ?? "").trim()).filter(Boolean))
+    const { data: cur, error } = await sb.from("acceso_perfil_usuarios").select("profile_id").eq("perfil_id", perfilId)
+    if (error) throw error
+    const actuales = new Set<string>((cur ?? []).map((r: any) => String(r.profile_id)))
+
+    const agregar = [...nuevos].filter((id) => !actuales.has(id))
+    const quitar = [...actuales].filter((id) => !nuevos.has(id))
+
+    if (quitar.length) {
+      const { error: e } = await sb
+        .from("acceso_perfil_usuarios")
+        .delete()
+        .eq("perfil_id", perfilId)
+        .in("profile_id", quitar)
+      if (e) throw e
+    }
+    if (agregar.length) {
+      const { error: e } = await sb
+        .from("acceso_perfil_usuarios")
+        .insert(agregar.map((profile_id) => ({ perfil_id: perfilId, profile_id, asignado_por: usuario ?? null })))
+      if (e) throw e
+    }
+
+    // Solo se recalcula a quien cambió: los demás ya están al día.
+    const errores: string[] = []
+    for (const id of [...agregar, ...quitar]) {
+      const r = await recalcularAccesoUsuario(id)
+      if (!r.success) errores.push(`${id}: ${r.message}`)
+    }
+    return { success: true, agregados: agregar.length, retirados: quitar.length, errores }
+  } catch (e: any) {
+    console.error("[acceso-perfiles] asignar usuarios:", e?.message ?? e)
+    return { success: false, message: mensajeDe(e), ...vacio }
+  }
+}
