@@ -41,6 +41,10 @@ jobs:
         run: pnpm exec tsc --noEmit
       - name: Guías de aprendizaje
         run: pnpm run check:aprendizaje
+      # Avisa si alguien creó una tabla y no regeneró el diccionario, o si una tabla
+      # nueva llegó sin descripción. No necesita base de datos: lee el JSON versionado.
+      - name: Diccionario de datos
+        run: pnpm run check:diccionario
       - name: Pruebas
         run: pnpm test
       - name: Build de producción
