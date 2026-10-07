@@ -23,6 +23,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/components/auth-provider"
 import { getUserPermissions } from "@/lib/permissions-actions"
 import BotonFacturarSiigo from "@/components/facturacion/boton-facturar-siigo"
+import FacturarSiigoPanel from "@/components/facturacion/facturar-siigo-panel"
 import { CORTE_CICLO_SIIGO } from "@/lib/ciclo-facturacion-shared"
 import { getValoresNetosOrden } from "@/lib/facturacion-control-actions"
 import {
@@ -57,7 +58,7 @@ import { getAccessibleEmpresesFromPermisos } from "@/lib/orders-actions"
 import { AdjuntosUploader } from "@/components/ciclo-facturacion/adjuntos-uploader"
 import { SoporteAnexo } from "@/components/cuadro-control-facturacion"
 import type { SoporteLinea } from "@/lib/facturacion-control-actions"
-import { AlertTriangle, Check, ChevronDown, ChevronUp, Clock, FileClock, Inbox, Loader2, Receipt, RefreshCw, Settings2, Wallet, X } from "lucide-react"
+import { AlertTriangle, Check, ChevronDown, ChevronUp, Clock, FileClock, FileText, Inbox, Loader2, Receipt, RefreshCw, Settings2, Wallet, X } from "lucide-react"
 
 const money = (v: number) => `$${Math.round(v).toLocaleString("es-CO")}`
 
@@ -196,7 +197,7 @@ export default function CicloFacturacion() {
   // MODIFIQUE el paso del otro rol, y eso ya lo bloquea `necesitaMiAccion`
   // más abajo (los botones de acción solo aparecen para quien tiene el
   // permiso de ESE paso), sin importar qué pestaña esté mirando.
-  type Vista = "todas" | "jefe" | "coordinador" | "cartera" | "contado"
+  type Vista = "todas" | "jefe" | "coordinador" | "cartera" | "contado" | "facturar"
   const [vista, setVista] = useState<Vista>("todas")
   useEffect(() => {
     if (permisos.jefe && !permisos.coordinador) setVista("jefe")
@@ -360,9 +361,16 @@ export default function CicloFacturacion() {
                   <Receipt className="h-3.5 w-3.5" /> Pagos de Contado
                 </TabsTrigger>
               )}
+              {permisos.jefe && (
+                <TabsTrigger value="facturar" className="gap-1.5 text-xs">
+                  <FileText className="h-3.5 w-3.5" /> Facturar a SIIGO
+                </TabsTrigger>
+              )}
             </TabsList>
           </Tabs>
 
+          {/* La pestaña Facturar a SIIGO trae su propio período y filtros. */}
+          {vista !== "facturar" && (
           <div className="space-y-2 rounded-lg border bg-muted/30 p-2.5">
             <div className="flex flex-wrap items-end gap-2">
               <div className="flex flex-col gap-1">
@@ -439,8 +447,11 @@ export default function CicloFacturacion() {
               </div>
             )}
           </div>
+          )}
 
-          {vista === "contado" ? (
+          {vista === "facturar" ? (
+            <FacturarSiigoPanel empresas={empresas} />
+          ) : vista === "contado" ? (
             <PagosContadoPanel empresaId={filtros.empresaId} periodoDesde={filtros.periodoDesde} periodoHasta={filtros.periodoHasta} />
           ) : loading ? (
             <div className="py-8 text-center text-xs text-muted-foreground">Cargando…</div>
@@ -1458,6 +1469,8 @@ interface OrdenContado {
   estadofactura: string | null
   /** La API ya lo devolvía; faltaba declararlo para poder saber si ya se facturó. */
   facturasiigo?: string | null
+  /** Para calcular el neto: la tarifa depende de la empresa de cada orden. */
+  idempresa?: number | null
 }
 
 function comprobanteUrls(raw: string | null): string[] {
@@ -1565,20 +1578,29 @@ function PagosContadoPanel({
    * El valor neto se pide DESPUES de tener las ordenes, igual que en Solicitar
    * Facturas: solo el de las ordenes ya cargadas, no el del historial entero.
    *
-   * Necesita `empresaId` porque la tarifa depende de la empresa. Sin empresa
-   * seleccionada no se puede calcular, y la pantalla cae de vuelta a
-   * `valorpago`.
+   * Se calcula POR EMPRESA DE CADA ORDEN, no por el filtro del modulo: la
+   * tarifa depende de la empresa, y el filtro arranca en "Todos los
+   * proyectos". Con el filtro vacio antes no se calculaba nada y toda la
+   * pestaña salia en $0 (reportado 2026-10-07).
    */
   useEffect(() => {
-    if (!empresaId || ordenes.length === 0) {
+    if (ordenes.length === 0) {
       setValoresNetos({})
       return
     }
     let cancelado = false
-    const nums = ordenes.map((o) => o.ordendecargue).filter(Boolean)
-    getValoresNetosOrden(empresaId, nums)
-      .then((r) => {
-        if (!cancelado && r.success) setValoresNetos(r.data)
+    const porEmpresa = new Map<number, string[]>()
+    for (const o of ordenes) {
+      const e = Number(o.idempresa ?? empresaId ?? 0)
+      if (!e || !o.ordendecargue) continue
+      porEmpresa.set(e, [...(porEmpresa.get(e) ?? []), o.ordendecargue])
+    }
+    Promise.all(Array.from(porEmpresa.entries()).map(([e, nums]) => getValoresNetosOrden(e, nums)))
+      .then((rs) => {
+        if (cancelado) return
+        const m: Record<string, number> = {}
+        for (const r of rs) if (r.success) Object.assign(m, r.data)
+        setValoresNetos(m)
       })
       .catch(() => {})
     return () => {

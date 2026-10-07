@@ -1027,3 +1027,216 @@ export async function emitirFacturaPrefactura(
     return { success: false, message: e?.message || "Falló la emisión." }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Emisión de una AGRUPACIÓN de órdenes (Facturar a SIIGO · crédito)
+// ---------------------------------------------------------------------------
+
+/**
+ * ¿Se pueden facturar estas órdenes JUNTAS, en un solo documento?
+ *
+ * Estricto a propósito: basta una que no cumpla para que no se emita ninguna.
+ * La pantalla manda solo las que ya pasaron el filtro, así que un rechazo aquí
+ * significa que algo cambió entre mirar y pulsar --y ese es exactamente el
+ * momento de parar, no de emitir "las que sí".
+ */
+export async function puedeFacturarAgrupacion(ordenIds: number[]): Promise<Verificacion> {
+  if (!(await permitido())) return { puede: false, motivo: "Sin permiso." }
+  const ids = Array.from(new Set((ordenIds ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0)))
+  if (!ids.length) return { puede: false, motivo: "No hay órdenes para facturar." }
+  const fallas: string[] = []
+  for (const id of ids) {
+    const v = await puedeFacturarOrden(id)
+    if (!v.puede) fallas.push(`#${id}: ${v.motivo}`)
+  }
+  if (fallas.length) {
+    return {
+      puede: false,
+      motivo: `${fallas.length} de ${ids.length} no se pueden facturar. ${fallas.slice(0, 3).join(" · ")}${fallas.length > 3 ? " …" : ""}`,
+    }
+  }
+  return { puede: true }
+}
+
+/**
+ * Emite UNA factura por varias órdenes: una línea por orden, con el mismo
+ * valor que cada una muestra en pantalla.
+ *
+ * Es la factura de crédito de un período: la agrupación por proyecto y owner
+ * que antes se hacía en el Ciclo, pero decidida desde la pestaña Facturar a
+ * SIIGO con el período que el usuario eligió. La bitácora guarda TODAS las
+ * órdenes (`ordenes bigint[]` nació para esto) y cada una queda marcada con el
+ * comprobante.
+ *
+ * NUNCA LANZA: un fallo deja rastro en la bitácora.
+ */
+export async function emitirFacturaAgrupacion(
+  ordenIds: number[],
+  opciones?: { clienteIdentificacion?: string; owner?: string; periodo?: string },
+): Promise<ResultadoEmision> {
+  if (!(await permitido())) return { success: false, message: "No tienes permiso para emitir." }
+
+  const sb: any = await getSupabaseAdmin()
+  const usuario = await getCurrentUsuarioForInsert().catch(() => null)
+  const ids = Array.from(new Set((ordenIds ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0)))
+
+  try {
+    // --- 1) ¿Se puede? -----------------------------------------------------
+    const v = await puedeFacturarAgrupacion(ids)
+    if (!v.puede) return { success: false, message: v.motivo }
+
+    // --- 2) La configuración -----------------------------------------------
+    const cfg = await getConfigEmision()
+    if (!cfg.success || !cfg.data) return { success: false, message: cfg.message ?? "Falta configurar la emisión." }
+    if (!cfg.data.completa) {
+      return { success: false, message: `Falta configurar: ${cfg.data.faltan.join(", ")}. Se hace en la pestaña de emisión.` }
+    }
+
+    // --- 3) Las órdenes ----------------------------------------------------
+    const { data: ordenes } = await sb
+      .from("cabeceraoc")
+      .select("id, ordendecargue, cliente, valorpago, idempresa, fechacargue")
+      .in("id", ids)
+    if (!ordenes || ordenes.length !== ids.length) {
+      return { success: false, message: "No se encontraron todas las órdenes de la agrupación." }
+    }
+
+    // --- 4) A quién se le factura ------------------------------------------
+    /*
+     * El NIT viene del puente owner→cliente (el owner de la agrupación) o se
+     * elige en el diálogo. Nunca se adivina a partir de texto libre:
+     * facturarle a quien no era es el error más caro.
+     */
+    let identificacion = opciones?.clienteIdentificacion?.trim()
+    const owner = String(opciones?.owner ?? "").trim()
+    if (!identificacion && owner) {
+      const { data: puente } = await sb
+        .from("siigo_owner_cliente")
+        .select("cliente_identificacion")
+        .eq("owner", owner)
+        .eq("activo", true)
+        .maybeSingle()
+      identificacion = puente?.cliente_identificacion
+    }
+    if (!identificacion) {
+      const clientes = Array.from(new Set(ordenes.map((o: any) => String(o.cliente ?? "").trim()).filter(Boolean)))
+      if (clientes.length === 1) {
+        const { data: puente } = await sb
+          .from("siigo_owner_cliente")
+          .select("cliente_identificacion")
+          .eq("owner", clientes[0])
+          .eq("activo", true)
+          .maybeSingle()
+        identificacion = puente?.cliente_identificacion
+      }
+    }
+    if (!identificacion) {
+      return {
+        success: false,
+        message: `No se sabe a qué tercero de Siigo facturarle "${owner || "esta agrupación"}". Elígelo en el diálogo o configura la correspondencia.`,
+      }
+    }
+    const { data: cliente } = await sb
+      .from("siigo_clientes")
+      .select("identificacion, nombre, activo")
+      .eq("identificacion", identificacion)
+      .maybeSingle()
+    if (!cliente) return { success: false, message: `El tercero ${identificacion} no está entre los clientes sincronizados de Siigo.` }
+    if (cliente.activo === false) return { success: false, message: `El tercero ${identificacion} está inactivo en Siigo.` }
+
+    // --- 5) Las líneas: una por orden ---------------------------------------
+    const items: ItemFactura[] = []
+    for (const o of ordenes) {
+      const valor = await valorAFacturar(o)
+      // Una línea en cero dentro de un documento oficial es tan irreversible
+      // como una factura en cero: se para aquí.
+      if (valor <= 0) return { success: false, message: `La orden ${o.ordendecargue ?? o.id} no tiene valor a facturar.` }
+      items.push({
+        code: cfg.data.productoCodigo!,
+        description: `Servicio logístico · Orden ${o.ordendecargue ?? o.id}${o.fechacargue ? ` · ${o.fechacargue}` : ""}`,
+        quantity: 1,
+        price: valor,
+        ...(cfg.data.impuestoId ? { taxes: [{ id: cfg.data.impuestoId }] } : {}),
+      })
+    }
+    const total = items.reduce((a, i) => a + i.price, 0)
+    if (total <= 0) return { success: false, message: "La agrupación no tiene valor a facturar." }
+
+    const hoy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
+    const numeros = ordenes.map((o: any) => String(o.ordendecargue ?? o.id))
+    const observaciones =
+      `${opciones?.periodo ? `Período ${opciones.periodo} · ` : ""}${owner ? `${owner} · ` : ""}${ids.length} órdenes: ` +
+      `${numeros.slice(0, 12).join(", ")}${numeros.length > 12 ? ` y ${numeros.length - 12} más` : ""}`
+
+    // El intento se registra ANTES de llamar a Siigo.
+    const { data: bitacora } = await sb
+      .from("siigo_facturas_emitidas")
+      .insert({
+        ordenes: ids,
+        cliente_identificacion: identificacion,
+        cliente_nombre: cliente.nombre ?? null,
+        valor_total: total,
+        origen: "credito",
+        emitida_por: usuario ?? null,
+        exitosa: false,
+        error: "en curso",
+      })
+      .select("id")
+      .single()
+
+    const r = await crearFactura({
+      documentoId: cfg.data.documentoId!,
+      fecha: hoy,
+      clienteIdentificacion: identificacion,
+      vendedor: cfg.data.vendedorId!,
+      items,
+      // Crédito lleva su propia forma de pago (con vencimiento) si está
+      // configurada; si no, la general.
+      pagos: [{ id: cfg.data.formaPagoCreditoId ?? cfg.data.formaPagoId!, value: total }],
+      observaciones,
+      ...(cfg.data.centroCosto ? { centroCosto: cfg.data.centroCosto } : {}),
+      enviarDian: cfg.data.enviarDian,
+      enviarCorreo: cfg.data.enviarCorreo,
+    })
+
+    // --- 6) El resultado ----------------------------------------------------
+    if (!r.ok || !r.data) {
+      if (bitacora?.id) {
+        await sb
+          .from("siigo_facturas_emitidas")
+          .update({ exitosa: false, error: r.error ?? "Error desconocido", peticion: r.peticion ?? null, respuesta: r.respuesta ?? null })
+          .eq("id", bitacora.id)
+      }
+      return { success: false, message: r.error }
+    }
+
+    const estadoDian = r.data.stamp?.status ?? (cfg.data.enviarDian ? "Accepted" : "Draft")
+    if (bitacora?.id) {
+      await sb
+        .from("siigo_facturas_emitidas")
+        .update({
+          siigo_id: r.data.id,
+          siigo_numero: r.data.number ?? null,
+          siigo_nombre: r.data.name ?? null,
+          cufe: r.data.cufe ?? null,
+          estado_dian: estadoDian,
+          exitosa: true,
+          error: null,
+          peticion: r.peticion ?? null,
+          respuesta: r.respuesta ?? null,
+        })
+        .eq("id", bitacora.id)
+    }
+
+    // Todas las órdenes quedan marcadas con el mismo comprobante.
+    await sb
+      .from("cabeceraoc")
+      .update({ facturasiigo: r.data.name ?? r.data.id, estadofactura: "CF - Cerrado" })
+      .in("id", ids)
+
+    return { success: true, siigoId: r.data.id, numero: r.data.number, nombre: r.data.name, cufe: r.data.cufe, estadoDian }
+  } catch (e: any) {
+    console.error("[v0] emitirFacturaAgrupacion:", e?.message ?? e)
+    return { success: false, message: e?.message || "Falló la emisión." }
+  }
+}

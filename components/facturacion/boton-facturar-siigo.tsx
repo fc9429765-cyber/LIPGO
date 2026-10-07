@@ -18,9 +18,11 @@ import { useToast } from "@/hooks/use-toast"
 import { AlertTriangle, CheckCircle2, FileText, Loader2, Search } from "lucide-react"
 import {
   buscarClientesSiigo,
+  emitirFacturaAgrupacion,
   emitirFacturaOrden,
   emitirFacturaPrefactura,
   getConfigEmision,
+  puedeFacturarAgrupacion,
   puedeFacturarOrden,
   puedeFacturarPrefactura,
 } from "@/lib/siigo-emision-actions"
@@ -35,6 +37,8 @@ const money = (n: number) =>
 export default function BotonFacturarSiigo({
   ordenId,
   prefacturaId,
+  ordenIds,
+  periodo,
   orden,
   cliente,
   valor,
@@ -45,6 +49,10 @@ export default function BotonFacturarSiigo({
   ordenId?: number
   /** Una agrupación del Ciclo. Excluyente con `ordenId`. */
   prefacturaId?: number
+  /** Varias órdenes en un solo documento (Facturar a SIIGO · crédito). */
+  ordenIds?: number[]
+  /** Texto del período, para las observaciones de la factura de agrupación. */
+  periodo?: string
   orden: string
   cliente: string | null
   valor: number
@@ -55,6 +63,7 @@ export default function BotonFacturarSiigo({
   // Las dos formas comparten diálogo porque la decisión es la misma --qué se
   // factura, a quién, por cuánto-- y solo cambia de dónde salen las líneas.
   const esPrefactura = prefacturaId != null
+  const esAgrupacion = !esPrefactura && Array.isArray(ordenIds) && ordenIds.length > 0
   const { toast } = useToast()
   const [abierto, setAbierto] = useState(false)
   const [verificando, setVerificando] = useState(false)
@@ -73,7 +82,11 @@ export default function BotonFacturarSiigo({
     setAbierto(true)
     setVerificando(true)
     const [v, c] = await Promise.all([
-      esPrefactura ? puedeFacturarPrefactura(prefacturaId!) : puedeFacturarOrden(ordenId!),
+      esPrefactura
+        ? puedeFacturarPrefactura(prefacturaId!)
+        : esAgrupacion
+          ? puedeFacturarAgrupacion(ordenIds!)
+          : puedeFacturarOrden(ordenId!),
       getConfigEmision(),
     ])
     setVerificacion(v)
@@ -86,7 +99,7 @@ export default function BotonFacturarSiigo({
       const r = await buscarClientesSiigo(cliente)
       if (r.success && r.data) setCandidatos(r.data)
     }
-  }, [ordenId, prefacturaId, esPrefactura, cliente])
+  }, [ordenId, prefacturaId, ordenIds, esPrefactura, esAgrupacion, cliente])
 
   async function buscar() {
     const r = await buscarClientesSiigo(busqueda)
@@ -109,7 +122,9 @@ export default function BotonFacturarSiigo({
     const extra = elegido ? { clienteIdentificacion: elegido.identificacion } : {}
     const r = esPrefactura
       ? await emitirFacturaPrefactura(prefacturaId!, extra)
-      : await emitirFacturaOrden(ordenId!, extra)
+      : esAgrupacion
+        ? await emitirFacturaAgrupacion(ordenIds!, { ...extra, owner: cliente ?? undefined, periodo })
+        : await emitirFacturaOrden(ordenId!, extra)
     setEmitiendo(false)
 
     if (!r.success) {
