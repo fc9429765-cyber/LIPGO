@@ -94,10 +94,10 @@ create table if not exists public.auditorias (
   equipo_auditor text,
 
   tipo text not null default 'Interna',
-  objetivo text default 'Evaluar la conformidad y eficacia del proceso',
+  objetivo text default 'Evaluar la conformidad y eficacia del proceso auditado frente a los criterios definidos para el SGC.',
   alcance text,
-  criterios text default 'ISO 9001:2015 y documentacion interna aplicable',
-  metodologia text default 'Entrevistas, revision documental, revision de registros',
+  criterios text default 'ISO 9001:2015 y documentación interna aplicable',
+  metodologia text default 'Entrevistas, revisión documental, revisión de registros, observación y muestreo',
   periodo_auditado text,
 
   /*

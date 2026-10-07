@@ -498,9 +498,14 @@ function Tablero({ resumen }: { resumen: ResumenAuditoria }) {
       </div>
       {/* La definición del indicador va a la vista: sin ella, un 60% se lee
           como "reprobado" cuando puede ser "aún sin evaluar". */}
+      {/* La advertencia viene textual del Excel que origino el modulo: el
+          indicador es interno y la metodologia debe validarse antes de
+          presentarlo como KPI oficial. Sin ella, un 60% se lee como
+          "reprobado" cuando puede ser "aun sin evaluar". */}
       <p className="text-[10px] text-muted-foreground">
         Cumplimiento = conformes ÷ (evaluados − no aplica). Los pendientes cuentan como aún no
-        demostrados.
+        demostrados. <strong>Indicador interno:</strong> validar la metodología antes de usarlo como
+        KPI oficial.
       </p>
     </div>
   )
