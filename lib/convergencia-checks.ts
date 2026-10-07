@@ -56,21 +56,41 @@ const CHK_SALIO_MAS = {
   gravedad: "critico" as const,
 }
 export async function checkSalioMasQueOrden(sb: SB, dias = 30): Promise<ResultadoCheck> {
-  const desde = diasAtrasISO(dias).slice(0, 10)
-  const { data, error } = await sb
-    .from("v_orden_vs_salidas")
-    .select("ocargue, producto, autorizado, despachado, estado_alerta, fechaorden")
-    .in("estado_alerta", ["SALIO_MAS", "FUERA_DE_LA_ORDEN"])
-    .gte("fechaorden", desde)
-    .order("ocargue")
-    .order("producto")
-    .limit(200)
-  if (error) {
-    const falta = /does not exist|schema cache|not find/i.test(error.message)
-    return sinDatos(CHK_SALIO_MAS, falta ? "la vista v_orden_vs_salidas no existe: falta correr scripts/sig/63_orden_vs_salidas.sql" : error.message)
+  // LA FECHA SE TOMA DE `primera_salida`, NUNCA DE `fechaorden`.
+  //
+  // Encontrado el 2026-10-07: este chequeo filtraba por `fechaorden`, y en las filas
+  // FUERA_DE_LA_ORDEN no hay línea de orden de donde sacar la fecha, así que `fechaorden`
+  // y `fechacargue` vienen NULAS. Un filtro por ellas descartaba el 100 % de esas filas,
+  // que son justo las más graves: 79 líneas y 7.299 unidades que salieron de un producto
+  // que la orden no incluía (ID3 62 líneas / 5.547 und, ID1 17 / 1.752) llevaban
+  // invisibles desde que existe el chequeo, mientras sí reportaba el SALIO_MAS vecino.
+  // `primera_salida` es la fecha en que el producto salió de verdad y está poblada en
+  // todas las filas con salidas (los SIN_SALIDA no entran en este chequeo).
+  //
+  // Se pagina en vez de topar en 200: un día malo puede traer más casos que el tope, y un
+  // chequeo que trunca informa de menos sin decirlo.
+  const desde = diasAtrasISO(dias)
+  try {
+    const filas = await fetchAllRows((from, to) =>
+      sb
+        .from("v_orden_vs_salidas")
+        .select("idempresa, ocargue, producto, autorizado, despachado, estado_alerta, primera_salida")
+        .in("estado_alerta", ["SALIO_MAS", "FUERA_DE_LA_ORDEN"])
+        .gte("primera_salida", desde)
+        .order("ocargue", { ascending: true })
+        .order("producto", { ascending: true })
+        .range(from, to),
+    )
+    const casos = filas.map(
+      (r: any) =>
+        `ID${n0(r.idempresa)} · ${r.ocargue} · ${r.producto}: autorizado ${n0(r.autorizado)}, salió ${n0(r.despachado)} (${r.estado_alerta === "FUERA_DE_LA_ORDEN" ? "NO estaba en la orden" : "de más"})`,
+    )
+    return resultadoDe(CHK_SALIO_MAS, casos)
+  } catch (e: any) {
+    const msg = e?.message ?? String(e)
+    const falta = /does not exist|schema cache|not find/i.test(msg)
+    return sinDatos(CHK_SALIO_MAS, falta ? "la vista v_orden_vs_salidas no existe: falta correr scripts/sig/63_orden_vs_salidas.sql" : msg)
   }
-  const casos = (data ?? []).map((r: any) => `${r.ocargue} · ${r.producto}: autorizado ${n0(r.autorizado)}, salió ${n0(r.despachado)} (${r.estado_alerta === "FUERA_DE_LA_ORDEN" ? "no estaba en la orden" : "de más"})`)
-  return resultadoDe(CHK_SALIO_MAS, casos)
 }
 
 const CHK_A_MEDIAS = {
@@ -184,18 +204,39 @@ const CHK_LIBRO = {
   regla: "Lo cargado de una línea es la suma de lo que se llevó cada orden; si difieren, una orden se escribió sin anotarse.",
   gravedad: "alerta" as const,
 }
+
+/**
+ * Líneas históricas que gerencia revisó una por una y dio por cerradas AUNQUE sigan
+ * incumpliendo la regla. Sirve para no repetir todas las noches una alerta ya decidida,
+ * que es la mejor forma de enseñarle a la gente a ignorar las alertas.
+ *
+ * HOY ESTÁ VACÍO, y es lo correcto: una excepción solo se justifica mientras el dato
+ * siga mal. La única que hubo, la línea 260 del pedido 147 de ID1, dejó de hacer falta
+ * el 2026-10-07 cuando gerencia ordenó corregir el dato en vez de taparlo: la línea
+ * decía 2 unidades pedidas y 2.000 cargadas, y se corrigió a 2.000 pedidas con el
+ * script 246. Dejar la excepción puesta habría escondido cualquier recaída de esa
+ * misma línea.
+ *
+ * Una línea nueva que incumpla SÍ salta, que es para lo que sirve el control.
+ */
+const PEDIDO_MAS_REVISADOS: Record<number, string> = {}
+
 export async function checkPedidos(sb: SB): Promise<ResultadoCheck[]> {
   const out: ResultadoCheck[] = []
   try {
-    const { data, error } = await sb
-      .from("pedidosdetalle")
-      .select("transid, idpedido, id_empresa, producto, unidades, unidadescargadas")
-      .not("unidadescargadas", "is", null)
-      .order("transid", { ascending: true })
-      .limit(5000)
-    if (error) throw error
+    // TODAS las líneas, no las primeras 5.000: `pedidosdetalle` tiene más de
+    // 24.000 y con el tope una línea nueva con transid alto nunca se habría
+    // mirado (encontrado el 2026-10-07).
+    const data = await fetchAllRows((from, to) =>
+      sb
+        .from("pedidosdetalle")
+        .select("transid, idpedido, id_empresa, producto, unidades, unidadescargadas")
+        .not("unidadescargadas", "is", null)
+        .order("transid", { ascending: true })
+        .range(from, to),
+    )
     const casos = (data ?? [])
-      .filter((l: any) => n0(l.unidadescargadas) > n0(l.unidades) + 0.01)
+      .filter((l: any) => n0(l.unidadescargadas) > n0(l.unidades) + 0.01 && !PEDIDO_MAS_REVISADOS[Number(l.transid)])
       .map((l: any) => `ID${l.id_empresa} pedido ${l.idpedido} · ${l.producto}: pedidas ${n0(l.unidades)}, cargadas ${n0(l.unidadescargadas)}`)
     out.push(resultadoDe(CHK_PEDIDO_MAS, casos))
   } catch (e: any) {

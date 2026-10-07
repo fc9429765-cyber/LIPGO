@@ -12,8 +12,12 @@
 -- propósito y con el reverso completo -- no un borrado a medias.
 --
 -- QUÉ BORRA. Lo mismo que `deleteLoadOrder`, en el mismo orden:
---   inventario -> lotes -> traslados/pausas -> líneas -> cabecera
+--   inventario -> lotes -> pausas -> líneas -> cabecera
 --   -> y después suelta los pedidos y las citas.
+--
+-- (2026-10-07) Corregido: `despachotraslados` es una VISTA y no se puede
+-- borrar de ella. Tampoco hace falta -- se vacía sola al limpiar las tablas
+-- de las que se deriva.
 --
 -- ESTO NO SE PUEDE DESHACER. Corre primero el PASO 0 y revisa lo que va a
 -- desaparecer. Si algo no cuadra, para ahí.
@@ -62,6 +66,24 @@ where i.ocargue in (
      or ordendecargue = 'AVI202610069897D'
 )
 group by i.ocargue;
+
+-- 0c-bis) VISTA O TABLA. Postgres se niega a borrar de una vista derivada
+--     ("cannot delete from view", 55000) y aborta la transacción entera. Esto
+--     confirma que todo lo que el paso 1 va a borrar es una tabla de verdad.
+select table_name,
+       table_type,
+       case table_type
+         when 'BASE TABLE' then 'ok, se puede borrar'
+         else 'VISTA -- no se borra de aquí'
+       end as nota
+from information_schema.tables
+where table_schema = 'public'
+  and table_name in ('invtrans','historicolotes','pausas','pedidodetalle_ocargue',
+                     'detalleoc','cabeceraoc','pedidoscabecera','pedidosdetalle',
+                     'citasvehiculos','despachotraslados','auditoria')
+order by table_type, table_name;
+-- Si algo distinto de `despachotraslados` sale como VIEW, quita su DELETE del
+-- paso 1 antes de correrlo.
 
 -- 0d) Los pedidos que quedarán libres para volver a cargarse.
 select idpedido, ocargue, estado, vehiculo, fechadeentrega
@@ -123,10 +145,11 @@ where ocargue in (select ordendecargue from _ordenes_a_borrar);
 delete from public.historicolotes
 where ordendecargue in (select ordendecargue from _ordenes_a_borrar);
 
--- 1e) Traslados y pausas: quedarían apuntando a una orden inexistente.
-delete from public.despachotraslados
-where ocargue in (select ordendecargue from _ordenes_a_borrar);
-
+-- 1e) Las pausas del cargue, que quedarían apuntando a una orden inexistente.
+--     `despachotraslados` NO se toca: es una VISTA, no una tabla. Postgres se
+--     niega a borrar de ella ("cannot delete from view", 55000) y no hace
+--     falta: lo que muestra sale de las tablas base y desaparece solo cuando
+--     estas se limpian.
 delete from public.pausas
 where ordendecargue in (select ordendecargue from _ordenes_a_borrar);
 
@@ -188,7 +211,8 @@ select 'historicolotes',                 count(*)           from public.historic
 union all
 select 'pedidodetalle_ocargue',          count(*)           from public.pedidodetalle_ocargue where ocargue       in ('AVI202610069897','AVI202610069897D')
 union all
-select 'despachotraslados',              count(*)           from public.despachotraslados     where ocargue       in ('AVI202610069897','AVI202610069897D')
+-- Vista derivada: debe quedar en 0 sola, al desaparecer sus tablas base.
+select 'despachotraslados (vista)',      count(*)           from public.despachotraslados     where ocargue       in ('AVI202610069897','AVI202610069897D')
 union all
 select 'pausas',                         count(*)           from public.pausas                where ordendecargue in ('AVI202610069897','AVI202610069897D')
 order by 1;

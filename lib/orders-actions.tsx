@@ -2777,28 +2777,19 @@ export async function deleteLoadOrder(orderId: number) {
     console.log("[v0] Deleted historicolotes for ocargue:", ordenDeCargue)
 
     /*
-     * Los traslados de despacho y las pausas del cargue tambien cuelgan de la
-     * orden. Sin esto quedan apuntando a un numero de orden que ya no existe:
-     * los traslados reaparecerian como pendientes de un despacho borrado, y
-     * las pausas sumarian tiempo muerto a una orden fantasma en los
-     * indicadores de piso.
+     * Las pausas del cargue tambien cuelgan de la orden. Sin esto quedan
+     * apuntando a un numero que ya no existe y suman tiempo muerto a una orden
+     * fantasma en los indicadores de piso.
      *
-     * No bloquean el borrado si fallan --no son el nucleo de la operacion y
-     * una orden a medio borrar es peor que un registro suelto-- pero el fallo
-     * se registra para poder limpiarlo despues.
+     * `despachotraslados` NO se toca: es una VISTA derivada, no una tabla. No
+     * se puede borrar de ella ("cannot delete from view", 55000) y no hace
+     * falta: lo que muestra sale de las tablas base, asi que desaparece solo
+     * cuando estas se limpian.
+     *
+     * No bloquea el borrado si falla --no es el nucleo de la operacion y una
+     * orden a medio borrar es peor que un registro suelto-- pero el fallo se
+     * registra para poder limpiarlo despues.
      */
-    const { error: trasladosError } = await supabase
-      .from("despachotraslados")
-      .delete()
-      .eq("ocargue", ordenDeCargue)
-    if (trasladosError) {
-      console.error("[v0] Error deleting despachotraslados:", trasladosError.message)
-      void registrarErrorServidor("orders.deleteLoadOrder.despachotraslados", trasladosError, {
-        orderId,
-        ordenDeCargue,
-      })
-    }
-
     const { error: pausasError } = await supabase
       .from("pausas")
       .delete()

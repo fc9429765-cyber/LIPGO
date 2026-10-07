@@ -91,7 +91,7 @@ select 'pedidosdetalle (líneas de pedido)',    count(*)           from public.p
 union all
 select 'citasvehiculos',                       count(*)           from public.citasvehiculos        where ocargue        = 'AVI202610069897'
 union all
-select 'despachotraslados',                    count(*)           from public.despachotraslados     where ocargue        = 'AVI202610069897'
+select 'despachotraslados (vista)',            count(*)           from public.despachotraslados     where ocargue        = 'AVI202610069897'
 union all
 select 'pausas',                               count(*)           from public.pausas                where ordendecargue  = 'AVI202610069897'
 order by 1;
