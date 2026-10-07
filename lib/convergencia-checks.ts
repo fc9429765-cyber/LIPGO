@@ -204,6 +204,38 @@ const CHK_LIBRO = {
   regla: "Lo cargado de una línea es la suma de lo que se llevó cada orden; si difieren, una orden se escribió sin anotarse.",
   gravedad: "alerta" as const,
 }
+/**
+ * Los excesos HISTÓRICOS que gerencia ya revisó (2026-10-07), con la cantidad exacta que
+ * salió. A diferencia de una excepción por línea, aquí se congela el NÚMERO: si esa misma
+ * línea vuelve a crecer un solo bulto, la alerta salta igual. Así una excepción no se
+ * convierte en una puerta abierta.
+ *
+ * Estas 8 no se pueden "corregir": las unidades salieron de verdad, con su orden y su
+ * picking, y el cliente las recibió. Lo que se corrigió (script 253) fue el pendiente que
+ * seguían mostrando. El exceso queda registrado para siempre en `pedidodetalle_ocargue`.
+ *
+ * Todas son de antes del 2026-10-04, cuando la segunda orden sobrescribía el contador en
+ * vez de sumarle y la pantalla volvía a ofrecer el pedido. Desde el tope duro no hay
+ * ninguna: 14.194 líneas despachadas después de esa fecha cuadran al 100 %.
+ */
+const EXCESOS_HISTORICOS_REVISADOS: Record<number, { salio: number; nota: string }> = {
+  19866: { salio: 721, nota: "ID2 pedido 9827 · pidió 700" },
+  19998: { salio: 1292, nota: "ID2 pedido 9876 · pidió 1.000" },
+  20043: { salio: 1955, nota: "ID2 pedido 9899 · pidió 800, salió en 8 órdenes" },
+  20371: { salio: 250, nota: "ID2 pedido 10056 · pidió 200" },
+  20538: { salio: 1320, nota: "ID2 pedido 10130 · pidió 800" },
+  22525: { salio: 1238, nota: "ID2 pedido 11026 · pidió 1.000" },
+  22764: { salio: 1324, nota: "ID2 pedido 11108 · pidió 800" },
+  24807: { salio: 1080, nota: "ID2 pedido 12013 · pidió 800" },
+}
+
+const CHK_SUMA_ORDENES = {
+  clave: "pedido_suma_ordenes_mayor",
+  titulo: "Sumando TODAS sus órdenes, el pedido recibió más de lo que pidió",
+  regla:
+    "Un pedido puede salir en varias órdenes y cada una le resta por producto, pero la suma de todas nunca puede superar lo pedido. Lo que manda es el libro de órdenes, no el contador de la línea.",
+  gravedad: "critico" as const,
+}
 
 /**
  * Líneas históricas que gerencia revisó una por una y dio por cerradas AUNQUE sigan
@@ -289,6 +321,62 @@ export async function checkPedidos(sb: SB): Promise<ResultadoCheck[]> {
     const texto = e?.message || e?.details || e?.hint || String(e) || "error sin mensaje"
     const falta = /does not exist|schema cache|not find/i.test(texto)
     out.push(sinDatos(CHK_LIBRO, falta ? "la tabla pedidodetalle_ocargue no existe: falta correr scripts/226_pedido_ordenes_cargue.sql" : texto))
+  }
+
+  // EL HUECO QUE ESTO TAPA (encontrado el 2026-10-07)
+  //
+  // `CHK_PEDIDO_MAS` compara el CONTADOR de la línea (`unidadescargadas`) contra lo pedido,
+  // y desde el 4-oct ese contador está topado en lo pedido: por construcción no puede
+  // pasarse, así que esa alerta no podía saltar nunca por este motivo. `CHK_LIBRO` sí mira
+  // el libro, pero solo lo que escribió la app en los últimos 7 días.
+  //
+  // El exceso de verdad vive en el libro y es histórico: 8 líneas de ID2 donde la suma de
+  // todas las órdenes se pasó de lo pedido (hasta 1.955 unidades despachadas contra un
+  // pedido de 800), porque antes del 4-oct la segunda orden SOBRESCRIBÍA el contador en vez
+  // de sumarle, el pendiente volvía a su valor anterior y la pantalla seguía ofreciendo el
+  // pedido para cargarlo otra vez. Ninguna de las dos comprobaciones las veía.
+  //
+  // Se mira el libro COMPLETO, sin ventana de días: son ~20.000 filas y el exceso no
+  // caduca, sigue siendo plata despachada de más mientras nadie lo cierre.
+  try {
+    const libro = await fetchAllRows((from, to) =>
+      sb.from("pedidodetalle_ocargue").select("transid, idpedido, ocargue, unidades").order("id", { ascending: true }).range(from, to),
+    )
+    const sumaPorLinea = new Map<number, { und: number; ordenes: Set<string> }>()
+    for (const r of libro) {
+      const k = Number(r.transid)
+      const v = sumaPorLinea.get(k) ?? { und: 0, ordenes: new Set<string>() }
+      v.und += n0(r.unidades)
+      v.ordenes.add(String(r.ocargue))
+      sumaPorLinea.set(k, v)
+    }
+    const lineas = await fetchAllRows((from, to) =>
+      sb
+        .from("pedidosdetalle")
+        .select("transid, idpedido, id_empresa, producto, unidades")
+        .order("transid", { ascending: true })
+        .range(from, to),
+    )
+    const casos: string[] = []
+    for (const l of lineas) {
+      const pedidas = n0(l.unidades)
+      const s = sumaPorLinea.get(Number(l.transid))
+      if (!s || pedidas <= 0) continue
+      if (s.und <= pedidas + 0.01) continue
+      // Un exceso ya revisado solo se calla mientras no CREZCA.
+      const revisado = EXCESOS_HISTORICOS_REVISADOS[Number(l.transid)]
+      if (revisado && s.und <= revisado.salio + 0.01) continue
+      casos.push(
+        `ID${l.id_empresa} pedido ${l.idpedido} · ${l.producto}: pidió ${pedidas} y entre ${s.ordenes.size} órdenes salieron ${s.und} (${s.und - pedidas} de más)${
+          revisado ? ` · ESTE CASO YA ESTABA REVISADO en ${revisado.salio} y volvió a crecer` : ""
+        }`,
+      )
+    }
+    out.push(resultadoDe(CHK_SUMA_ORDENES, casos))
+  } catch (e: any) {
+    const texto = e?.message || e?.details || e?.hint || String(e) || "error sin mensaje"
+    const falta = /does not exist|schema cache|not find/i.test(texto)
+    out.push(sinDatos(CHK_SUMA_ORDENES, falta ? "la tabla pedidodetalle_ocargue no existe: falta correr scripts/226_pedido_ordenes_cargue.sql" : texto))
   }
   return out
 }

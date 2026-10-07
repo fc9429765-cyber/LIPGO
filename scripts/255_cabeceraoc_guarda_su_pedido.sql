@@ -1,6 +1,6 @@
 
 -- =====================================================================
--- 252_cabeceraoc_guarda_su_pedido.sql
+-- 255_cabeceraoc_guarda_su_pedido.sql
 --
 -- La orden de cargue pasa a saber de qué pedido nació.
 --
@@ -87,9 +87,9 @@ alter table public.cabeceraoc add column if not exists idpedido  bigint;
 alter table public.cabeceraoc add column if not exists pedidos_n smallint;
 
 comment on column public.cabeceraoc.idpedido is
-  'Pedido del que nacio esta orden de cargue (pedidoscabecera.idpedido). SOLO se llena cuando la orden atiende a UN pedido: si atiende a varios queda en nulo a proposito y la relacion completa esta en pedidodetalle_ocargue. Script 252.';
+  'Pedido del que nacio esta orden de cargue (pedidoscabecera.idpedido). SOLO se llena cuando la orden atiende a UN pedido: si atiende a varios queda en nulo a proposito y la relacion completa esta en pedidodetalle_ocargue. Script 255.';
 comment on column public.cabeceraoc.pedidos_n is
-  'Cuantos pedidos atiende esta orden. 0 = ninguno (anomalia en una orden de Cargue; normal en Descargue, Distribucion, Tolva y proyeccion), 1 = esta en idpedido, >1 = ver pedidodetalle_ocargue. Evita confundir "sin pedido" con "varios pedidos". Script 252.';
+  'Cuantos pedidos atiende esta orden. 0 = ninguno (anomalia en una orden de Cargue; normal en Descargue, Distribucion, Tolva y proyeccion), 1 = esta en idpedido, >1 = ver pedidodetalle_ocargue. Evita confundir "sin pedido" con "varios pedidos". Script 255.';
 
 create index if not exists idx_cabeceraoc_idpedido on public.cabeceraoc (idpedido);
 
