@@ -959,7 +959,7 @@ export async function adminGetLog(opts?: {
 }
 
 // ---------------------------------------------------------------------------
-// Unificación con los perfiles de acceso (2026-10-07, script 252)
+// Unificación con los perfiles de acceso (2026-10-07, script 264)
 // ---------------------------------------------------------------------------
 
 /** Catálogo de procesos autorizables, para la pestaña Autorizaciones del perfil. */

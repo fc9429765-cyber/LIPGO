@@ -1,5 +1,5 @@
 -- ============================================================================
--- 252 — UN SOLO CATÁLOGO DE PERFILES
+-- 264 — UN SOLO CATÁLOGO DE PERFILES
 -- ----------------------------------------------------------------------------
 -- Había DOS sistemas de perfiles que decían cosas distintas de la misma
 -- persona:
@@ -38,7 +38,7 @@ alter table public.autorizacion_perfiles add column if not exists creado_por tex
 alter table public.autorizacion_perfiles add column if not exists updated_at timestamptz not null default now();
 
 comment on table public.autorizacion_perfiles is
-  'EL perfil de LIPgo (puesto): procesos que autoriza con clave (autorizacion_perfil_procesos) + empresas, owners y modulos que abre (acceso_perfil_*). Unificado el 2026-10-07 (script 252).';
+  'EL perfil de LIPgo (puesto): procesos que autoriza con clave (autorizacion_perfil_procesos) + empresas, owners y modulos que abre (acceso_perfil_*). Unificado el 2026-10-07 (script 264).';
 
 
 -- ----------------------------------------------------------------------------
@@ -48,7 +48,7 @@ comment on table public.autorizacion_perfiles is
 do $$
 begin
   if to_regclass('public.acceso_perfiles') is null then
-    raise notice '252: acceso_perfiles no existe (el 247 no se corrio, o esto ya se migro). Se omite la migracion.';
+    raise notice '264: acceso_perfiles no existe (el 247 no se corrio, o esto ya se migro). Se omite la migracion.';
     return;
   end if;
 
@@ -101,7 +101,7 @@ begin
 
   -- 2f) El catalogo viejo ya no tiene razon de ser.
   drop table public.acceso_perfiles;
-  raise notice '252: migracion completada.';
+  raise notice '264: migracion completada.';
 end $$;
 
 
@@ -145,9 +145,9 @@ begin
   end loop;
 end $$;
 
-comment on table public.acceso_perfil_empresas is 'Empresas que abre cada perfil (autorizacion_perfiles). Ver scripts/252.';
-comment on table public.acceso_perfil_owners   is 'Owners a los que limita Pedidos cada perfil (autorizacion_perfiles). Ver scripts/252.';
-comment on table public.acceso_perfil_permisos is 'Permisos de modulo (columnas de permisos_usuarios) que enciende cada perfil. Ver scripts/252.';
+comment on table public.acceso_perfil_empresas is 'Empresas que abre cada perfil (autorizacion_perfiles). Ver scripts/264.';
+comment on table public.acceso_perfil_owners   is 'Owners a los que limita Pedidos cada perfil (autorizacion_perfiles). Ver scripts/264.';
+comment on table public.acceso_perfil_permisos is 'Permisos de modulo (columnas de permisos_usuarios) que enciende cada perfil. Ver scripts/264.';
 
 
 -- ----------------------------------------------------------------------------
