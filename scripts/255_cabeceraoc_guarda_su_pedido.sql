@@ -84,13 +84,15 @@
 --     LWY409) contra el pedido 11815 (ID3): los dos dicen PT LA NIEVE 25LB, 1.400
 --     unidades, cliente ORJUELA CALDERON MODESTO. Es el mismo despacho.
 --   · Solo 3 vínculos son entre empresas DE VERDAD distintas (ID3/ID4 contra ID2), y los
---     tres son de febrero a abril de 2026. Quedan listados en el paso 3b para mirarlos;
---     no se corrigen aquí.
+--     tres son de febrero a abril de 2026, cuando la plataforma se estaba montando.
+--     Gerencia los dio por cerrados el 2026-10-07: "olvida esos pedidos de abril ya que se
+--     estaba montando". Quedan en el paso 3b solo para que no desaparezcan del registro.
 --
--- Por eso el vínculo se guarda tal como lo dicen los datos, y lo que era un candado pasa
--- a ser un aviso con la cuenta. Quien use `idpedido` en una pantalla tiene que filtrar por
--- proyecto por su cuenta, como ya lo hace todo lo demás: la columna dice la verdad del
--- despacho, no reemplaza el control de acceso.
+-- Que un usuario de ID1 genere órdenes en ID3 y al contrario es la operación establecida,
+-- con sus permisos (gerencia, 2026-10-07). Por eso el vínculo se guarda tal como lo dicen
+-- los datos, y lo que era un candado pasa a ser un aviso con la cuenta. Quien use
+-- `idpedido` en una pantalla tiene que filtrar por proyecto por su cuenta, como ya lo hace
+-- todo lo demás: la columna dice la verdad del despacho, no reemplaza el control de acceso.
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
@@ -256,8 +258,8 @@ where c.idempresa is distinct from p.id_empresa
   and not (least(c.idempresa, p.id_empresa) = 1 and greatest(c.idempresa, p.id_empresa) = 3)
 order by c.fechacargue;
 -- Esperado: 3 filas, todas de febrero a abril de 2026 (órdenes 814 y 2862 de ID3 y la
--- 2436 de ID4, las tres contra pedidos de ID2). Ninguna reciente. Se informan, no se
--- corrigen aquí.
+-- 2436 de ID4, las tres contra pedidos de ID2). Ninguna reciente: son de la etapa de
+-- montaje y gerencia las dio por cerradas. No se corrigen.
 
 -- 3c. Las órdenes de CARGUE sin pedido, que es la anomalía de la que hablamos.
 select to_char(fechacargue, 'YYYY-MM') as mes, count(*) as ordenes
