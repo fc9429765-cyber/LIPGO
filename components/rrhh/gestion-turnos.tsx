@@ -67,6 +67,7 @@ import {
   type TurnoInput,
   type TurnoTarifa,
 } from "@/lib/turnos-actions"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 // Estado vacio del formulario. Centralizado para resetear con facilidad
 // y para que tanto "crear" como "cancelar edicion" partan de aqui.
@@ -88,6 +89,7 @@ const EMPTY_FORM: TurnoInput = {
 
 export default function GestionTurnos() {
   const { selectedEmpresaId } = useAuth()
+  const { conClave } = useClaveAccion()
   const { toast } = useToast()
 
   const [turnos, setTurnos] = useState<TurnoTarifa[]>([])
@@ -205,9 +207,9 @@ export default function GestionTurnos() {
     }
 
     setSaving(true)
-    const result = editingId
-      ? await updateTurno(selectedEmpresaId, editingId, form)
-      : await createTurno(selectedEmpresaId, form)
+    const result = await conClave("Turnos", "configurar", (clave) =>
+      editingId ? updateTurno(selectedEmpresaId, editingId, form, clave) : createTurno(selectedEmpresaId, form, clave),
+    )
 
     if (result.success) {
       toast({
@@ -231,7 +233,7 @@ export default function GestionTurnos() {
   const handleDelete = async () => {
     if (!selectedEmpresaId || !deleteTarget) return
     setSaving(true)
-    const result = await deleteTurno(selectedEmpresaId, deleteTarget.id)
+    const result = await conClave("Turnos", "configurar", (clave) => deleteTurno(selectedEmpresaId, deleteTarget.id, clave))
     if (result.success) {
       toast({
         title: "Turno eliminado",

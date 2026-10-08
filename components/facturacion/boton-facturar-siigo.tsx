@@ -26,6 +26,7 @@ import {
   puedeFacturarOrden,
   puedeFacturarPrefactura,
 } from "@/lib/siigo-emision-actions"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 const money = (n: number) =>
   new Intl.NumberFormat("es-CO", {
@@ -65,6 +66,7 @@ export default function BotonFacturarSiigo({
   const esPrefactura = prefacturaId != null
   const esAgrupacion = !esPrefactura && Array.isArray(ordenIds) && ordenIds.length > 0
   const { toast } = useToast()
+  const { conClave } = useClaveAccion()
   const [abierto, setAbierto] = useState(false)
   const [verificando, setVerificando] = useState(false)
   const [verificacion, setVerificacion] = useState<{ puede: boolean; motivo?: string } | null>(null)
@@ -120,11 +122,15 @@ export default function BotonFacturarSiigo({
 
     setEmitiendo(true)
     const extra = elegido ? { clienteIdentificacion: elegido.identificacion } : {}
-    const r = esPrefactura
-      ? await emitirFacturaPrefactura(prefacturaId!, extra)
-      : esAgrupacion
-        ? await emitirFacturaAgrupacion(ordenIds!, { ...extra, owner: cliente ?? undefined, periodo })
-        : await emitirFacturaOrden(ordenId!, extra)
+    // Emitir en Siigo es una acción con clave (fac_emitir_siigo): en modo bloquear
+    // se pide la clave personal; en aviso pasa y deja rastro.
+    const r = await conClave("Ciclo de Facturación", "aprobar", (clave) =>
+      esPrefactura
+        ? emitirFacturaPrefactura(prefacturaId!, extra, clave)
+        : esAgrupacion
+          ? emitirFacturaAgrupacion(ordenIds!, { ...extra, owner: cliente ?? undefined, periodo }, clave)
+          : emitirFacturaOrden(ordenId!, extra, clave),
+    )
     setEmitiendo(false)
 
     if (!r.success) {

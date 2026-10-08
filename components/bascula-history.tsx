@@ -17,6 +17,7 @@ import { BasculaOrderDetailsDialog } from "@/components/bascula-order-details-di
 import { KpiCard } from "@/components/orders/dashboard-pedidos/kpi-card"
 import { Chip, Cifra, Esqueleto, EstadoVacio, Eyebrow } from "@/components/ui/lipgo"
 import { cn } from "@/lib/utils"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 const EDIT_PASSWORD = "Jeff123456"
 
@@ -48,6 +49,7 @@ interface BasculaHistoryRecord {
 
 export function BasculaHistory() {
   const { selectedEmpresaId } = useAuth()
+  const { conClave } = useClaveAccion()
   // Solo las PLANTAS (idempresa 1/2) tienen báscula física. Los CEDIS (3/4 y
   // cualquier otra empresa) por ahora no la tienen: su peso se calcula desde
   // los productos de la orden, no desde un pesaje real — este historial no
@@ -156,12 +158,11 @@ export function BasculaHistory() {
     setSaving(true)
     try {
       const trimmedTransporte = newTransporte.trim()
-      const result = await updateBasculaRecord(
+      const result = await conClave("Historial Báscula", "editar", (clave) => updateBasculaRecord(
         editRecord.id,
         parsed,
         newTiquete,
-        trimmedTransporte,
-      )
+        trimmedTransporte, clave))
       if (!result.success) {
         toast({ title: "Error", description: result.error || "No se pudo actualizar el registro.", variant: "destructive" })
         return

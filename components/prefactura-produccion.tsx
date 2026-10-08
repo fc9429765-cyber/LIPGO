@@ -50,6 +50,7 @@ import {
   type SoporteProduccion,
 } from "@/lib/prefactura-produccion-actions"
 import { PROYECTOS_PRODUCCION } from "@/lib/prefactura-produccion-constants"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 const money = (n: number) => "$" + Math.round(Number(n) || 0).toLocaleString("es-CO")
 // La tarifa (a diferencia del Total) puede ser fraccionaria de verdad -- ej.
@@ -83,6 +84,7 @@ const TOPE_SOPORTE = 400
 
 export default function PrefacturaProduccion({ idempresaFija }: { idempresaFija?: number }) {
   const { toast } = useToast()
+  const { conClave } = useClaveAccion()
   const hoy = hoyISO()
 
   const [idempresa, setIdempresa] = useState<number>(idempresaFija ?? 2)
@@ -201,12 +203,12 @@ export default function PrefacturaProduccion({ idempresaFija }: { idempresaFija?
   // Reabrir bloqueado por avance del Ciclo de Facturación: se ofrece forzar
   // con una confirmación aparte, en vez de dejar la acción muerta.
   const reabrirConConfirmacion = async (id: number) => {
-    const r = await reabrirPrefacturaProduccion(id)
+    const r = await conClave("Prefactura de Producción", "aprobar", (clave) => reabrirPrefacturaProduccion(id, undefined, clave))
     if (r.success) {
       toast({ title: "Prefactura reabierta" })
       cargarGuardadas()
     } else if (r.message?.includes("Ciclo de Facturación") && window.confirm(`${r.message}\n\n¿Forzar de todas formas?`)) {
-      await accionGuardada(() => reabrirPrefacturaProduccion(id, true), "Prefactura reabierta")
+      await accionGuardada(() => conClave("Prefactura de Producción", "aprobar", (clave) => reabrirPrefacturaProduccion(id, true, clave)), "Prefactura reabierta")
     } else {
       toast({ title: "No se pudo completar", description: r.message, variant: "destructive" })
     }
@@ -658,7 +660,7 @@ export default function PrefacturaProduccion({ idempresaFija }: { idempresaFija?
                 setConfirmar(null)
                 if (!c) return
                 if (c.accion === "aprobar" && c.id)
-                  accionGuardada(() => aprobarPrefacturaProduccion(c.id!), "Prefactura aprobada")
+                  accionGuardada(() => conClave("Prefactura de Producción", "aprobar", (clave) => aprobarPrefacturaProduccion(c.id!, clave)), "Prefactura aprobada")
                 else if (c.accion === "eliminar" && c.id)
                   accionGuardada(() => eliminarPrefacturaProduccion(c.id!), "Prefactura eliminada")
                 else if (c.accion === "solape") guardar(true)

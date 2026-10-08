@@ -6,50 +6,14 @@ import { revalidatePath } from "next/cache"
 import { getCurrentEmpresaId, getEmpresaIdFieldName, shouldFilterByEmpresa } from "@/lib/company-filter"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import { getCurrentUser } from "@/lib/auth-actions"
-import { tieneModulo } from "@/lib/puerta-modulo"
-import { motivoSinAccion } from "@/lib/puerta-modulo"
+import { autorizarAccion, motivoSinAccion, tieneModulo } from "@/lib/puerta-modulo"
 import type { Verbo } from "@/lib/permisos-verbos"
+import { nivelDe } from "@/lib/politicas-modulos"
+import { TABLAS_CONFIG } from "@/lib/config-tablas"
 
-// LISTA BLANCA DE TABLAS (Fase 0, 2026-10-07).
-//
-// Estas acciones reciben el nombre de la tabla desde el navegador. Sin lista,
-// `createConfigRecord("permisos_usuarios", {...})` o
-// `deleteConfigRecord("autorizacion_claves", "id", 1)` eran llamadas válidas
-// para cualquiera con sesión: el CRUD genérico de Configuración era una puerta
-// de servicio a TODA la base. Ahora solo se aceptan las tablas de los maestros,
-// cada una con su llave primaria real (la que manda el cliente debe coincidir)
-// y con los módulos del menú que la editan; se exige tener al menos uno.
-//
-// `cabeceraoc` entra solo para LEER (Báscula la consulta con fetchConfigData);
-// no tiene escrituras aquí. `perfil_acceso_empresas`, que config-definitions
-// expone como "Accesos de Usuario", queda fuera a propósito: se administra
-// desde Autorizaciones, nunca por el CRUD genérico.
-const TABLAS_CONFIG: Record<string, { modulos: string[]; pk: string; soloLectura?: boolean }> = {
-  almacenes: { modulos: ["Bodegas"], pk: "id" },
-  bodegas: { modulos: ["Sucursales", "Bodegas"], pk: "idbodega" },
-  categorias: { modulos: ["Categorías"], pk: "id" },
-  subcategorias: { modulos: ["Sub Categorías"], pk: "id" },
-  clientes: { modulos: ["Clientes"], pk: "id" },
-  condicionespago: { modulos: ["Condiciones Pago"], pk: "idcondicion" },
-  destinos: { modulos: ["Destinos"], pk: "id" },
-  grupos: { modulos: ["Grupos"], pk: "id" },
-  medio: { modulos: ["Medios"], pk: "id" },
-  productos: { modulos: ["Productos"], pk: "id" },
-  tipodespacho: { modulos: ["Tipos Despacho"], pk: "idtipodespacho" },
-  vendedores: { modulos: ["Vendedores"], pk: "idvendedor" },
-  transportes: { modulos: ["Transportadoras"], pk: "id" },
-  tiposvehiculos: { modulos: ["Tipos de Vehiculos"], pk: "id" },
-  locations: { modulos: ["Localizaciones"], pk: "id" },
-  citasvehiculos: { modulos: ["Ver Vehículos"], pk: "id" },
-  proveedores: { modulos: ["Gestión de proveedores"], pk: "id" },
-  materiales: { modulos: ["Creación de materiales"], pk: "id" },
-  tarifas: { modulos: ["Tarifas"], pk: "id" },
-  tarifasoperacion: { modulos: ["Tarifas"], pk: "id" },
-  tarifaspersonal: { modulos: ["Tarifas"], pk: "id" },
-  tarifasturnos: { modulos: ["Tarifas"], pk: "id" },
-  tarifasfacturacionturnos: { modulos: ["Tarifas"], pk: "id" },
-  cabeceraoc: { modulos: ["Báscula"], pk: "id", soloLectura: true },
-}
+// La lista blanca de tablas (tabla → módulos, llave primaria) vive en
+// lib/config-tablas.ts: la lee también la pantalla para saber si una tabla
+// pide clave personal.
 
 /** Verbo del catálogo de políticas que corresponde a cada escritura del CRUD. */
 type VerboCrud = Extract<Verbo, "crear" | "editar" | "eliminar">
@@ -59,7 +23,12 @@ type VerboCrud = Extract<Verbo, "crear" | "editar" | "eliminar">
  * Lecturas: sesión y tabla permitida. Escrituras: además el módulo de la
  * pantalla y, desde la Fase 2, la acción (`<llave>__crear/editar/eliminar`).
  */
-async function puertaConfig(tableName: string, verbo: VerboCrud | "ver", primaryKey?: string): Promise<string | null> {
+async function puertaConfig(
+  tableName: string,
+  verbo: VerboCrud | "ver",
+  primaryKey?: string,
+  opciones?: { clave?: string; id?: unknown },
+): Promise<string | null> {
   const def = TABLAS_CONFIG[tableName]
   if (!def) return "Tabla no permitida."
   if (primaryKey !== undefined && primaryKey !== def.pk) return "Llave primaria no válida para esta tabla."
@@ -69,6 +38,18 @@ async function puertaConfig(tableName: string, verbo: VerboCrud | "ver", primary
   }
   if (def.soloLectura) return "Esta tabla no se edita desde Configuración."
   if (!(await tieneModulo(def.modulos))) return `Sin permiso para ${def.modulos[0]}.`
+  // Tablas cuyo módulo declara "configurar" CON CLAVE (Tarifas → fac_tarifas):
+  // cualquier escritura es cambiar la configuración y pide la clave personal.
+  // En modo aviso pasa sin clave y deja rastro; en 'bloquear' la pantalla la pide.
+  const moduloConClave = def.modulos.find((m) => nivelDe(m, "configurar") === "clave")
+  if (moduloConClave) {
+    const r = await autorizarAccion(moduloConClave, "configurar", {
+      clave: opciones?.clave ?? "",
+      idempresa: null,
+      referencia: `${verbo} en ${tableName}${opciones?.id != null ? ` #${String(opciones.id)}` : ""}`,
+    })
+    return r.ok ? null : r.error || "Sin autorización."
+  }
   return motivoSinAccion(def.modulos, verbo)
 }
 
@@ -333,8 +314,8 @@ export async function getNextId(tableName: string, primaryKey: string) {
   }
 }
 
-export async function createConfigRecord(tableName: string, data: any, selectedEmpresaId?: number) {
-  const motivo = await puertaConfig(tableName, "crear")
+export async function createConfigRecord(tableName: string, data: any, selectedEmpresaId?: number, opciones?: { clave?: string }) {
+  const motivo = await puertaConfig(tableName, "crear", undefined, opciones)
   if (motivo) return { success: false, error: motivo }
   // Con actor: así la auditoría (trigger fn_auditoria) sabe quién creó la fila.
   // Antes se escribía con el singleton de servicio y quedaba como "sistema".
@@ -358,8 +339,8 @@ export async function createConfigRecord(tableName: string, data: any, selectedE
   }
 }
 
-export async function updateConfigRecord(tableName: string, primaryKey: string, id: any, data: any) {
-  const motivo = await puertaConfig(tableName, "editar", primaryKey)
+export async function updateConfigRecord(tableName: string, primaryKey: string, id: any, data: any, opciones?: { clave?: string }) {
+  const motivo = await puertaConfig(tableName, "editar", primaryKey, { ...opciones, id })
   if (motivo) return { success: false, error: motivo }
   const supabase = await getSupabaseAdmin()
 
@@ -376,8 +357,8 @@ export async function updateConfigRecord(tableName: string, primaryKey: string, 
   }
 }
 
-export async function deleteConfigRecord(tableName: string, primaryKey: string, id: any) {
-  const motivo = await puertaConfig(tableName, "eliminar", primaryKey)
+export async function deleteConfigRecord(tableName: string, primaryKey: string, id: any, opciones?: { clave?: string }) {
+  const motivo = await puertaConfig(tableName, "eliminar", primaryKey, { ...opciones, id })
   if (motivo) return { success: false, error: motivo }
   const supabase = await getSupabaseAdmin()
 

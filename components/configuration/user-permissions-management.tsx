@@ -85,6 +85,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/components/auth-provider"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 interface UserWithPermissions {
   id: string
@@ -163,6 +164,7 @@ function permsDeUsuario(u: UserWithPermissions): Partial<UserPermissions> {
 
 export function UserPermissionsManagement() {
   const { selectedEmpresaId, user } = useAuth()
+  const { conClave } = useClaveAccion()
   const { toast } = useToast()
 
   const [users, setUsers] = useState<UserWithPermissions[]>([])
@@ -574,7 +576,7 @@ export function UserPermissionsManagement() {
   const handleDelete = async () => {
     if (!selectedUser) return
     setDeleting(true)
-    const result = await eliminarUsuario(selectedUser.id)
+    const result = await conClave("Gestión de Usuarios", "eliminar", (clave) => eliminarUsuario(selectedUser.id, clave))
     setDeleting(false)
     if (result.success) {
       toast({ title: "Usuario eliminado", description: `${selectedUser.usuario} fue eliminado del sistema.` })

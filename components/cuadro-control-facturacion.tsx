@@ -54,6 +54,7 @@ import { FacturacionReglasHeader } from "@/components/facturacion-reglas-header"
 import { CierreFinanciero } from "@/components/cierre-financiero"
 import { GESTION_LIPGO_DESDE } from "@/lib/facturacion-constantes"
 import { esVehiculoPropioAgrupable } from "@/lib/distribucion-placas"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 const money = (n: number) => "$" + Math.round(Number(n) || 0).toLocaleString("es-CO")
 // Tarifas por unidad (ej. Huevo $2,95) pierden el sentido si se redondean a
@@ -304,6 +305,7 @@ const defaultFiltros = (): FiltrosControl => ({ ...emptyFiltros(), desde: GESTIO
 
 export function CuadroControlFacturacion() {
   const { selectedEmpresaId, user } = useAuth() as any
+  const { conClave } = useClaveAccion()
   const { toast } = useToast()
   const [data, setData] = useState<ControlFacturacion | null>(null)
   const [loading, setLoading] = useState(true)
@@ -698,7 +700,7 @@ export function CuadroControlFacturacion() {
   }
 
   const aprobar = async (id: number, estado: "borrador" | "aprobada", forzar?: boolean) => {
-    const r = await cambiarEstadoPrefactura(id, estado, { usuario: user?.email || user?.nombre || null, forzar })
+    const r = await conClave("Cuadro de Control Facturación", "aprobar", (clave) => cambiarEstadoPrefactura(id, estado, { usuario: user?.email || user?.nombre || null, forzar }, clave))
     if (r.success) {
       toast({ title: estado === "aprobada" ? "Prefactura aprobada" : "Reabierta a borrador" })
       cargarGuardadas()

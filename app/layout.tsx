@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next"
 import Script from "next/script"
 import { AuthProvider } from "@/components/auth-provider"
 import { SubmoduloFiltroProvider } from "@/components/submodulo-filtro-context"
+import { ClaveAccionProvider } from "@/components/clave-accion-provider"
 import GlobalLocationScheduler from "@/components/global-location-scheduler"
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt"
 import { MonitorErrores } from "@/components/monitor-errores"
@@ -104,7 +105,10 @@ export default function RootLayout({
               hora de Colombia (ver components/global-location-scheduler.tsx) */}
           <GlobalLocationScheduler />
           {/* Filtro año/mes del submódulo compartido con la tira de KPIs del módulo. */}
-          <SubmoduloFiltroProvider>{children}</SubmoduloFiltroProvider>
+          {/* Diálogo único de clave personal para las acciones con clave (modo bloquear). */}
+          <ClaveAccionProvider>
+            <SubmoduloFiltroProvider>{children}</SubmoduloFiltroProvider>
+          </ClaveAccionProvider>
           {/* Necesario para que useToast muestre feedback en toda la app. */}
           <Toaster />
         </AuthProvider>

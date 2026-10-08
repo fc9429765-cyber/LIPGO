@@ -38,6 +38,8 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useClaveAccion } from "@/components/clave-accion-provider"
+import { moduloDeTabla } from "@/lib/config-tablas"
 
 interface GenericCrudTableProps {
   moduleDef: ModuleDefinition
@@ -47,6 +49,7 @@ interface GenericCrudTableProps {
 export function GenericCrudTable({ moduleDef, hideNewButton = false }: GenericCrudTableProps) {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const { conClave } = useClaveAccion()
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingRecord, setEditingRecord] = useState<any | null>(null)
@@ -427,11 +430,10 @@ export function GenericCrudTable({ moduleDef, hideNewButton = false }: GenericCr
 
     setDeleting(true)
     try {
-      const result = await deleteConfigRecord(
+      const result = await conClave(moduloDeTabla(moduleDef.tableName) ?? "", "configurar", (clave) => deleteConfigRecord(
         moduleDef.tableName,
         moduleDef.primaryKey,
-        recordToDelete[moduleDef.primaryKey],
-      )
+        recordToDelete[moduleDef.primaryKey], { clave }))
 
       if (result.success) {
         toast({
@@ -678,15 +680,14 @@ export function GenericCrudTable({ moduleDef, hideNewButton = false }: GenericCr
 if (moduleDef.tableName === "almacenes" && selectedEmpresaId) {
       updateData.idempresa = selectedEmpresaId
         }
-        result = await updateConfigRecord(
+        result = await conClave(moduloDeTabla(moduleDef.tableName) ?? "", "configurar", (clave) => updateConfigRecord(
           moduleDef.tableName,
           moduleDef.primaryKey,
           editingRecord[moduleDef.primaryKey],
-          updateData,
-        )
+          updateData, { clave }))
       } else {
         const { cliente, ...insertData } = formData
-        result = await createConfigRecord(moduleDef.tableName, insertData, selectedEmpresaId ?? undefined)
+        result = await conClave(moduloDeTabla(moduleDef.tableName) ?? "", "configurar", (clave) => createConfigRecord(moduleDef.tableName, insertData, selectedEmpresaId ?? undefined, { clave }))
         
         // Auto-generate codigo for productos after creation
         if (result.success && moduleDef.tableName === "productos" && result.data?.id) {

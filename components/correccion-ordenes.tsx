@@ -29,6 +29,7 @@ import {
   type OrdenCorreccionCabecera,
   type CabeceraEditable,
 } from "@/lib/correccion-ordenes-actions"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 interface LineaEditable {
   _key: string
@@ -48,6 +49,7 @@ const TIPOS_PAGO = [
 
 export default function CorreccionOrdenes() {
   const { toast } = useToast()
+  const { conClave } = useClaveAccion()
 
   const [numeroOrdenInput, setNumeroOrdenInput] = useState("")
   const [buscando, setBuscando] = useState(false)
@@ -170,14 +172,14 @@ export default function CorreccionOrdenes() {
     }
     setGuardando(true)
     try {
-      const r = await guardarCorreccionOrden({
+      const r = await conClave("Corrección de Órdenes", "editar", (clave) => guardarCorreccionOrden({
         ordenId: contexto.id,
         ordendecargue: contexto.ordendecargue,
         motivo,
         cabecera,
         lineas: lineas.map((l) => ({ id: l.id, producto: l.producto, cantidad: l.cantidad, toneladas: l.toneladas })),
         lineasEliminadasIds,
-      })
+      }, clave))
       if (!r.success) {
         toast({ title: "No se pudo guardar", description: r.message, variant: "destructive" })
         return

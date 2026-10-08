@@ -68,6 +68,7 @@ import {
   type PreviewRecalculo,
 } from "@/lib/politicas-horas-extra-actions"
 import { getPuestosFromTarifas } from "@/lib/programacion-turnos-actions"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 const hoyISO = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Bogota" })
 
@@ -80,6 +81,7 @@ const nuevaPolitica = (puesto: string, fechaDesde: string, diaSemana: number | n
 
 export function PoliticasHorasExtra() {
   const { selectedEmpresaId } = useAuth()
+  const { conClave } = useClaveAccion()
   const { toast } = useToast()
 
   const [politicas, setPoliticas] = useState<PoliticaHorasExtra[]>([])
@@ -158,7 +160,7 @@ export function PoliticasHorasExtra() {
   const guardar = async () => {
     if (!editando) return
     setGuardando(true)
-    const res = await guardarPoliticaHorasExtra(editando)
+    const res = await conClave("Tabla Asistencia", "configurar", (clave) => guardarPoliticaHorasExtra(editando, clave))
     setGuardando(false)
     if (!res.success) {
       toast({ title: "No se pudo guardar", description: res.message, variant: "destructive" })
@@ -178,7 +180,7 @@ export function PoliticasHorasExtra() {
 
   const confirmarEliminar = async () => {
     if (!porEliminar?.id) return
-    const res = await eliminarPoliticaHorasExtra(porEliminar.id)
+    const res = await conClave("Tabla Asistencia", "configurar", (clave) => eliminarPoliticaHorasExtra(porEliminar.id!, clave))
     if (!res.success) {
       toast({ title: "No se pudo eliminar", description: res.message, variant: "destructive" })
       return
@@ -608,6 +610,7 @@ function AplicarAVariosPuestos({
   onGuardado: () => void
 }) {
   const { toast } = useToast()
+  const { conClave } = useClaveAccion()
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [buscar, setBuscar] = useState("")
   const [guardando, setGuardando] = useState(false)
@@ -668,7 +671,7 @@ function AplicarAVariosPuestos({
   const aplicar = async () => {
     if (!plantilla) return
     setGuardando(true)
-    const res = await guardarPoliticaEnPuestos(plantilla, [...seleccion])
+    const res = await conClave("Tabla Asistencia", "configurar", (clave) => guardarPoliticaEnPuestos(plantilla, [...seleccion], clave))
     setGuardando(false)
 
     if (!res.success || !res.data) {

@@ -48,6 +48,7 @@ import { SigHeader, SigFilterBar, SigKpi } from "@/components/sst/sig-ui"
 import { SignaturePad, type SignaturePadHandle } from "@/components/rrhh/signature-pad"
 import type { SigInventarioCuadre, SigInventarioCuadreDetalle, SigInventarioAjuste } from "@/lib/sig-types"
 import { Loader2, ClipboardCheck, Plus, Lock, Trash2, FileCheck2, ArrowLeft, Pencil, BookOpen, CheckCircle2, ArrowDownToLine, ArrowUpFromLine, PackageSearch, User, ChevronDown, ChevronRight, ListChecks, Wand2, RotateCcw, Undo2, Settings2, Repeat, ShieldCheck } from "lucide-react"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 const ESTADO_CUADRE: Record<string, { label: string; color: string }> = {
   borrador: { label: "Borrador", color: "#94a3b8" },
@@ -83,6 +84,7 @@ function codigoDe(tipo: string, direccion: string): string {
 
 export function CuadreInventario() {
   const { toast } = useToast()
+  const { conClave } = useClaveAccion()
   const { selectedEmpresaId, selectedEmpresaNombre, user, profile } = useAuth()
   const proyecto = selectedEmpresaId ? String(selectedEmpresaId) : "" // lo define el selector global
   // Usuario que realiza la transacción (auditoría).
@@ -386,7 +388,7 @@ export function CuadreInventario() {
     if (!sel) return
     if (!confirm("CIERRE MENSUAL\n\nSe contabilizarán las correcciones del cuadre como movimientos reales de inventario (mueven el stock: faltantes salen, sobrantes entran) y el saldo del sistema quedará igual al conteo físico. Esta acción no se puede deshacer.\n\n¿Cerrar el mes?")) return
     setSaving(true)
-    const r = await cerrarMesCuadre(sel.id)
+    const r = await conClave("Cuadre de Inventario", "cerrar", (clave) => cerrarMesCuadre(sel.id, clave))
     setSaving(false)
     if (r.success) {
       toast({ title: "Mes cerrado", description: `${r.posteados ?? 0} correcciones contabilizadas · stock ajustado` })

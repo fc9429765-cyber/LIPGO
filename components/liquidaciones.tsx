@@ -55,6 +55,7 @@ import {
   type ParametrosPrestaciones,
   type EstadoLiquidacion,
 } from "@/lib/liquidaciones-actions"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 const MOTIVOS_RETIRO = [
   "Voluntario",
@@ -123,6 +124,7 @@ function TarjetaKpi({
 
 export default function Liquidaciones() {
   const { selectedEmpresaId } = useAuth()
+  const { conClave } = useClaveAccion()
   const { toast } = useToast()
   const [data, setData] = useState<LiquidacionPersona[]>([])
   const [params, setParams] = useState<ParametrosPrestaciones>(PARAMS_DEFAULT)
@@ -266,7 +268,7 @@ export default function Liquidaciones() {
       return
     }
     setMarcandoMasivo(true)
-    const r = await guardarEstadoLiquidacionMasivo(
+    const r = await conClave("Liquidaciones", "aprobar", (clave) => guardarEstadoLiquidacionMasivo(
       items.map((p) => ({
         idempresa: p.idempresa,
         identificacion: p.identificacion,
@@ -274,8 +276,7 @@ export default function Liquidaciones() {
         fecha_retiro: p.fecha_retiro,
         total: p.total_liquidacion,
       })),
-      "liquidada",
-    )
+      "liquidada", clave))
     setMarcandoMasivo(false)
     if (r.success) {
       toast({ title: "Actualizado", description: `${r.actualizadas} liquidación(es) marcada(s) como pagadas.` })
@@ -286,7 +287,7 @@ export default function Liquidaciones() {
 
   const guardarParams = async () => {
     setSavingParams(true)
-    const r = await guardarParametrosPrestaciones(params)
+    const r = await conClave("Liquidaciones", "configurar", (clave) => guardarParametrosPrestaciones(params, clave))
     setSavingParams(false)
     if (r.success) {
       toast({ title: "Parámetros guardados", description: "Se recalcularon las prestaciones." })
@@ -297,14 +298,14 @@ export default function Liquidaciones() {
   const cambiarEstado = async (p: LiquidacionPersona) => {
     setBusy(p.identificacion)
     const nuevo = p.estado === "liquidada" ? "pendiente" : "liquidada"
-    const r = await guardarEstadoLiquidacion({
+    const r = await conClave("Liquidaciones", "aprobar", (clave) => guardarEstadoLiquidacion({
       idempresa: p.idempresa,
       identificacion: p.identificacion,
       persona: p.persona,
       fecha_retiro: p.fecha_retiro,
       total: p.total_liquidacion,
       estado: nuevo,
-    })
+    }, clave))
     setBusy(null)
     if (r.success) {
       setData((prev) => prev.map((x) => (x.identificacion === p.identificacion ? { ...x, estado: nuevo } : x)))

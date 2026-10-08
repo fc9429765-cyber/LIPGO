@@ -60,6 +60,7 @@ import { AdjuntosUploader } from "@/components/ciclo-facturacion/adjuntos-upload
 import { SoporteAnexo } from "@/components/cuadro-control-facturacion"
 import type { SoporteLinea } from "@/lib/facturacion-control-actions"
 import { AlertTriangle, Check, ChevronDown, ChevronUp, Clock, FileClock, Inbox, Loader2, Receipt, RefreshCw, Settings2, Wallet, X } from "lucide-react"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 const money = (v: number) => `$${Math.round(v).toLocaleString("es-CO")}`
 
@@ -712,6 +713,7 @@ function BarraFacturarPrefacturas({
   onCambio: () => void
 }) {
   const { toast } = useToast()
+  const { conClave, pedirClave } = useClaveAccion()
   const [lote, setLote] = useState<{ hechas: number; total: number } | null>(null)
   const listas = useMemo(() => prefacturas.filter(prefacturaFacturable), [prefacturas])
   // Si cambian los filtros, la selección se queda solo con lo visible.
@@ -735,10 +737,13 @@ function BarraFacturarPrefacturas({
       return
     const fallas: string[] = []
     let ok = 0
+    // Una sola clave para todo el lote (en modo bloquear); en aviso no se pide.
+    const claveLote = await pedirClave("Ciclo de Facturación", "aprobar", { titulo: `Emitir ${elegidas.length} facturas en Siigo` })
+    if (claveLote === null) return
     setLote({ hechas: 0, total: elegidas.length })
     for (let i = 0; i < elegidas.length; i++) {
       const p = elegidas[i]
-      const r = await emitirFacturaPrefactura(p.id)
+      const r = await emitirFacturaPrefactura(p.id, undefined, claveLote)
       if (r.success) ok++
       else fallas.push(`${p.owner} (${p.periodo_desde} a ${p.periodo_hasta}): ${r.message ?? "error"}`)
       setLote({ hechas: i + 1, total: elegidas.length })
@@ -1143,6 +1148,7 @@ function ModalPago({
   onOk: () => void
 }) {
   const { toast } = useToast()
+  const { conClave } = useClaveAccion()
   const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10))
   const [valor, setValor] = useState(saldo)
   const [observacion, setObservacion] = useState("")
@@ -1150,7 +1156,9 @@ function ModalPago({
 
   const guardar = async () => {
     setGuardando(true)
-    const r = await registrarPago(prefacturaId, { fecha, valor: Number(valor) || 0, observacion: observacion.trim() || undefined, usuario })
+    const r = await conClave("Ciclo de Facturación", "crear", (clave) =>
+      registrarPago(prefacturaId, { fecha, valor: Number(valor) || 0, observacion: observacion.trim() || undefined, usuario }, clave),
+    )
     setGuardando(false)
     if (r.success) {
       toast({ title: "Pago registrado" })
@@ -1694,6 +1702,7 @@ function PagosContadoPanel({
   periodoHasta: string
 }) {
   const { toast } = useToast()
+  const { conClave, pedirClave } = useClaveAccion()
   const [ordenes, setOrdenes] = useState<OrdenContado[]>([])
   const [loading, setLoading] = useState(true)
   const [soloSinComprobante, setSoloSinComprobante] = useState(false)
@@ -1867,10 +1876,12 @@ function PagosContadoPanel({
       return
     const fallas: string[] = []
     let ok = 0
+    const claveLote = await pedirClave("Ciclo de Facturación", "aprobar", { titulo: `Emitir ${elegidas.length} facturas en Siigo` })
+    if (claveLote === null) return
     setLote({ hechas: 0, total: elegidas.length })
     for (let i = 0; i < elegidas.length; i++) {
       const o = elegidas[i]
-      const r = await emitirFacturaOrden(o.id)
+      const r = await emitirFacturaOrden(o.id, undefined, claveLote)
       if (r.success) ok++
       else fallas.push(`${o.ordendecargue}: ${r.message ?? "error"}`)
       setLote({ hechas: i + 1, total: elegidas.length })
