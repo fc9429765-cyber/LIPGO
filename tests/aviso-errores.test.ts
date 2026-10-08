@@ -3,7 +3,7 @@
 // aviso que casi siempre dice "todo bien" se deja de leer.
 
 import { describe, expect, it } from "vitest"
-import { agruparErrores, asuntoErrores, hayErroresQueAvisar, htmlErrores, huellaMensaje, lineasErrores, type ErrorRegistrado } from "@/lib/aviso-errores"
+import { agruparErrores, asuntoErrores, hayErroresQueAvisar, horaBogota, htmlErrores, huellaMensaje, lineasErrores, type ErrorRegistrado } from "@/lib/aviso-errores"
 
 const E = (extra: Partial<ErrorRegistrado> = {}): ErrorRegistrado => ({
   id: 1,
@@ -172,5 +172,39 @@ describe("los errores de pestaña vieja se agrupan como un solo problema", () =>
     expect(r.grupos.length).toBeLessThanOrEqual(5)
     const bascula = r.grupos.find((g) => g.modulo === "desp_bascula")
     expect(bascula?.veces).toBe(2)
+  })
+})
+
+describe("la hora del correo va en hora de Colombia", () => {
+  it("convierte el UTC de app_errores.created_at a Bogotá (−5 h)", () => {
+    // `app_errores.created_at` lo escribe la base con now(), así que es UTC REAL.
+    // Antes se cortaba la cadena ISO y un error de las 8:00 de la mañana llegaba
+    // al correo de gerencia como "13:00".
+    expect(horaBogota("2026-10-08T13:00:00.000Z")).toBe("08:00")
+    expect(horaBogota("2026-10-08T12:41:03.161Z")).toBe("07:41")
+  })
+
+  it("no se adelanta un día cuando en UTC ya cambió la fecha", () => {
+    // 01:22 UTC del 8 son las 20:22 del 7 en Bogotá.
+    expect(horaBogota("2026-10-08T01:22:00.000Z")).toBe("20:22")
+  })
+
+  it("usa reloj de 24 horas, sin a. m. / p. m.", () => {
+    expect(horaBogota("2026-10-08T23:30:00.000Z")).toBe("18:30")
+    expect(horaBogota("2026-10-08T05:00:00.000Z")).toBe("00:00")
+  })
+
+  it("aguanta nulos y basura sin romper el correo", () => {
+    expect(horaBogota(null)).toBe("—")
+    expect(horaBogota(undefined)).toBe("—")
+    expect(horaBogota("")).toBe("—")
+    expect(horaBogota("no es una fecha")).toBe("—")
+  })
+
+  it("el cuerpo del correo muestra la hora de Colombia", () => {
+    const r = agruparErrores([E({ creado: "2026-10-08T13:00:00.000Z" })])
+    const texto = lineasErrores(r).join("\n")
+    expect(texto).toContain("08:00")
+    expect(texto).not.toContain("13:00")
   })
 })

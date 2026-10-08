@@ -133,7 +133,26 @@ export function asuntoErrores(r: ResumenErrores, fecha: string): string {
   return `LIPgo · ${r.total} ${r.total === 1 ? "error" : "errores"} en ${n} ${n === 1 ? "punto" : "puntos"} · ${fecha}`
 }
 
-const hora = (v: string | null) => (v ? String(v).slice(11, 16) : "—")
+/*
+ * LA HORA DEL CORREO VA EN HORA DE COLOMBIA.
+ *
+ * `app_errores.created_at` lo escribe la base con `now()`, así que es UTC REAL — al revés que
+ * `invtrans.creado`, que la app escribe ya en hora de Bogotá. Cortar la cadena ISO
+ * (`slice(11,16)`) mostraba la hora UTC: un error de las 8:00 de la mañana llegaba al correo
+ * de gerencia como "13:00". Se corrigió el 2026-10-08, por pedido de gerencia de que TODAS las
+ * horas de la app estén en hora de Colombia.
+ *
+ * Se convierte con zona horaria explícita y no restando cinco horas a mano: así no depende de
+ * dónde corra el servidor.
+ */
+export const horaBogota = (v: string | null | undefined): string => {
+  if (!v) return "—"
+  const d = new Date(v)
+  if (Number.isNaN(d.getTime())) return "—"
+  return d.toLocaleTimeString("es-CO", { timeZone: "America/Bogota", hour: "2-digit", minute: "2-digit", hour12: false })
+}
+
+const hora = horaBogota
 
 /** Texto plano, para el cuerpo alterno y para los registros. */
 export function lineasErrores(r: ResumenErrores): string[] {
