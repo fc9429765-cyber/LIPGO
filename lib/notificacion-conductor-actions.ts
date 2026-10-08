@@ -29,6 +29,7 @@ import type {
   EventoConductor,
   ResultadoAviso,
 } from "@/lib/notificacion-conductor-tipos"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 function faltaTabla(msg: string | undefined): boolean {
   const m = String(msg ?? "").toLowerCase()
@@ -83,6 +84,9 @@ export async function guardarConfigConductor(payload: {
   empresas: number[]
   telefonoPrueba?: string | null
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Notificaciones al Personal"], "configurar", "Aviso al conductor")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!payload.mensaje?.trim()) return { success: false, message: "El mensaje no puede estar vacío." }
 

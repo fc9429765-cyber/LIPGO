@@ -212,15 +212,40 @@ export function MiClaveAutorizacionDialog({
 
   const guardar = async () => {
     if (!estado || !puedeGuardar) return
+    const eraCreacion = !estado.tieneClave
+    // Si hoy no tiene forma de recuperarla, hay que resolverlo AHORA que está aquí.
+    const sinComoRecuperar = !estado.correoRecuperacion && estado.correoLoginRecibe === false
     setGuardando(true)
     const r = estado.tieneClave ? await cambiarMiClave(actual, nueva, confirmar) : await crearMiClave(nueva, confirmar)
     setGuardando(false)
     if (r.success) {
-      toast({ title: "Clave de autorización", description: r.message })
       setActual("")
       setNueva("")
       setConfirmar("")
       await cargar()
+      /*
+       * EL CORREO DE RECUPERACIÓN SE PIDE JUSTO DESPUÉS DE CREAR LA CLAVE.
+       *
+       * Medido el 2026-10-08: de las 22 personas con perfil de autorización, 21 no tienen
+       * correo de recuperación, y su correo de acceso @lipgo.app NO es un buzón. Si crean su
+       * clave y la olvidan, no pueden recuperarla solos: cada una depende de que Gestión de
+       * Usuarios le genere una clave provisional. Con las claves compartidas venciendo el
+       * 27 de octubre, son 19 personas a punto de pasar por aquí.
+       *
+       * Avisar DESPUÉS, cuando ya olvidaron la clave, no sirve de nada. Aquí ya están en la
+       * ventana, con la cabeza en el tema y treinta segundos de trabajo por delante.
+       */
+      if (eraCreacion && sinComoRecuperar) {
+        setTab("correo")
+        toast({
+          title: "Clave creada. Falta un paso para no quedarte por fuera",
+          description:
+            "Registra un correo real (tu Gmail o tu correo corporativo) para poder recuperar la clave si la olvidas. " +
+            "Tu correo de acceso @lipgo.app no recibe mensajes. Toma treinta segundos y te evita depender de Gestión de Usuarios.",
+        })
+      } else {
+        toast({ title: "Clave de autorización", description: r.message })
+      }
     } else {
       toast({ title: "No se pudo guardar", description: r.message, variant: "destructive" })
     }

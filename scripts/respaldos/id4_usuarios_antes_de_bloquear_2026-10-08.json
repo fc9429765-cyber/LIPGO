@@ -1,0 +1,54 @@
+{
+  "tomada": "2026-10-08T01:51:05.106Z",
+  "empresa": 4,
+  "usuarios": [
+    {
+      "id": "affff69d-4b9a-4fb7-8194-538d77d0475e",
+      "usuario": "Bodega Medellín",
+      "email": "bodegamolmed@lipgo.app",
+      "modulos": 66,
+      "ultimo": "2026-09-26T16:56:11.553484Z",
+      "bloqueada": false
+    },
+    {
+      "id": "d385a14c-41f8-4e13-b9c4-d387c96f50c5",
+      "usuario": "Coordinador Medellin",
+      "email": "coordmolmed@lipgo.app",
+      "modulos": 44,
+      "ultimo": "2026-08-05T19:28:17.23411Z",
+      "bloqueada": false
+    },
+    {
+      "id": "775246f1-f2a5-4fa8-bbf0-0d555bd71be7",
+      "usuario": "Katherine Marin",
+      "email": "pedidosmedellin@lipgo.app",
+      "modulos": 74,
+      "ultimo": "2026-08-01T14:25:40.292803Z",
+      "bloqueada": false
+    },
+    {
+      "id": "7abb8751-b91a-4365-b9b8-c5b7d2969036",
+      "usuario": "Natalia Gutierrez",
+      "email": "comercialmedellin@lipgo.app",
+      "modulos": 94,
+      "ultimo": "2026-09-18T20:22:28.121664Z",
+      "bloqueada": false
+    },
+    {
+      "id": "2d890194-cf51-4385-a0f9-f59e40812d26",
+      "usuario": "Pedidos Medellín",
+      "email": "pedidosmolmed@lipgo.app",
+      "modulos": 0,
+      "ultimo": "2026-02-02T19:15:57.096095Z",
+      "bloqueada": false
+    },
+    {
+      "id": "7714e717-e4f7-4556-b3ca-7bdf7024fcd8",
+      "usuario": "Porteria Medellín",
+      "email": "porteriamolmed@lipgo.appp",
+      "modulos": 9,
+      "ultimo": "2026-09-08T12:10:42.895144Z",
+      "bloqueada": false
+    }
+  ]
+}

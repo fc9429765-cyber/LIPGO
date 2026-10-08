@@ -6,6 +6,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { PARAMS_NOMINA_DEFAULTS, type ParametrosNomina, type VigenciaParametros } from "@/lib/parametros-nomina"
+import { autorizarAccion } from "@/lib/puerta-modulo"
 
 // ---------------------------------------------------------------------------
 // PARÁMETROS POR VIGENCIA (intervalos de fecha) — `parametros_legales_vigencia`.
@@ -61,7 +62,11 @@ export async function getVigenciasParametros(): Promise<{
  * resto) a `parametros_legales_anio` del AÑO de esa fecha, para que los consumidores
  * que siguen leyendo por año (parafiscales, ausentismos, liquidaciones) queden al día.
  */
-export async function guardarVigenciaParametros(v: VigenciaParametros): Promise<{ success: boolean; message?: string }> {
+export async function guardarVigenciaParametros(v: VigenciaParametros, clave?: string): Promise<{ success: boolean; message?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Liquidaciones", "configurar", { clave: clave ?? "", idempresa: null, referencia: `vigencia parámetros ${v?.fechaDesde}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   if (!v?.fechaDesde || !/^\d{4}-\d{2}-\d{2}$/.test(v.fechaDesde))
     return { success: false, message: "Fecha de vigencia inválida (use AAAA-MM-DD)." }
   try {
@@ -99,7 +104,11 @@ export async function guardarVigenciaParametros(v: VigenciaParametros): Promise<
 }
 
 /** Elimina una vigencia por su fecha_desde. */
-export async function eliminarVigenciaParametros(fechaDesde: string): Promise<{ success: boolean; message?: string }> {
+export async function eliminarVigenciaParametros(fechaDesde: string, clave?: string): Promise<{ success: boolean; message?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Liquidaciones", "configurar", { clave: clave ?? "", idempresa: null, referencia: `eliminar vigencia ${fechaDesde}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   try {
     const admin: any = await getSupabaseAdmin()
     const { error } = await admin.from("parametros_legales_vigencia").delete().eq("fecha_desde", fechaDesde)
@@ -158,7 +167,12 @@ export async function getParametrosNomina(
 // dias_cargo_empleador / pct_pago_incapacidad (los usa SST/ausentismos).
 export async function guardarParametrosNomina(
   p: ParametrosNomina,
+  clave?: string,
 ): Promise<{ success: boolean; message?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Liquidaciones", "configurar", { clave: clave ?? "", idempresa: null, referencia: `parámetros de nómina ${p?.anio}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   if (!p?.anio) return { success: false, message: "Año inválido." }
   try {
     const admin: any = await getSupabaseAdmin()

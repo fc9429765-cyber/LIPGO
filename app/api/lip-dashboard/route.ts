@@ -6,6 +6,7 @@ import {
   buildSyntheticMetaRow,
 } from "@/lib/empresa-meta-dia"
 import { esProductoPorUnidad } from "@/lib/facturacion-billed-party"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 // Huevos / Empaque MP (Avimol) se facturan y pagan POR UNIDAD: lo que las
 // vistas traen como "toneladas" para ese "Tipo de Producto" son unidades (una
@@ -28,6 +29,8 @@ function resumenPorUnidad(metaRows: any[] | null | undefined) {
 }
 
 export async function GET(request: Request) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const { searchParams } = new URL(request.url)
     const empresaId = searchParams.get("empresaId")

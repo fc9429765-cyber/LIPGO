@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { normalizarCelularCO } from "@/lib/whatsapp"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 // La programacion cambia durante el dia; no cachear.
 export const dynamic = "force-dynamic"
@@ -57,6 +58,8 @@ function normNombre(n: string | null | undefined): string {
  * `headcount.estado` usa 'Activo'/'Inactivo' (con mayuscula).
  */
 export async function GET(request: NextRequest) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const { searchParams } = new URL(request.url)
     const empresaId = searchParams.get("empresaId")

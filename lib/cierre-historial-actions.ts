@@ -19,6 +19,7 @@
  */
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const BUCKET = "cierrediario"
 
@@ -47,6 +48,9 @@ export async function saveCierreSnapshot(
   fechaISO: string,
   html: string,
 ): Promise<ActionResult<CierreSnapshot>> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Bitácora", "Operación del día"], "editar", "Guardar cierre del día")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!empresaId) return { success: false, error: "Empresa no seleccionada" }
   if (!fechaISO) return { success: false, error: "Fecha requerida" }
   if (!html || html.length < 100) {
@@ -191,6 +195,9 @@ export async function deleteCierreSnapshot(
   empresaId: number,
   fechaISO: string,
 ): Promise<ActionResult> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Bitácora"], "eliminar", "Borrar cierre del día")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!empresaId) return { success: false, error: "Empresa no seleccionada" }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaISO)) {
     return { success: false, error: "Fecha invalida" }

@@ -12,7 +12,16 @@
 import { groups } from "@/lib/dashboard-data"
 import { MODULE_PERMISSION_MAP, type UserPermissions } from "@/lib/permissions-map"
 
-export const GRUPO_PROCESOS_SOLO_LIP = "Financiera"
+/**
+ * Grupos de procesos con clave que son propiedad de LIP: Financiera (los de
+ * siempre) y, desde el plan de políticas por acción (2026-10-07), Facturación
+ * y Nómina. Solo se otorgan a usuarios con módulos financieros.
+ */
+export const GRUPOS_PROCESOS_SOLO_LIP: ReadonlySet<string> = new Set(["Financiera", "Facturación", "Nómina"])
+
+export function esGrupoSoloLip(grupo: string | null | undefined): boolean {
+  return GRUPOS_PROCESOS_SOLO_LIP.has(String(grupo ?? ""))
+}
 
 /** Grupos del menú cuyo contenido es financiero de LIP: Gestión Financiera y Compensación (nómina, bonos, liquidaciones). */
 const GRUPOS_FINANCIEROS = new Set(["financiera", "compensacion"])

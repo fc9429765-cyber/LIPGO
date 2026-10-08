@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next"
 import Script from "next/script"
 import { AuthProvider } from "@/components/auth-provider"
 import { SubmoduloFiltroProvider } from "@/components/submodulo-filtro-context"
+import { ClaveAccionProvider } from "@/components/clave-accion-provider"
 import GlobalLocationScheduler from "@/components/global-location-scheduler"
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt"
 import { MonitorErrores } from "@/components/monitor-errores"
@@ -34,6 +35,20 @@ const geistMono = localFont({
 
 export const viewport: Viewport = {
   themeColor: "#5bc0de",
+  /*
+   * Que la pagina se mida con el ancho REAL del equipo.
+   *
+   * Sin `width: "device-width"` el navegador movil asume una pantalla ancha
+   * (~980px) y encoge todo para que quepa: la letra queda diminuta y hay que
+   * desplazarse a los lados. Es el ajuste que hace que el diseno responsive
+   * --que ya existe en los `sm:`/`lg:` de toda la app-- se aplique de verdad.
+   *
+   * `initialScale: 1` arranca sin zoom. No se limita el zoom maximo ni se
+   * bloquea `userScalable`: quien necesite acercarse para leer debe poder
+   * hacerlo.
+   */
+  width: "device-width",
+  initialScale: 1,
 }
 
 export const metadata: Metadata = {
@@ -90,7 +105,10 @@ export default function RootLayout({
               hora de Colombia (ver components/global-location-scheduler.tsx) */}
           <GlobalLocationScheduler />
           {/* Filtro año/mes del submódulo compartido con la tira de KPIs del módulo. */}
-          <SubmoduloFiltroProvider>{children}</SubmoduloFiltroProvider>
+          {/* Diálogo único de clave personal para las acciones con clave (modo bloquear). */}
+          <ClaveAccionProvider>
+            <SubmoduloFiltroProvider>{children}</SubmoduloFiltroProvider>
+          </ClaveAccionProvider>
           {/* Necesario para que useToast muestre feedback en toda la app. */}
           <Toaster />
         </AuthProvider>

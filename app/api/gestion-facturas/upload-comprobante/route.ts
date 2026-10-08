@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { exigirAccionApi } from "@/lib/puerta-api"
 
 /**
  * Sube comprobantes de pago / facturas Siigo de Gestion de Facturas.
@@ -13,6 +14,8 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
  * `lib/headcount-actions`, `lib/orders-actions`, etc.
  */
 export async function POST(request: NextRequest) {
+  const puerta = await exigirAccionApi(["Solicitar Facturas", "Cuadro de Control Facturación"], "editar")
+  if (puerta) return puerta
   try {
     const formData = await request.formData()
     const file = formData.get("file") as File | null

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { exigirAccionApi } from "@/lib/puerta-api"
 
 /**
  * Evidencia PDF de entrega de Dotación / EPP.
@@ -51,6 +52,8 @@ async function clienteAdmin() {
 }
 
 export async function POST(request: NextRequest) {
+  const puerta = await exigirAccionApi(["Entrega de EPP", "Gestión de Dotación EPP"], "crear")
+  if (puerta) return puerta
   const tipoContenido = request.headers.get("content-type") || ""
 
   // ── Modo 1: emitir URL firmada ────────────────────────────────────────

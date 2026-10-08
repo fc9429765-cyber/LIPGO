@@ -207,7 +207,7 @@ export function FacturacionReglasHeader({ empresaId }: { empresaId: number | nul
                         ))}
                       </ul>
                       <p className="mt-1 text-muted-foreground">
-                        El trámite no cambia: la factura siempre se solicita desde Gestión de Facturas. Lo que
+                        El trámite no cambia: la factura siempre se solicita desde Solicitar Facturas. Lo que
                         cambia es la condición de pago.
                       </p>
                     </Bloque>

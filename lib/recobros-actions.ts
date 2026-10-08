@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase-client"
 import type { ActualizarRecobroInput } from "@/lib/recobros"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 /**
  * Actualiza el seguimiento del recobro de una incapacidad (fila de
@@ -9,6 +10,9 @@ import type { ActualizarRecobroInput } from "@/lib/recobros"
  * registro (días, costos, diagnóstico) no se modifica.
  */
 export async function actualizarRecobro(id: string, input: ActualizarRecobroInput) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Recobro de Incapacidades"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   // Cliente tipado a `any` (mismo patrón del resto del proyecto) para evitar
   // que el tipado estricto de supabase-js rechace el update genérico.
   const supabase: any = await createClient()

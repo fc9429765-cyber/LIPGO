@@ -22,6 +22,7 @@
 // ---------------------------------------------------------------------------
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 import { procesarNovedadRetiro } from "@/lib/retiro-actions"
 import { sincronizarBorradorAusentismo } from "@/lib/ausentismos-actions"
 import { metaDeNovedad } from "@/lib/novedades-catalogo"
@@ -60,6 +61,9 @@ export async function getNovedadesPeriodo(
   mes: number,
   quincena: 1 | 2,
 ): Promise<{ success: boolean; data?: NovedadesPeriodoData; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Novedades de personal", "Tabla Asistencia"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!empresaId) return { success: false, message: "Selecciona una empresa en el selector de arriba." }
 
   const p = (n: number) => String(n).padStart(2, "0")
@@ -300,6 +304,9 @@ export async function registrarNovedad(payload: {
   fechaDesde: string
   fechaHasta?: string | null
 }): Promise<{ success: boolean; dias?: number; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Novedades de personal", "Tabla Asistencia"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const { empresaId, identificacion, nombre, valor, fechaDesde } = payload
   if (!empresaId) return { success: false, message: "Falta la empresa." }
   if (!identificacion || !nombre) return { success: false, message: "Falta el trabajador." }
@@ -394,5 +401,23 @@ export async function registrarNovedad(payload: {
   } catch (e: any) {
     console.error("[v0] registrarNovedad excepción:", e?.message ?? e)
     return { success: false, message: e?.message || "No se pudo registrar la novedad." }
+  }
+}
+
+/**
+ * Cambia la novedad de UN registro de asistencia (Tabla Asistencia, Novedades,
+ * Visor). Antes components/attendance/edit-novedad-dialog.tsx lo escribía
+ * directo desde el navegador (Fase 3, 2026-10-07).
+ */
+export async function actualizarNovedadAsistencia(id: number, novedad: string | null): Promise<{ success: boolean; message?: string }> {
+  const motivoAccion = await motivoSinAccion(["Tabla Asistencia", "Novedades de personal", "Visor"], "editar", "Editar novedad del día")
+  if (motivoAccion) return { success: false, message: motivoAccion }
+  try {
+    const sb: any = await getSupabaseAdmin()
+    const { error } = await sb.from("registroasistencia").update({ asistencia: novedad || null }).eq("id", id)
+    if (error) return { success: false, message: error.message }
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, message: e?.message || "No se pudo actualizar la novedad." }
   }
 }

@@ -1,7 +1,10 @@
 import { createClient } from "@/lib/supabase"
 import { NextResponse } from "next/server"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 export async function GET(request: Request) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const supabase = await createClient()
 

@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { parseColombianNumber } from "@/lib/parse-colombian-number"
 import { excluirPlacasFacturas, excluirNoFacturable } from "@/lib/facturas-exclusiones"
+import { exigirSesionApi, exigirAccionApi } from "@/lib/puerta-api"
 
 export async function GET(request: NextRequest) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const { searchParams } = new URL(request.url)
     const empresaId = searchParams.get("empresaId")
@@ -195,6 +198,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  const puerta = await exigirAccionApi(["Solicitar Facturas", "Cuadro de Control Facturación"], "editar")
+  if (puerta) return puerta
   try {
     const body = await request.json()
     const { orderId, mediopago, valorpago, iva, comprobante, cuentatransferencia, retefuente, estadofactura, cliente, observacionesfactura } = body
@@ -250,6 +255,8 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const puerta = await exigirAccionApi(["Solicitar Facturas", "Cuadro de Control Facturación"], "editar")
+  if (puerta) return puerta
   try {
     const body = await request.json()
     const { orderId, estadofactura, cliente, iva, retefuente, valorpago, cuentatransferencia, facturasiigo } = body
@@ -286,7 +293,7 @@ export async function PATCH(request: NextRequest) {
       updateData.cuentatransferencia = cuentatransferencia
     }
     // Permite LIMPIAR la factura Siigo (facturasiigo: null) al eliminarla desde
-    // Gestión de Facturas (acción protegida por contraseña).
+    // Solicitar Facturas (acción protegida por contraseña).
     if (facturasiigo !== undefined) {
       updateData.facturasiigo = facturasiigo
     }

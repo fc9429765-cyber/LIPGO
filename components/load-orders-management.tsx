@@ -39,6 +39,7 @@ import { PERIODOS_LISTADO, PERIODO_LISTADO_DEFECTO, desdeDePeriodo, type Periodo
 import { getAvailableVehiclesForAssignment, assignVehicleToLoadOrder } from "@/lib/vehicle-actions"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/components/auth-provider"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 interface LoadOrder {
   id: number
@@ -87,6 +88,7 @@ interface LoadOrdersManagementProps {
 export function LoadOrdersManagement({ initialSearch, onInitialSearchApplied }: LoadOrdersManagementProps = {}) {
   const [orders, setOrders] = useState<LoadOrder[]>([])
   const [loading, setLoading] = useState(true)
+  const { conClave } = useClaveAccion()
   // Ciclo completo de una orden (orden → asignación de lotes → despacho).
   const [orden360, setOrden360] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<"pendiente" | "finalizada" | "todas">("todas")
@@ -372,7 +374,7 @@ export function LoadOrdersManagement({ initialSearch, onInitialSearchApplied }: 
     }
 
     setIsAssigning(true)
-    const result = await deleteLoadOrder(orderToDelete.id)
+    const result = await conClave("Gestión de Ordenes", "eliminar", (clave) => deleteLoadOrder(orderToDelete.id, clave))
 
     if (result.success) {
       toast({

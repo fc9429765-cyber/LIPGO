@@ -54,6 +54,7 @@ import {
   type ClaseRiesgo,
   type ParametrosParafiscales,
 } from "@/lib/parafiscales"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 const money = (n: number) =>
   "$" + Math.round(Number(n) || 0).toLocaleString("es-CO", { maximumFractionDigits: 0 })
@@ -65,6 +66,7 @@ const MESES = [
 
 export default function Parafiscales() {
   const { selectedEmpresaId } = useAuth()
+  const { conClave } = useClaveAccion()
   const { toast } = useToast()
   const hoy = new Date()
   // Seguridad Social y Parafiscales se pagan MES VENCIDO (la planilla PILA de
@@ -134,7 +136,7 @@ export default function Parafiscales() {
 
   const guardarParams = async () => {
     setSavingParams(true)
-    const r = await guardarParametrosParafiscales({ ...params, anio })
+    const r = await conClave("Parafiscales", "configurar", (clave) => guardarParametrosParafiscales({ ...params, anio }, clave))
     setSavingParams(false)
     if (r.success) {
       toast({ title: "Parámetros guardados", description: `Año ${anio} actualizado. Se recalcularon los aportes.` })

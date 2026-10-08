@@ -3,6 +3,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import type { MedevacRow } from "@/lib/sst-evidencia-types"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 // Nota: se usa el cliente admin (service role) en el servidor porque la tabla
 // sst_medevac tiene RLS activo; el acceso al módulo ya lo controla PermissionGuard
@@ -118,6 +119,9 @@ export async function saveMedevac(
   empresaIdFromClient?: number | null,
   actualizadoPor?: string,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["MEDEVAC"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase: any = await getSupabaseAdmin()
   const empresaId = await resolveEmpresaId(empresaIdFromClient)
   const limpio = saneado(row)
@@ -150,6 +154,9 @@ export async function saveMedevac(
 }
 
 export async function deleteMedevac(id: number): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["MEDEVAC"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase: any = await getSupabaseAdmin()
   const { error } = await supabase.from("sst_medevac").delete().eq("id", id)
   return error ? { success: false, message: error.message } : { success: true }
@@ -160,6 +167,9 @@ export async function deleteMedevac(id: number): Promise<{ success: boolean; mes
  * corrigió a mano lo que la carga masiva no pudo resolver.
  */
 export async function resolverRevisionMedevac(id: number): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["MEDEVAC"], "aprobar", "Resolver revisión")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase: any = await getSupabaseAdmin()
   const { error } = await supabase
     .from("sst_medevac")

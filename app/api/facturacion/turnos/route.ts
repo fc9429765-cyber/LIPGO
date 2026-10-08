@@ -2,8 +2,11 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/client"
 import { getCurrentEmpresaIdForInsert } from "@/lib/company-filter"
 import { fetchAllRows } from "@/lib/fetch-all-rows"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 export async function GET(request: Request) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const { searchParams } = new URL(request.url)
     const selectedEmpresaId = searchParams.get("empresaId")

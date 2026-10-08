@@ -30,6 +30,7 @@ import { useEffect, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { toZonedTime, formatInTimeZone } from "date-fns-tz"
 import { useAuth } from "@/components/auth-provider"
+import { registrarConexion } from "@/lib/conexiones-actions"
 
 // ---------- Constantes ----------
 
@@ -141,31 +142,12 @@ export default function GlobalLocationScheduler() {
             const pos = await getGeolocation()
             const { latitude, longitude } = pos.coords
 
-            // Insert fire-and-forget: NO hacemos await para no bloquear la UI.
-            // Errores se reportan por console.log para no molestar al usuario.
-            void supabase
-              .from("registro_conexiones")
-              .insert({
-                usuario_id: user.id,
-                latitud: latitude,
-                longitud: longitude,
-                accion: win.accion,
-              })
-              .then(({ error }) => {
-                if (error) {
-                  console.log(
-                    "[v0] GlobalLocationScheduler: insert fallo",
-                    win.slug,
-                    error.message,
-                  )
-                } else {
-                  console.log(
-                    "[v0] GlobalLocationScheduler: captura ok",
-                    win.slug,
-                    dateStr,
-                  )
-                }
-              })
+            // Server action: el usuario sale de la sesión del servidor (antes el navegador
+            // escribía su propio usuario_id). Fire-and-forget: no bloquea la UI.
+            void registrarConexion({ latitud: latitude, longitud: longitude, accion: win.accion }).then(({ success, message }) => {
+              if (!success) console.log("[v0] GlobalLocationScheduler: insert fallo", win.slug, message)
+              else console.log("[v0] GlobalLocationScheduler: captura ok", win.slug, dateStr)
+            })
           } catch (err: any) {
             // Errores tipicos: permiso denegado, timeout de GPS, sin senal.
             // Fallamos silenciosamente por requerimiento.

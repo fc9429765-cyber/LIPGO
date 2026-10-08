@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase-client"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import type { SoporteRow, SoporteMeta } from "@/lib/soportes-types"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 async function resolveEmpresaId(fromClient?: number | null): Promise<number | null> {
   if (fromClient && !Number.isNaN(fromClient)) return fromClient
@@ -77,6 +78,9 @@ export async function subirYRegistrarSoporte(
   meta: SoporteMeta,
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; url?: string; id?: number; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Repositorio de Soportes", "Matriz de Estándares", "Auditoría 0312", "IPEVR", "Plan de Mejoramiento", "Investigación AT", "Investigaciones Realizadas", "Cargos Fijos", "Matriz Integrada SIG", "Repositorio por Norma SIG"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const empresaId = await resolveEmpresaId(empresaIdFromClient)
     if (!empresaId) return { success: false, message: "No se pudo resolver la empresa." }
@@ -135,8 +139,110 @@ export async function subirYRegistrarSoporte(
   }
 }
 
+/*
+ * REGISTRA UN ARCHIVO QUE EL NAVEGADOR YA SUBIÓ A STORAGE.
+ *
+ * `subirYRegistrarSoporte` manda el archivo entero a través del Server
+ * Action, y ahí el tope no lo pone LIPgo: lo pone la plataforma. Vercel corta
+ * el cuerpo de la petición mucho antes de los 50 MB que declara
+ * `next.config.mjs`, y el usuario ve un fallo sin explicación con un escaneo
+ * grande -- justo lo que pasa en Investigación de AT, donde los soportes son
+ * expedientes escaneados.
+ *
+ * Con la subida directa el archivo va del navegador a Supabase Storage sin
+ * pasar por Vercel, así que el límite deja de existir: solo queda el del
+ * bucket. Por aquí llega únicamente la URL y los datos del archivo, que son
+ * unos cientos de bytes.
+ *
+ * `storagePath` es la ruta real dentro del bucket: se guarda para poder
+ * borrar el archivo si el registro falla, y así no dejar huérfanos.
+ */
+export async function registrarSoporteSubido(
+  datos: {
+    storagePath: string
+    url: string
+    nombre: string
+    tipo: string
+    tamano: number
+  },
+  meta: SoporteMeta,
+  empresaIdFromClient?: number | null,
+): Promise<{ success: boolean; url?: string; id?: number; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Repositorio de Soportes", "Matriz de Estándares", "Auditoría 0312", "IPEVR", "Plan de Mejoramiento", "Investigación AT", "Investigaciones Realizadas", "Cargos Fijos", "Matriz Integrada SIG", "Repositorio por Norma SIG"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
+  try {
+    const empresaId = await resolveEmpresaId(empresaIdFromClient)
+    if (!empresaId) return { success: false, message: "No se pudo resolver la empresa." }
+
+    /*
+     * La ruta se comprueba antes de registrarla. Sin esto, cualquiera podría
+     * llamar a esta acción con una URL arbitraria y dejarla guardada como si
+     * fuera un soporte: el archivo no estaría en nuestro bucket y el registro
+     * apuntaría a cualquier parte.
+     */
+    if (!datos.storagePath.startsWith("soportes/")) {
+      return { success: false, message: "Ruta de archivo no válida." }
+    }
+
+    const supabase = await createClient()
+    await supabase
+      .from("soportes_documentales")
+      .update({ vigente: false })
+      // SST transversal (LIP): la vigencia se maneja a nivel LIP, no por cliente.
+      .eq("referencia_tipo", meta.referenciaTipo)
+      .eq("referencia_id", meta.referenciaId)
+
+    const ins = await supabase
+      .from("soportes_documentales")
+      .insert([
+        {
+          idempresa: empresaId,
+          norma: meta.norma,
+          modulo: meta.modulo,
+          referencia_tipo: meta.referenciaTipo,
+          referencia_id: meta.referenciaId,
+          referencia_desc: meta.referenciaDesc ?? null,
+          archivo_url: datos.url,
+          archivo_nombre: datos.nombre,
+          tipo_archivo: datos.tipo || datos.nombre.split(".").pop() || "bin",
+          tamano: datos.tamano,
+          subido_por: meta.subidoPor ?? null,
+          observacion: meta.observacion ?? null,
+          vigente: true,
+        },
+      ])
+      .select("id")
+      .single()
+
+    if (ins.error) {
+      console.error("[v0] registrarSoporteSubido insert:", ins.error.message)
+      /*
+       * El archivo ya está en Storage pero el registro falló: se retira, o
+       * quedaría ocupando espacio sin que ninguna pantalla pueda mostrarlo ni
+       * nadie sepa que existe.
+       */
+      try {
+        const admin = await getSupabaseAdmin()
+        await admin.storage.from("archivos").remove([datos.storagePath])
+      } catch (e: any) {
+        console.error("[v0] registrarSoporteSubido limpieza:", e?.message ?? e)
+      }
+      return { success: false, message: ins.error.message }
+    }
+
+    return { success: true, url: datos.url, id: (ins.data as any)?.id }
+  } catch (e: any) {
+    console.error("[v0] registrarSoporteSubido:", e?.message ?? e)
+    return { success: false, message: e?.message ?? "Error inesperado al registrar el soporte." }
+  }
+}
+
 // Marca un soporte como histórico (no borra el archivo; conserva la trazabilidad).
 export async function anularSoporte(id: number): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Repositorio de Soportes"], "anular")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const { error } = await supabase.from("soportes_documentales").update({ vigente: false }).eq("id", id)
   return error ? { success: false, message: error.message } : { success: true }
@@ -165,6 +271,9 @@ export async function eliminarSoporte(
   id: number,
   motivo: string,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Repositorio de Soportes", "Matriz de Estándares", "Auditoría 0312", "IPEVR", "Plan de Mejoramiento", "Investigación AT", "Investigaciones Realizadas", "Matriz Integrada SIG", "Repositorio por Norma SIG"], "editar", "Quitar soporte")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!id) return { success: false, message: "No se indicó qué soporte quitar." }
   if (!motivo || !motivo.trim()) {
     return { success: false, message: "Indica por qué se quita el soporte." }

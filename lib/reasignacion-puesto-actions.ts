@@ -24,6 +24,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 /** Mínimo del motivo. Corto no explica nada y el registro pierde su razón de ser. */
 const MOTIVO_MIN = 10
@@ -77,6 +78,9 @@ async function resolverEspecialidad(admin: any, puesto: string): Promise<boolean
 export async function reasignarPuestoDelDia(
   input: ReasignarPuestoInput,
 ): Promise<{ success: boolean; message: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Tabla Asistencia"], "editar", "Reasignar puesto")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const identificacion = String(input?.identificacion ?? "").trim()
   const puestoNuevo = String(input?.puestoNuevo ?? "").trim()
   const motivo = String(input?.motivo ?? "").trim()

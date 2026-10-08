@@ -7,6 +7,7 @@ import { CODIGOS_REQUIEREN_APROBACION } from "@/lib/transacciones-codigo"
 import * as XLSX from "xlsx"
 import { generateAndUploadProductionEntryPDF } from "@/lib/pdf-actions"
 import { getColombiaDate } from "@/lib/date-utils"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 import {
   getCurrentEmpresaIdForInsert,
   getCurrentUsuarioForInsert,
@@ -519,6 +520,9 @@ export interface InventoryTransaction {
 }
 
 export async function registerInventoryTransaction(transaction: InventoryTransaction) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Transacciones de Inventario"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     console.log("[v0] Registering transaction with data:", transaction)
 
@@ -1153,6 +1157,9 @@ export async function exportInventoryDetailsToExcel(
   subcategoriaFilter?: string,
   empresaId?: number | null,
 ): Promise<{ success: boolean; data?: string; filename?: string; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Saldos de inventario", "Saldos por producto"], "exportar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const details = await getInventoryBalanceDetails(
       productFilter,
@@ -1212,6 +1219,9 @@ export async function exportInventoryGlobalToExcel(
   filename?: string
   error?: string
 }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Saldos de inventario", "Saldos por producto"], "exportar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     // Reutilizamos la misma funcion de consulta que usa la vista para
     // garantizar que el Excel salga con EXACTAMENTE los mismos
@@ -1300,6 +1310,9 @@ export async function getReprocesos(selectedEmpresaId?: number | null): Promise<
 }
 
 export async function deleteReproceso(id: number): Promise<{ success: boolean; message: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Reprocesos"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const supabase = await createClient()
     const { error } = await supabase.from("reprocesos").delete().eq("id", id)
@@ -1327,6 +1340,9 @@ export interface ProcessReprocesoData {
 }
 
 export async function processReproceso(data: ProcessReprocesoData): Promise<{ success: boolean; message: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Reprocesos"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const supabase = await createClient()
 
@@ -1490,6 +1506,9 @@ const registerMultipleProductionEntries = async (
 export const registerProductionEntries = registerMultipleProductionEntries
 
 export async function registerProductionEntry(entry: ProductionEntry) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ingreso de Producción", "Ver ingresos de producción"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     console.log("[v0] Registering production entry with data:", entry)
 
@@ -1620,6 +1639,9 @@ export async function approveProductionEntry(
   observaciones?: string,
   selectedEmpresaId?: number | null,
 ): Promise<{ success: boolean; message: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Aprobación de ingreso de producción"], "aprobar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const supabase = await createClient()
 
@@ -1696,6 +1718,9 @@ export async function approveProductionEntry(
 }
 
 export async function rejectProductionEntry(id: number): Promise<{ success: boolean; message: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Aprobación de ingreso de producción"], "anular", "Rechazar ingreso")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const supabase = await createClient()
     const { error } = await supabase.from("invtrans").update({ status: "rechazado" }).eq("id", id)
@@ -1831,6 +1856,9 @@ export async function getAllInventoryTransactions(filters?: {
 }
 
 export async function deleteInventoryTransaction(id: number): Promise<{ success: boolean; message: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ver ingresos de producción"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const supabase = await createClient()
     const { error } = await supabase.from("invtrans").delete().eq("id", id)
@@ -1858,6 +1886,9 @@ export async function updateInvtransOrdentolva(
   ids: number[],
   ordentolva: string,
 ): Promise<{ success: boolean; message: string; updated?: number }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ver ingresos de producción", "Ver Tolva"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!Array.isArray(ids) || ids.length === 0) {
     return { success: false, message: "No se recibieron IDs para actualizar" }
   }
@@ -1914,6 +1945,9 @@ export interface UpdateInventoryTransactionData {
 export async function updateInventoryTransaction(
   data: UpdateInventoryTransactionData,
 ): Promise<{ success: boolean; message: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ver ingresos de producción", "Ver Tolva"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const supabase = await createClient()
 
@@ -2317,6 +2351,9 @@ export async function registerProductTransfer(
   cantidad: number,
   selectedEmpresaId?: number,
 ): Promise<{ success: boolean; message: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Traslados de producto"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     console.log("[v0] Registering product transfer:", {
       origenLocation,
@@ -2762,6 +2799,9 @@ export async function registerQRPalletFromTransaction(data: {
   tipoMovimiento: string
   fechaVencimiento: string | null
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Transacciones de Inventario", "Registro de QR estibas"], "crear")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   const supabase = await createClient()
 
   try {

@@ -20,6 +20,7 @@ import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin
 import { getCurrentUser } from "@/lib/auth-actions"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
 import { checkModulePermission } from "@/lib/permissions-actions"
+import { PROCESOS_NUEVOS } from "@/lib/politicas-modulos"
 import {
   hashClave,
   verificarClaveHash,
@@ -57,7 +58,11 @@ const MAX_INTENTOS_CODIGO = 5
 type Resp<T = {}> = { success: boolean; message?: string } & Partial<T>
 
 async function assertAdmin(): Promise<boolean> {
-  return await checkModulePermission(MODULO_ADMIN)
+  // Desde la unificación (2026-10-07) esta administración vive dentro de la
+  // pantalla única que abre "Gestión de Usuarios". Vale cualquiera de las dos
+  // llaves de módulo, para que nadie quede viendo la pestaña sin poder usarla.
+  if (await checkModulePermission(MODULO_ADMIN)) return true
+  return await checkModulePermission("Gestión de Usuarios")
 }
 
 async function logInterno(fila: { usuario_id: string | null; usuario: string | null; proceso: string; resultado: string; autorizado_por?: string | null; referencia?: string | null; detalle?: Record<string, unknown> | null }) {
@@ -220,22 +225,37 @@ export async function getMiEstadoClave(): Promise<EstadoMiClave | null> {
  * (perfil o excepción) pero aún no creó su clave personal, o tiene una
  * provisional. Tres consultas mínimas; nada de esto requiere permisos de módulo.
  */
-export async function getAvisoMiClave(): Promise<{ motivo: "sin_clave" | "provisional" | null }> {
+/**
+ * Aviso de clave pendiente para la persona en sesión.
+ *
+ * Devuelve además la FECHA en que vencen las claves compartidas y el día de hoy en Bogotá,
+ * para que la franja pueda decir cuántos días faltan. Sin esa cuenta regresiva el aviso es
+ * "pendiente" a secas, y eso no mueve a nadie: medido el 2026-10-07, el aviso llevaba desde
+ * el 27 de septiembre dentro del menú del avatar y 19 de 21 personas seguían sin clave.
+ */
+export async function getAvisoMiClave(): Promise<{
+  motivo: "sin_clave" | "provisional" | null
+  transicionHasta: string | null
+  hoy: string
+}> {
+  const hoy = hoyColombiaISO()
   try {
     const user = await getCurrentUser()
-    if (!user) return { motivo: null }
+    if (!user) return { motivo: null, transicionHasta: null, hoy }
     const sb: any = await getSupabaseAdminAsSystem()
-    const [{ data: clave }, { count: nPerf }, { count: nExc }] = await Promise.all([
+    const [{ data: clave }, { count: nPerf }, { count: nExc }, { data: cfg }] = await Promise.all([
       sb.from("autorizacion_claves").select("provisional").eq("usuario_id", user.id).maybeSingle(),
       sb.from("autorizacion_usuario_perfiles").select("id", { count: "exact", head: true }).eq("usuario_id", user.id),
       sb.from("autorizacion_usuario_procesos").select("id", { count: "exact", head: true }).eq("usuario_id", user.id).eq("permitir", true),
+      sb.from("autorizacion_config").select("valor").eq("clave", "transicion_claves_compartidas_hasta").maybeSingle(),
     ])
-    if (Number(nPerf || 0) + Number(nExc || 0) === 0) return { motivo: null }
-    if (!clave) return { motivo: "sin_clave" }
-    if (clave.provisional) return { motivo: "provisional" }
-    return { motivo: null }
+    const transicionHasta = typeof cfg?.valor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(cfg.valor) ? cfg.valor : null
+    if (Number(nPerf || 0) + Number(nExc || 0) === 0) return { motivo: null, transicionHasta, hoy }
+    if (!clave) return { motivo: "sin_clave", transicionHasta, hoy }
+    if (clave.provisional) return { motivo: "provisional", transicionHasta, hoy }
+    return { motivo: null, transicionHasta, hoy }
   } catch {
-    return { motivo: null }
+    return { motivo: null, transicionHasta: null, hoy }
   }
 }
 
@@ -554,7 +574,7 @@ export async function adminGetResumen(): Promise<Resp<{ data: ResumenAutorizacio
       emails,
       { data: correosRec },
     ] = await Promise.all([
-      sb.from("autorizacion_procesos").select("*").order("orden"),
+      sb.from("autorizacion_procesos").select("*").order("orden").then((r: any) => ({ ...r, data: conProcesosDelCatalogo(r.data) })),
       sb.from("autorizacion_perfiles").select("*").order("nombre"),
       sb.from("autorizacion_perfil_procesos").select("perfil_id, proceso"),
       sb.from("profiles").select("id, usuario, empresa_id").order("usuario"),
@@ -936,5 +956,134 @@ export async function adminGetLog(opts?: {
     return { success: true, data: (data ?? []) as LogAutorizacion[] }
   } catch (e: any) {
     return { success: false, message: e?.message || "No se pudo leer la bitácora." }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Unificación con los perfiles de acceso (2026-10-07, script 264)
+// ---------------------------------------------------------------------------
+
+/** Catálogo de procesos autorizables, para la pestaña Autorizaciones del perfil. */
+/**
+ * Suma a las filas de `autorizacion_procesos` los procesos del catálogo
+ * (lib/politicas-modulos.ts) que todavía no existen en la base, marcados
+ * `pendiente_sql`. Así la pantalla muestra las políticas nuevas desde el
+ * despliegue y dice qué SQL falta, en vez de ocultarlas en silencio.
+ */
+function conProcesosDelCatalogo(rows: any[] | null | undefined): ProcesoAutorizable[] {
+  const base = (rows ?? []) as ProcesoAutorizable[]
+  const codigos = new Set(base.map((p) => p.codigo))
+  const pendientes: ProcesoAutorizable[] = PROCESOS_NUEVOS.filter((p) => !codigos.has(p.codigo)).map((p) => ({
+    codigo: p.codigo,
+    nombre: p.nombre,
+    descripcion: p.descripcion,
+    grupo: p.grupo,
+    orden: p.orden,
+    con_alcance: p.con_alcance,
+    activo: true,
+    pendiente_sql: true,
+  }))
+  return [...base, ...pendientes].sort((a, b) => a.grupo.localeCompare(b.grupo) || a.orden - b.orden)
+}
+
+export async function adminListarProcesos(): Promise<Resp<{ data: ProcesoAutorizable[] }>> {
+  try {
+    if (!(await assertAdmin())) return { success: false, message: "No autorizado" }
+    const sb: any = await getSupabaseAdmin()
+    const { data, error } = await sb.from("autorizacion_procesos").select("*").eq("activo", true).order("grupo").order("orden")
+    if (error) return { success: false, message: error.message }
+    return { success: true, data: conProcesosDelCatalogo(data) }
+  } catch (e: any) {
+    return { success: false, message: e?.message || "No se pudieron cargar los procesos." }
+  }
+}
+
+/**
+ * Deja al usuario con exactamente los perfiles indicados, con el alcance que
+ * dicta cada perfil: una fila por EMPRESA del perfil, o una sola fila "todos
+ * los proyectos" si el perfil no define empresas.
+ *
+ * REGLA DE NO AMPLIAR. Un perfil sin empresas que el usuario YA tenía se deja
+ * exactamente como está, con el alcance que le puso la administración a mano.
+ * Si se le pusiera "todos" se le estaría abriendo la clave a todos los
+ * proyectos sin que nadie lo decidiera.
+ *
+ * Escribe `autorizacion_usuario_perfiles` con el mismo candado financiero y la
+ * misma bitácora que adminAsignarPerfil/adminQuitarPerfil.
+ */
+export async function adminSincronizarPerfilesUsuario(
+  usuarioId: string,
+  deseados: Array<{ perfilId: number; empresas: number[] }>,
+): Promise<Resp<{ agregados: number; retirados: number }>> {
+  try {
+    if (!(await assertAdmin())) return { success: false, message: "No autorizado" }
+    if (!usuarioId) return { success: false, message: "Usuario no especificado." }
+    const sb: any = await getSupabaseAdmin()
+    const admin = await getCurrentUsuarioForInsert()
+
+    const { data: actuales, error } = await sb
+      .from("autorizacion_usuario_perfiles")
+      .select("id, perfil_id, idempresa")
+      .eq("usuario_id", usuarioId)
+    if (error) return { success: false, message: error.message }
+    const filas: Array<{ id: number; perfil_id: number; idempresa: number | null }> = (actuales ?? []).map((r: any) => ({
+      id: Number(r.id),
+      perfil_id: Number(r.perfil_id),
+      idempresa: r.idempresa == null ? null : Number(r.idempresa),
+    }))
+    const teniaPerfil = new Set(filas.map((f) => f.perfil_id))
+    const deseadoPor = new Map(deseados.map((d) => [Number(d.perfilId), d]))
+
+    // 1) Perfiles que salen: todas sus filas, con cualquier alcance.
+    const quitar = filas.filter((f) => !deseadoPor.has(f.perfil_id))
+
+    // 2) Perfiles que entran, o que cambian de alcance porque el perfil define empresas.
+    const insertar: Array<{ perfil_id: number; idempresa: number | null }> = []
+    const borrarPorAlcance: number[] = []
+    for (const d of deseados) {
+      const pid = Number(d.perfilId)
+      const empresas = Array.from(new Set((d.empresas ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0)))
+      const mias = filas.filter((f) => f.perfil_id === pid)
+      if (empresas.length === 0) {
+        if (mias.length === 0) insertar.push({ perfil_id: pid, idempresa: null })
+        continue
+      }
+      const objetivo = new Set(empresas)
+      for (const f of mias) if (f.idempresa == null || !objetivo.has(f.idempresa)) borrarPorAlcance.push(f.id)
+      const yaTiene = new Set(mias.map((f) => f.idempresa))
+      for (const e of empresas) if (!yaTiene.has(e)) insertar.push({ perfil_id: pid, idempresa: e })
+    }
+
+    // Candado financiero: solo para los perfiles que el usuario NO tenía.
+    const nuevosPerfiles = Array.from(new Set(insertar.map((i) => i.perfil_id))).filter((p) => !teniaPerfil.has(p))
+    if (nuevosPerfiles.length) {
+      const { data: pp } = await sb.from("autorizacion_perfil_procesos").select("proceso").in("perfil_id", nuevosPerfiles)
+      const rechazo = await rechazoFinanciero(sb, usuarioId, (pp ?? []).map((r: any) => String(r.proceso)))
+      if (rechazo) return { success: false, message: rechazo }
+    }
+
+    const idsBorrar = [...quitar.map((f) => f.id), ...borrarPorAlcance]
+    if (idsBorrar.length) {
+      const { error: e } = await sb.from("autorizacion_usuario_perfiles").delete().in("id", idsBorrar)
+      if (e) return { success: false, message: e.message }
+    }
+    if (insertar.length) {
+      const { error: e } = await sb
+        .from("autorizacion_usuario_perfiles")
+        .insert(insertar.map((i) => ({ usuario_id: usuarioId, perfil_id: i.perfil_id, idempresa: i.idempresa, asignado_por: admin })))
+      if (e && e.code !== "23505") return { success: false, message: e.message }
+    }
+
+    const nombre = await nombreDeUsuario(sb, usuarioId)
+    const perfilesQuitados = Array.from(new Set(quitar.map((f) => f.perfil_id)))
+    for (const pid of perfilesQuitados) {
+      await logInterno({ usuario_id: usuarioId, usuario: nombre, proceso: "admin_asignacion", resultado: "perfil_quitado", autorizado_por: admin, detalle: { perfilId: pid, via: "perfiles_unificados" } })
+    }
+    for (const pid of nuevosPerfiles) {
+      await logInterno({ usuario_id: usuarioId, usuario: nombre, proceso: "admin_asignacion", resultado: "perfil_asignado", autorizado_por: admin, detalle: { perfilId: pid, empresas: deseadoPor.get(pid)?.empresas ?? [], via: "perfiles_unificados" } })
+    }
+    return { success: true, agregados: nuevosPerfiles.length, retirados: perfilesQuitados.length }
+  } catch (e: any) {
+    return { success: false, message: e?.message || "No se pudo sincronizar los perfiles." }
   }
 }

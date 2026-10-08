@@ -1,0 +1,16 @@
+{
+  "_comentario": "Numeros de script que YA estan duplicados. No se renombran: un script que ya se corrio debe conservar su nombre, o nadie sabe que ejecuto. Esta lista solo deberia encoger si alguna vez se consolidan. Un duplicado NUEVO si rompe el chequeo.",
+  "_actualizado": "2026-10-07",
+  "duplicados": [
+    "scripts/181",
+    "scripts/212",
+    "scripts/241",
+    "scripts/243",
+    "scripts/244",
+    "scripts/sig/44",
+    "scripts/sig/45",
+    "scripts/sig/46",
+    "scripts/sig/51",
+    "scripts/sig/52"
+  ]
+}

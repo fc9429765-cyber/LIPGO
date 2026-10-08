@@ -10,6 +10,7 @@
  */
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 export interface VentanaTurno {
   horaInicio: string | null // "HH:MM"
@@ -125,6 +126,9 @@ export async function guardarHorarioTolva(
   turno1: VentanaTurno,
   turno2: VentanaTurno,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Programación de turnos"], "configurar", "Horario de tolva")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!idempresa || !fecha) return { success: false, message: "Empresa y fecha son requeridas." }
   try {
     const admin: any = await getSupabaseAdmin()

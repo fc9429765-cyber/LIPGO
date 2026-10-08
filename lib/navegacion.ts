@@ -674,12 +674,9 @@ export const HUBS: Hub[] = [
     title: "Seguridad y accesos",
     icon: Lock,
     color: "#dc2626",
-    descripcion: "Usuarios, accesos por proyecto y autorizaciones por clave. Exclusivo de LIPgo.",
-    tabs: [
-      { module: "Gestión de Usuarios", label: "Usuarios" },
-      { module: "Accesos de Usuario", label: "Accesos" },
-      { module: "Autorizaciones por clave", label: "Autorizaciones" },
-    ],
+    descripcion:
+      "Una sola pantalla: usuarios, perfiles (empresas, owners, módulos y procesos que autorizan) y claves personales. Exclusivo de LIPgo.",
+    tabs: [{ module: "Gestión de Usuarios", label: "Autorizaciones" }],
   },
   // ===== Materiales · MRP (Fase 4b; desde 2026-10-01 es un subgrupo de Producción:
   // un área con una sola tarjeta no era limpia) =====

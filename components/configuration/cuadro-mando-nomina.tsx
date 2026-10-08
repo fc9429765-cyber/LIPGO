@@ -26,6 +26,7 @@ import {
   type ParametrosLegalesBase,
   type VigenciaParametros,
 } from "@/lib/parametros-nomina"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 const money = (n: number) =>
   "$" + (Number(n) || 0).toLocaleString("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -83,6 +84,7 @@ const nuevaVigencia = (fechaDesde: string): VigenciaParametros => ({
 
 export function CuadroMandoNomina() {
   const { toast } = useToast()
+  const { conClave } = useClaveAccion()
   const [vigencias, setVigencias] = useState<VigenciaParametros[]>([])
   const [sel, setSel] = useState<string | null>(null) // fechaDesde seleccionada
   const [params, setParams] = useState<VigenciaParametros>(() => nuevaVigencia(hoyISO()))
@@ -143,7 +145,7 @@ export function CuadroMandoNomina() {
       return
     }
     setSaving(true)
-    const r = await guardarVigenciaParametros(params)
+    const r = await conClave("Liquidaciones", "configurar", (clave) => guardarVigenciaParametros(params, clave))
     setSaving(false)
     if (r.success) {
       toast({ title: "Vigencia guardada", description: `Rige desde ${fmtFecha(params.fechaDesde)}.` })
@@ -155,7 +157,7 @@ export function CuadroMandoNomina() {
     if (esNueva || !sel) return
     if (!confirm(`¿Eliminar la vigencia que rige desde ${fmtFecha(sel)}?`)) return
     setSaving(true)
-    const r = await eliminarVigenciaParametros(sel)
+    const r = await conClave("Liquidaciones", "configurar", (clave) => eliminarVigenciaParametros(sel, clave))
     setSaving(false)
     if (r.success) {
       toast({ title: "Vigencia eliminada" })

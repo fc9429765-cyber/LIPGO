@@ -18,8 +18,10 @@ import { getCurrentUser } from "@/lib/auth-actions"
 import { checkModulePermission } from "@/lib/permissions-actions"
 import { segundoFactorPendiente } from "@/lib/seguridad-servidor"
 import { updateUserPermissions } from "@/lib/permissions-actions"
-import { MODULE_PERMISSION_MAP, type UserPermissions } from "@/lib/permissions-map"
+import type { UserPermissions } from "@/lib/permissions-map"
+import { CLAVES_PERMISO } from "@/lib/permisos-claves"
 import type { CrearUsuarioInput, AuthMetaUsuario } from "@/lib/user-admin-types"
+import { autorizarAccion } from "@/lib/puerta-modulo"
 
 const MODULO_ADMIN = "Gestión de Usuarios"
 
@@ -32,15 +34,15 @@ async function assertAdmin(): Promise<boolean> {
 }
 
 // Todas las columnas de permiso en `false`. Se construye desde la unica fuente
-// de verdad (`MODULE_PERMISSION_MAP`): cada valor del mapa es el nombre real de
-// una columna booleana en `permisos_usuarios`. Necesario porque esas columnas
-// tienen DEFAULT `true`: si insertaramos una fila "vacia", el usuario nuevo
-// naceria con TODO habilitado. Con este objeto nace SIN permisos y el admin le
-// habilita modulos con el arbol de permisos existente.
+// de verdad (`CLAVES_PERMISO`: módulos, extras y acciones): cada clave es el
+// nombre real de una columna booleana en `permisos_usuarios`. Necesario porque
+// las columnas de módulo tienen DEFAULT `true`: si insertaramos una fila
+// "vacia", el usuario nuevo naceria con TODO habilitado. Con este objeto nace
+// SIN permisos y el admin le habilita modulos con el arbol de permisos.
+// (Antes iteraba solo MODULE_PERMISSION_MAP y las extras nunca se sembraban.)
 function permisosEnFalse(): Partial<UserPermissions> {
-  const claves = Array.from(new Set(Object.values(MODULE_PERMISSION_MAP)))
   const out: Record<string, boolean> = {}
-  for (const k of claves) out[k as string] = false
+  for (const k of CLAVES_PERMISO) out[k] = false
   return out as Partial<UserPermissions>
 }
 
@@ -147,7 +149,11 @@ export async function resetearPassword(userId: string, nuevaPassword: string): P
   }
 }
 
-export async function eliminarUsuario(userId: string): Promise<{ success: boolean; error?: string }> {
+export async function eliminarUsuario(userId: string, clave?: string): Promise<{ success: boolean; error?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Gestión de Usuarios", "eliminar", { clave: clave ?? "", idempresa: null, referencia: `eliminar usuario ${userId}` })
+  if (!autorizacionAccion.ok) return { success: false, error: autorizacionAccion.error || "Sin autorización." }
   try {
     if (!(await assertAdmin())) return { success: false, error: "No autorizado" }
     if (!userId) return { success: false, error: "Usuario no especificado" }
@@ -161,13 +167,68 @@ export async function eliminarUsuario(userId: string): Promise<{ success: boolea
 
     const supabase = await getSupabaseAdmin()
 
-    // Borrado explicito y ordenado de las tablas de la app antes de tocar Auth.
-    // Es robusto sin depender de la config de ON DELETE de cada FK. Los errores
-    // por fila inexistente no son fatales (best-effort por tabla).
-    await supabase.from("perfil_acceso_empresas").delete().eq("profile_id", userId)
-    await supabase.from("perfil_acceso_owners").delete().eq("profile_id", userId)
-    await supabase.from("permisos_usuarios").delete().eq("usuario_id", userId)
-    await supabase.from("profiles").delete().eq("id", userId)
+    /*
+     * SE LIMPIAN LAS DOCE TABLAS QUE APUNTAN A `profiles`, NO TRES.
+     *
+     * Hasta hoy esto borraba tres y pasaba de largo. El problema (ID4, 2026-10-08, al
+     * intentar retirar a los usuarios de Medellín por la entrega del proyecto): las tablas
+     * de autorizaciones por clave nacieron después y nadie las añadió aquí, así que el
+     * borrado de `profiles` chocaba contra su llave foránea. Y como el error de ese borrado
+     * NO se revisaba, seguía de largo hasta Auth y el administrador veía un mensaje de base
+     * de datos que no explicaba nada.
+     *
+     * `auditoria` NO se toca y no hace falta: su `actor_id` es un uuid suelto, sin llave
+     * foránea, y el nombre vive aparte en `actor_nombre`, que es texto. El rastro de lo que
+     * hizo la persona sobrevive intacto al borrado de su usuario, que es justo lo que se
+     * quiere.
+     */
+    for (const [tabla, col] of [
+      ["autorizacion_usuario_perfiles", "usuario_id"],
+      ["autorizacion_usuario_procesos", "usuario_id"],
+      ["autorizacion_recuperacion", "usuario_id"],
+      ["autorizacion_correos", "usuario_id"],
+      ["autorizacion_claves", "usuario_id"],
+      ["acceso_perfil_usuarios", "profile_id"],
+      ["acceso_perfil_materializado", "profile_id"],
+      ["permisos_mapa_procesos", "usuario_id"],
+      ["perfil_acceso_empresas", "profile_id"],
+      ["perfil_acceso_owners", "profile_id"],
+      ["permisos_usuarios", "usuario_id"],
+    ] as const) {
+      const { error } = await supabase.from(tabla).delete().eq(col, userId)
+      // Una tabla que todavía no existe (script sin correr) no puede frenar el borrado.
+      if (error && !/does not exist|schema cache|not find/i.test(error.message)) {
+        console.error(`[user-admin] no se pudo limpiar ${tabla}:`, error.message)
+      }
+    }
+
+    /*
+     * EL CHAT NO SE BORRA EN SILENCIO.
+     *
+     * `messages.receiver_id` también apunta a `profiles`, pero eso es CONTENIDO, no permisos:
+     * son conversaciones que también le pertenecen a quien las escribió. Borrarlas de paso,
+     * sin decirlo, destruiría el historial del otro lado. Se cuenta y se informa para que
+     * quien administra decida.
+     */
+    const { count: mensajes } = await supabase.from("messages").select("id", { count: "exact", head: true }).eq("receiver_id", userId)
+    if (Number(mensajes || 0) > 0) {
+      return {
+        success: false,
+        error:
+          `No se eliminó: este usuario tiene ${mensajes} mensaje(s) del chat interno dirigidos a él. ` +
+          `Son conversaciones que también le pertenecen a quien las escribió, así que no se borran solas. ` +
+          `Si el usuario ya no debe entrar, lo efectivo es quitarle los módulos y bloquear la cuenta: eso le cierra el acceso y conserva el rastro.`,
+      }
+    }
+
+    const { error: errProfile } = await supabase.from("profiles").delete().eq("id", userId)
+    if (errProfile) {
+      console.error("[user-admin] Error borrando profiles:", errProfile.message)
+      return {
+        success: false,
+        error: `No se pudo eliminar el perfil del usuario: ${errProfile.message}. Nada quedó a medias: la cuenta sigue existiendo.`,
+      }
+    }
 
     // Por ultimo, la cuenta de Auth.
     const { error } = await supabase.auth.admin.deleteUser(userId)

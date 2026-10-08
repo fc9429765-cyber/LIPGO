@@ -49,6 +49,7 @@ import {
   type ParametrosParafiscales,
 } from "@/lib/parafiscales"
 import { getLiquidaciones } from "@/lib/liquidaciones-actions"
+import { autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
 
 export interface ParafiscalPersona extends Aportes {
   persona: string
@@ -130,7 +131,12 @@ export async function getParametrosParafiscales(
 
 export async function guardarParametrosParafiscales(
   p: ParametrosParafiscales,
+  clave?: string,
 ): Promise<{ success: boolean; message?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Parafiscales", "configurar", { clave: clave ?? "", idempresa: null, referencia: "parámetros de parafiscales" })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   // Baranda legal del lado del servidor: un valor fuera del rango admisible no
   // se persiste aunque la UI lo mande. Los "avisos" (apartarse del valor de ley
   // vigente por una reforma) sí se permiten — los confirma el usuario en la UI.
@@ -184,6 +190,9 @@ export async function getParafiscales(
   auxilio?: number
   message?: string
 }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Parafiscales"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion, data: [] }
   try {
     const admin: any = await getSupabaseAdmin()
     const params = await leerParametros(admin, anio)
@@ -571,6 +580,9 @@ export async function guardarValorRealParafiscal(payload: {
   ibcReal: number | null
   diasReal: number | null
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Parafiscales"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!payload?.identificacion || !payload.anio || !payload.mes) {
     return { success: false, message: "Datos incompletos." }
   }

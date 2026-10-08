@@ -41,6 +41,7 @@ import { getConciliacionAvimol } from "@/lib/conciliacion-avimol-actions"
 import { esPlacaDistribucion, ownerDeLinea, cargarPlacasDistribucion } from "@/lib/distribucion-placas"
 import { PLACAS_EXCLUIDAS_FACTURAS } from "@/lib/facturas-exclusiones"
 import { facturadoAOwner } from "@/lib/facturacion-billed-party"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const num = (v: any) => {
   const n = Number(String(v ?? "").replace(/,/g, ""))
@@ -580,6 +581,9 @@ export async function getAnalisisFinanciero(
   hasta: string,
   meses: number,
 ): Promise<{ success: boolean; data?: AnalisisFinanciero; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Estado de Resultados", "Resumen de Facturación por Proyecto", "Facturación Proyectos"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!ids?.length) return { success: false, message: "Sin proyectos en el alcance." }
     const sb: any = await getSupabaseAdmin()
@@ -779,6 +783,9 @@ export async function guardarAcuerdoVolumen(payload: {
   fechainicio: string
   fechafin: string
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Estado de Resultados"], "configurar", "Acuerdo de volumen")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const sb: any = await getSupabaseAdmin()
     const row = {

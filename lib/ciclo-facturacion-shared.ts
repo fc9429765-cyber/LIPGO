@@ -26,3 +26,42 @@ export function fechaAyerColombiaISO(): string {
   const d = String(colombia.getDate()).padStart(2, "0")
   return `${y}-${m}-${d}`
 }
+
+/**
+ * Desde cuándo muestra el Ciclo de Facturación.
+ *
+ * Se arranca de cero el 1 de octubre de 2026 para empezar a emitir facturas en
+ * Siigo desde ese mes. Lo anterior ya se facturó por fuera: mostrarlo aquí
+ * invitaría a volver a facturarlo, y una factura electrónica de más no se
+ * borra.
+ *
+ * El corte se aplica en el SERVIDOR y no en los filtros de la pantalla:
+ * aquellos se pueden limpiar con un botón, y entonces reaparecería el
+ * histórico entero.
+ *
+ * Vive aquí y no en `ciclo-facturacion-actions.ts` porque ese archivo es
+ * "use server" y ahí solo se pueden exportar funciones async: exportar una
+ * constante rompe el build, y el typecheck no lo detecta.
+ *
+ * Para levantarlo hay que cambiar esta constante a propósito, que es
+ * justamente la clase de decisión que no debe tomarse sin querer.
+ */
+export const CORTE_CICLO_SIIGO = "2026-10-01"
+
+/**
+ * Proyectos que YA NO SON de LIPgo. Se entregaron y nada de facturación debe
+ * seguir generándose ni mostrándose para ellos: ni el cron, ni la bandeja,
+ * ni las alertas.
+ *
+ * ID4 · Cedi Medellín, entregado el 26 de septiembre de 2026 (gerencia,
+ * 2026-10-08: "saca de la ecuación el ID4 que ya no está con nosotros").
+ *
+ * Va aquí, en código, y NO se tocan sus condiciones en la base: la regla de la
+ * casa es no alterar parámetros por proyecto. Si un día vuelve, se quita de
+ * esta lista y todo sigue como lo dejó.
+ */
+export const PROYECTOS_ENTREGADOS: ReadonlySet<number> = new Set([4])
+
+export function proyectoEntregado(idempresa: number | null | undefined): boolean {
+  return idempresa != null && PROYECTOS_ENTREGADOS.has(Number(idempresa))
+}

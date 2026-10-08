@@ -7,7 +7,7 @@ import { getColombiaDateTime, getColombiaDate, getColombiaTime, dateInputToColom
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import { getCurrentUser, getUserProfile } from "@/lib/auth-actions"
 import { getCurrentEmpresaId, getCurrentUserContext } from "@/lib/company-filter"
-import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 import { autorizar } from "@/lib/autorizaciones-core"
 import { revalidatePath } from "next/cache"
 import { generateAndUploadLoadOrderPDF } from "./pdf-actions" // Added for generateLoadOrder
@@ -24,6 +24,8 @@ import {
   lineaTrasReverso,
   type CargueDeLinea,
 } from "@/lib/pedido-ordenes"
+import { autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
+import { resumenPedidosDeLaOrden } from "@/lib/pedido-de-la-orden"
 
 /**
  * Obtiene los IDs de empresa accesibles para el usuario actual desde perfil_acceso_empresas
@@ -285,6 +287,9 @@ export async function getOrderDetails(idpedido: number) {
 }
 
 export async function updateOrder(idpedido: number, data: any) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestionar pedidos", "Entrada de pedidos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     const { error } = await supabase.from("pedidoscabecera").update(data).eq("idpedido", idpedido)
@@ -302,6 +307,9 @@ export async function updateOrder(idpedido: number, data: any) {
 }
 
 export async function deleteOrder(idpedido: number) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestionar pedidos"], "eliminar", "Eliminar pedido")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     // Check if ocargue is null or empty
@@ -355,6 +363,9 @@ export async function deleteOrder(idpedido: number) {
 }
 
 export async function updateOrderDetails(idpedido: number, products: any[]) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestionar pedidos", "Entrada de pedidos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     console.log("[v0] Server: Fetching existing details for order:", idpedido)
@@ -532,6 +543,9 @@ export async function approveOrder(idpedido: number, approvalCode: string) {
 }
 
 export async function updateOrderPDFUrl(idpedido: number, pdfUrl: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestionar pedidos", "Entrada de pedidos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     const { error } = await supabase.from("pedidoscabecera").update({ pdfpedido: pdfUrl }).eq("idpedido", idpedido)
@@ -548,7 +562,16 @@ export async function updateOrderPDFUrl(idpedido: number, pdfUrl: string) {
   }
 }
 
-export async function getOrderFiltersData() {
+/**
+ * Los valores de los desplegables de filtro: pedidos, órdenes de compra,
+ * ciudades y vendedores.
+ *
+ * `empresaId` es la empresa elegida en el selector superior. Sin ella, los
+ * desplegables se armaban con TODAS las empresas accesibles: quien tiene
+ * acceso a varios proyectos veía pedidos que no existen en el que está
+ * mirando, y al escogerlos la lista salía vacía sin explicar por qué.
+ */
+export async function getOrderFiltersData(empresaId?: number) {
   const supabase = await createClient()
   try {
     console.log("[v0] Fetching order filters data")
@@ -569,8 +592,19 @@ export async function getOrderFiltersData() {
         .eq("aprobado", "si")
         .order("pedido", { ascending: false })
         .order("idpedido", { ascending: false })
-      // Filter by accessible empresas
-      q = q.in("id_empresa", accessibleEmpresas)
+      /*
+       * La empresa elegida en el selector superior manda sobre la lista de
+       * accesibles.
+       *
+       * Se comprueba que esté entre las accesibles antes de usarla: el valor
+       * viene del navegador, y sin esa comprobación bastaría con cambiarlo
+       * para ver pedidos de un proyecto al que no se tiene acceso.
+       */
+      if (empresaId && accessibleEmpresas.includes(empresaId)) {
+        q = q.eq("id_empresa", empresaId)
+      } else {
+        q = q.in("id_empresa", accessibleEmpresas)
+      }
       // Filter by accessible owners in empresafactura field (if user has owner permissions)
       if (accessibleOwners.length > 0) q = q.in("empresafactura", accessibleOwners)
       return q
@@ -1066,6 +1100,9 @@ export async function generateLoadOrder(orderData: {
   tipoOperacion?: string
   idempresaSeleccionada?: number // Optional: warehouse/bodega ID selected by user
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Generar Órdenes de Cargue"], "crear", "Generar orden de cargue")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   try {
@@ -1222,6 +1259,29 @@ export async function generateLoadOrder(orderData: {
 
     console.log("[v0] Cabeceraoc inserted successfully")
 
+    /*
+     * DE QUÉ PEDIDO NACIÓ ESTA ORDEN (script 255).
+     *
+     * Va en un UPDATE aparte, y a propósito. Crear una orden de cargue es la operación más
+     * crítica de la app: si estas dos columnas fueran parte del INSERT y la base no las
+     * tuviera todavía (un entorno nuevo, el script sin correr), el insert fallaría y nadie
+     * podría despachar. Así, si el update no puede, la orden ya existe y todo lo demás
+     * sigue igual; solo quedan en nulo y el relleno del 255 las puede recalcular.
+     *
+     * El resumen se deriva de las mismas líneas que alimentan el libro
+     * `pedidodetalle_ocargue`, con la misma regla, para que las dos fuentes no se
+     * contradigan nunca.
+     */
+    try {
+      const resumen = resumenPedidosDeLaOrden(orderData.detailUpdates)
+      const { error: vinculoError } = await supabase.from("cabeceraoc").update(resumen).eq("id", nextId)
+      if (vinculoError) {
+        console.warn("[cargue] no se pudo anotar el pedido en la cabecera de la orden:", vinculoError.message)
+      }
+    } catch (e: any) {
+      console.warn("[cargue] no se pudo anotar el pedido en la cabecera de la orden:", e?.message ?? e)
+    }
+
     // Reporte interno. Va aquí, con la orden ya insertada, y nunca lanza: un
     // problema de WhatsApp no puede impedir crear una orden de cargue.
     try {
@@ -1233,7 +1293,7 @@ export async function generateLoadOrder(orderData: {
     // La inspección deja de estar huérfana: queda amarrada a esta orden.
     await vincularRegistroSanitario(supabase, horaSanitaria.registroId, orderCode)
 
-    const detailUpdateResult = await updatePedidoDetalleStatus(orderData.detailUpdates, orderCode)
+    const detailUpdateResult = await updatePedidoDetalleStatus(orderData.detailUpdates, orderCode, nextId)
 
     if (!detailUpdateResult.success) {
       return { success: false, message: detailUpdateResult.message }
@@ -1470,6 +1530,9 @@ export async function getOrderCodeForSelectedOrders(selectedOrderIds: number[]) 
 }
 
 export async function updateLoadOrderPDFUrl(orderId: number, pdfUrl: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Generar Órdenes de Cargue", "Gestión de Ordenes"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     const { error } = await supabase.from("cabeceraoc").update({ pdfoc: pdfUrl }).eq("id", orderId)
@@ -1487,6 +1550,9 @@ export async function updateLoadOrderPDFUrl(orderId: number, pdfUrl: string) {
 }
 
 export async function updateLoadOrderFechaCargue(orderId: number, fechaCargue: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Ordenes"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     const fechaCargueFormatted = await dateInputToColombiaDate(fechaCargue)
@@ -1668,6 +1734,9 @@ export async function updateBasculaData(orderData: {
   pesovascula?: number
   tiquetebascula?: string
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Báscula"], "editar", "Registrar pesaje")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     const updateData: any = {}
@@ -1924,6 +1993,9 @@ export async function getVehiclesForSanitaryRegistry() {
 }
 
 export async function uploadSanitaryPhoto(file: File, ordenCargue: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Registro sanitario"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     console.log("[v0] uploadSanitaryPhoto - Starting upload for order:", ordenCargue)
     console.log("[v0] uploadSanitaryPhoto - File name:", file.name, "size:", file.size, "type:", file.type)
@@ -1983,6 +2055,9 @@ export async function registerSanitaryVerification(data: {
   isVehicleOnly?: boolean
   citasVehiculosId?: number | null
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Registro sanitario"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     console.log("[v0] Registering sanitary verification:", data)
@@ -2147,6 +2222,14 @@ export async function updatePedidoDetalleStatus(
     idpedido?: number
   }>,
   orderCode?: string,
+  /**
+   * Id de la orden en `cabeceraoc`. Es el vínculo FIABLE para el libro: `ocargue` es un
+   * código de texto y `cabeceraoc` tiene códigos repetidos, así que por texto no siempre
+   * se sabe de qué orden habla una fila. Es lo que dejó 254 atribuciones huérfanas antes
+   * del 2026-10-07 (script 251). Opcional para no romper a nadie; si no llega, la fila
+   * queda con el código como antes.
+   */
+  idorden?: number,
 ) {
   const supabase = await createClient()
   try {
@@ -2224,6 +2307,8 @@ export async function updatePedidoDetalleStatus(
             idpedido: Number(l?.idpedido ?? u.idpedido) || 0,
             transid: Number(u.transid),
             ocargue: orderCode,
+            // El vínculo por id, además del código de texto (script 251).
+            idorden: Number.isFinite(Number(idorden)) ? Number(idorden) : null,
             unidades: Number(u.unidadescargadas) || 0,
             origen: "app",
           }
@@ -2632,7 +2717,11 @@ async function eliminarClonesDeCargue(
   return { success: true }
 }
 
-export async function deleteLoadOrder(orderId: number) {
+export async function deleteLoadOrder(orderId: number, clave?: string) {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Gestión de Ordenes", "eliminar", { clave: clave ?? "", idempresa: (await (await getSupabaseAdminAsSystem()).from("cabeceraoc").select("idempresa").eq("id", orderId).maybeSingle()).data?.idempresa ?? null, referencia: `eliminar orden ${orderId}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   // (2026-10-02) Eliminar una orden es delicado: debe quedar QUIÉN lo hizo.
   // Con el cliente genérico la auditoría registraba actor "sistema" sin id
   // (nueve órdenes eliminadas el 30-sep sin responsable identificable). El
@@ -2669,7 +2758,7 @@ export async function deleteLoadOrder(orderId: number) {
     // Step 1: Get the order to be deleted to get ordendecargue
     const { data: orderToDelete, error: fetchError } = await supabase
       .from("cabeceraoc")
-      .select("ordendecargue, tipooperacion")
+      .select("ordendecargue, tipooperacion, facturasiigo, idempresa")
       .eq("id", orderId)
       .single()
 
@@ -2685,6 +2774,65 @@ export async function deleteLoadOrder(orderId: number) {
     const ordenDeCargue = orderToDelete.ordendecargue
     console.log("[v0] Order to delete has ordendecargue:", ordenDeCargue)
 
+    /*
+     * UNA ORDEN YA FACTURADA NO SE BORRA.
+     *
+     * `facturasiigo` lleno significa que existe una factura electronica
+     * emitida por esta orden. Esa factura NO se puede borrar: se anula con una
+     * nota credito, que es otro documento contable con su propia numeracion.
+     *
+     * Si se borrara la orden, la factura quedaria en Siigo sin nada que la
+     * respalde en LIPgo -- y el cruce contable se romperia sin que nadie se
+     * entere. Primero se anula en Siigo, despues se borra aqui.
+     */
+    if (String(orderToDelete.facturasiigo ?? "").trim() !== "") {
+      return {
+        success: false,
+        message:
+          `La orden ${ordenDeCargue} ya tiene factura emitida en Siigo y no se puede eliminar. ` +
+          "Anulala primero en Siigo con una nota credito.",
+      }
+    }
+
+    /*
+     * UNA ORDEN QUE YA DESPACHÓ NO SE BORRA.
+     *
+     * Regla de gerencia (2026-10-07): "si tiene los otros pasos del proceso, como picking
+     * verificado, no se puede borrar o afectaría el inventario".
+     *
+     * El picking es el momento en que la mercancía sale de verdad: las líneas pasan de
+     * `por descontar` (una reserva) a `aprobado` (una salida). Si la orden se borra después
+     * de eso, el reverso devuelve el inventario y el sistema queda diciendo que hay producto
+     * que ya se fue en un camión. El saldo se infla en silencio y nadie se entera hasta el
+     * conteo del mes.
+     *
+     * Una reserva sin picking sí se puede borrar: no salió nada todavía.
+     *
+     * Si de verdad hay que deshacer un despacho, no es borrando la orden: es una corrección
+     * de inventario, que deja su propio rastro y pasa por clave.
+     */
+    const { data: yaDespacho, error: errDespacho } = await supabase
+      .from("invtrans")
+      .select("id, nombreproducto, cantidad, status")
+      .eq("ocargue", ordenDeCargue)
+      .ilike("origen", "orden de cargue")
+      .ilike("status", "apr%")
+      .limit(500)
+    if (errDespacho) {
+      return { success: false, message: `No se pudo comprobar si la orden ya despachó: ${errDespacho.message}. No se borró nada.` }
+    }
+    if ((yaDespacho ?? []).length > 0) {
+      const unidades = (yaDespacho ?? []).reduce((s: number, r: any) => s + (Number(r.cantidad) || 0), 0)
+      return {
+        success: false,
+        message:
+          `La orden ${ordenDeCargue} ya despachó: tiene ${yaDespacho!.length} salida(s) de inventario aprobadas ` +
+          `por ${unidades.toLocaleString("es-CO")} unidades. Borrarla devolvería a la bodega un producto que ya salió. ` +
+          `Si hay que corregirla, hazlo desde Cuadre y Correcciones de inventario, que deja rastro; o anula el pedido ` +
+          `asociado si lo que cambió fue la entrega.`,
+      }
+    }
+
     // Si es una orden de Cargue (madre), borra primero sus clones automáticos
     // (o bloquea si alguno ya fue procesado). Los demás tipos (Descargue,
     // Distribucion, Tolva...) no disparan esta cascada.
@@ -2693,6 +2841,73 @@ export async function deleteLoadOrder(orderId: number) {
       if (!cascada.success) {
         return cascada
       }
+    }
+
+    /*
+     * REVERSO DE INVENTARIO Y CALIDAD.
+     *
+     * La aprobacion de calidad (`approveBatchAllocation`) deja tres rastros
+     * por orden: el movimiento de inventario en `invtrans`, la asignacion de
+     * lotes en `historicolotes`, y la marca `horalote` en la cabecera.
+     *
+     * Hasta ahora el borrado de la orden no tocaba ninguno, asi que el
+     * inventario seguia descontado por un despacho que ya no existia y los
+     * lotes quedaban asignados a una orden borrada. El saldo
+     * (`saldoinvdetalle`) se deriva de `invtrans`, asi que retirar las
+     * transacciones restituye el inventario sin tener que recalcular nada.
+     *
+     * Es el mismo reverso que ya hace "Anular asignacion de lotes"
+     * (`annulBatchAssignment` en lib/batch-actions.ts); aqui se aplica tambien
+     * al borrar la orden entera.
+     *
+     * Va ANTES de borrar la cabecera: si algo falla, la orden sigue existiendo
+     * y se puede reintentar. Al reves quedaria inventario descontado sin orden
+     * a la cual atribuirlo, que es precisamente lo que se esta corrigiendo.
+     */
+    const { error: invtransDeleteError } = await supabase
+      .from("invtrans")
+      .delete()
+      .eq("ocargue", ordenDeCargue)
+    if (invtransDeleteError) {
+      console.error("[v0] Error deleting invtrans:", invtransDeleteError)
+      return { success: false, message: "Error al revertir las transacciones de inventario" }
+    }
+    console.log("[v0] Deleted invtrans for ocargue:", ordenDeCargue)
+
+    const { error: lotesDeleteError } = await supabase
+      .from("historicolotes")
+      .delete()
+      .eq("ordendecargue", ordenDeCargue)
+    if (lotesDeleteError) {
+      console.error("[v0] Error deleting historicolotes:", lotesDeleteError)
+      return { success: false, message: "Error al revertir la asignacion de lotes" }
+    }
+    console.log("[v0] Deleted historicolotes for ocargue:", ordenDeCargue)
+
+    /*
+     * Las pausas del cargue tambien cuelgan de la orden. Sin esto quedan
+     * apuntando a un numero que ya no existe y suman tiempo muerto a una orden
+     * fantasma en los indicadores de piso.
+     *
+     * `despachotraslados` NO se toca: es una VISTA derivada, no una tabla. No
+     * se puede borrar de ella ("cannot delete from view", 55000) y no hace
+     * falta: lo que muestra sale de las tablas base, asi que desaparece solo
+     * cuando estas se limpian.
+     *
+     * No bloquea el borrado si falla --no es el nucleo de la operacion y una
+     * orden a medio borrar es peor que un registro suelto-- pero el fallo se
+     * registra para poder limpiarlo despues.
+     */
+    const { error: pausasError } = await supabase
+      .from("pausas")
+      .delete()
+      .eq("ordendecargue", ordenDeCargue)
+    if (pausasError) {
+      console.error("[v0] Error deleting pausas:", pausasError.message)
+      void registrarErrorServidor("orders.deleteLoadOrder.pausas", pausasError, {
+        orderId,
+        ordenDeCargue,
+      })
     }
 
     // Step 2: Delete all associated lines in detalleoc where idorden = orderId
@@ -2879,39 +3094,84 @@ export async function deleteLoadOrder(orderId: number) {
   }
 }
 
-// Verifica la autorización de CARTERA y devuelve el nombre de quien autoriza.
-// SQL 203: clave PERSONAL con el proceso `ped_aprobar_cartera` en el proyecto
-// del pedido (perfil "Cartera"). Las contraseñas de `usuariocartera` siguen
-// valiendo solo durante la transición.
-export async function verifyCarteraPassword(password: string, idpedido?: number | null) {
-  try {
-    let idempresa: number | null = null
-    if (idpedido) {
-      const supabase = await createClient()
-      const { data } = await supabase.from("pedidoscabecera").select("id_empresa").eq("idpedido", idpedido).maybeSingle()
-      idempresa = data?.id_empresa ?? null
-    }
-    const auth = await autorizar({
-      proceso: "ped_aprobar_cartera",
-      idempresa,
-      clave: password,
-      referencia: idpedido ? `cartera pedido ${idpedido}` : "cartera",
-    })
-    if (!auth.ok) {
-      return { success: false, message: auth.error || "Contraseña de cartera inválida" }
-    }
-    return { success: true, nombre: auth.autorizadoPor, message: "Contraseña válida" }
-  } catch (error) {
-    console.error("[v0] Error verifying cartera password:", error)
-    return { success: false, message: "Error al verificar contraseña" }
+/*
+ * PANTALLA DESACTUALIZADA. Esta acción ya no la llama nadie del código actual.
+ *
+ * Antes de la Fase 0 (2026-10-07) la pantalla hacía dos pasos: verificaba la clave aquí y
+ * después llamaba a `approveCartera(idpedido, NOMBRE)`. Esa segunda acción ahora recibe la
+ * CLAVE, no el nombre, porque recibir el nombre era el hueco: cualquiera podía llamarla con
+ * un nombre inventado y saltarse la clave.
+ *
+ * El problema real (ID2, 2026-10-08): quien tenía la pantalla abierta desde antes del
+ * despliegue seguía ejecutando el código viejo. Verificaba bien y acto seguido mandaba el
+ * nombre donde ahora va la clave, así que la aprobación NO se guardaba y la pantalla decía
+ * "Clave incorrecta. Te quedan 4 intentos". María Camila cambió su clave personal TRES veces
+ * buscando un problema que no estaba en la clave, y cada intento le quemaba un intento real:
+ * a los cinco se habría bloqueado quince minutos.
+ *
+ * Por eso esta acción ya no verifica nada: corta en el PRIMER paso con la instrucción
+ * correcta. El cliente viejo muestra ese mensaje y nunca llega a quemar intentos; el
+ * cliente nuevo ni siquiera pasa por aquí.
+ */
+export async function verifyCarteraPassword(_password?: string, _idpedido?: number | null) {
+  return {
+    success: false,
+    message:
+      "Esta pantalla está desactualizada y por eso no se guarda la aprobación. " +
+      "Recarga la página con Ctrl+Shift+R (o cierra y vuelve a abrir el navegador) e intenta de nuevo. " +
+      "Tu clave está bien: no hace falta cambiarla.",
   }
 }
 
 // New function to update pedido with revisioncartera
-export async function approveCartera(idpedido: number, nombreCartera: string) {
+export async function approveCartera(idpedido: number, clave: string) {
   const supabase = await createClient()
   try {
-    console.log("[v0] Approving cartera for pedido:", idpedido, "with nombre:", nombreCartera)
+    // Fase 0 (2026-10-07): antes recibía el NOMBRE de quien aprobaba, que el
+    // navegador obtenía de `verifyCarteraPassword`; cualquiera podía llamar
+    // esta acción con un nombre inventado y saltarse la clave. Ahora la clave
+    // se valida aquí, atómica con la escritura (como closePendingOrder).
+    const { data: order } = await supabase.from("pedidoscabecera").select("id_empresa").eq("idpedido", idpedido).maybeSingle()
+
+    /*
+     * ¿LLEGÓ UN NOMBRE EN VEZ DE UNA CLAVE? Es una pantalla vieja, no una clave mala.
+     *
+     * El cliente anterior a la Fase 0 mandaba aquí el NOMBRE que le devolvía
+     * `verifyCarteraPassword`. Si se deja pasar, `autorizar` lo cuenta como intento fallido
+     * y la persona ve "Clave incorrecta": cambia su clave una y otra vez sin motivo y a los
+     * cinco intentos se bloquea quince minutos. Pasó en ID2 el 2026-10-08.
+     *
+     * Un nombre propio no es una clave de nadie, así que reconocerlo no debilita el candado:
+     * se compara contra el nombre del usuario en sesión y contra los nombres de
+     * `usuariocartera`, que son los dos únicos valores que el cliente viejo podía mandar.
+     */
+    const posibleNombre = String(clave ?? "").trim()
+    if (posibleNombre) {
+      const { usuario } = await getCurrentUserContext().catch(() => ({ usuario: null as string | null }))
+      let esNombre = !!usuario && posibleNombre.toLowerCase() === String(usuario).trim().toLowerCase()
+      if (!esNombre) {
+        const { data: cart } = await supabase.from("usuariocartera").select("nombre")
+        esNombre = (cart ?? []).some((c: any) => String(c.nombre ?? "").trim().toLowerCase() === posibleNombre.toLowerCase())
+      }
+      if (esNombre) {
+        return {
+          success: false,
+          message:
+            "Esta pantalla está desactualizada y por eso no se guardó la aprobación. " +
+            "Recarga la página con Ctrl+Shift+R (o cierra y vuelve a abrir el navegador) e intenta de nuevo. " +
+            "Tu clave está bien: no hace falta cambiarla.",
+        }
+      }
+    }
+
+    const auth = await autorizar({
+      proceso: "ped_aprobar_cartera",
+      idempresa: order?.id_empresa ?? null,
+      clave,
+      referencia: `cartera pedido ${idpedido}`,
+    })
+    if (!auth.ok) return { success: false, message: auth.error || "Contraseña de cartera inválida" }
+    const nombreCartera = auth.autorizadoPor || "Cartera"
 
     const { error } = await supabase
       .from("pedidoscabecera")
@@ -2931,6 +3191,9 @@ export async function approveCartera(idpedido: number, nombreCartera: string) {
 }
 
 export async function addProductsToOrder(idpedido: number, productsToInsert: any[]) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestionar pedidos", "Entrada de pedidos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     const empresaId = await getCurrentEmpresaIdForInsert()
@@ -3001,6 +3264,9 @@ export async function generateUnloadOrder(orderData: {
   // coordinador quiere crear el Descargue de todos modos (ver chequeo abajo).
   forzarDuplicado?: boolean
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Generar Órdenes de Descargue"], "crear", "Generar orden de descargue")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   try {
@@ -3262,6 +3528,9 @@ export async function generateDistributionOrder(orderData: {
   pesoTotalOrden: number
   pesoBrutoTotalOrden?: number
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Generar Orden de Distribución"], "crear", "Generar orden de distribución")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   try {
@@ -3627,6 +3896,9 @@ async function generateAndUploadUnloadOrderPDF(data: {
 
 
 export async function createSanitaryRegister(data: any) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Registro sanitario"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     const empresaId = await getCurrentEmpresaIdForInsert()
@@ -3695,6 +3967,9 @@ export async function saveTolva(tolvaData: {
   }>
   selectedEmpresaId?: number
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Tolva", "Ver ingresos de producción"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   try {
@@ -3874,6 +4149,9 @@ export async function saveProyecciones(proyeccionData: {
    */
   idempresaSeleccionada?: number
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Proyecciones"], "editar", "Guardar proyección")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   try {
@@ -3996,6 +4274,9 @@ export async function updateTolva(
     }>
   },
 ) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Tolva", "Ver Tolva", "Ver ingresos de producción"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   try {
@@ -4240,7 +4521,12 @@ export async function closeOrderWithInvoice(
   idpedido: number,
   factura: string,
   unitsReceived: { transid: number; unidadesRecibidas: number }[],
+  clave?: string,
 ) {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Gestionar pedidos", "cerrar", { clave: clave ?? "", idempresa: (await (await getSupabaseAdminAsSystem()).from("pedidoscabecera").select("id_empresa").eq("idpedido", idpedido).maybeSingle()).data?.id_empresa ?? null, referencia: `cerrar con factura pedido ${idpedido}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   const supabase = await createClient()
   try {
     // Get Colombia date
@@ -4298,6 +4584,9 @@ export async function closeOrderWithInvoice(
 }
 
 export async function updateLoadOrder(orderId: number, data: Record<string, any>) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Ordenes"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     // Format fechacargue if it exists in the data
@@ -4316,5 +4605,109 @@ export async function updateLoadOrder(orderId: number, data: Record<string, any>
   } catch (error) {
     console.error("Unexpected error:", error)
     return { success: false, message: "Error inesperado al actualizar orden de cargue" }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Escrituras que antes hacía el NAVEGADOR directo contra la base (Fase 3,
+// 2026-10-07). Una server action es la única forma de que la política por
+// acción se cumpla: lo que escribe el navegador no pasa por ninguna puerta.
+// ---------------------------------------------------------------------------
+
+/**
+ * Reemplaza TODAS las líneas de un pedido (Gestionar pedidos › editar). Antes
+ * el diálogo borraba e insertaba `pedidosdetalle` desde el navegador.
+ */
+export async function reemplazarDetallesPedido(
+  idpedido: number,
+  detalles: Array<{
+    producto: string
+    unidades: number
+    precio_und: number
+    total_linea: number
+    iva: number
+    descuentopp: number
+    subtotal: number
+    peso: number
+    categoria: string | null
+  }>,
+): Promise<{ success: boolean; message?: string }> {
+  const motivoAccion = await motivoSinAccion(["Gestionar pedidos", "Entrada de pedidos"], "editar", "Editar líneas del pedido")
+  if (motivoAccion) return { success: false, message: motivoAccion }
+  const supabase = await getSupabaseAdmin()
+  try {
+    const { data: cab } = await supabase.from("pedidoscabecera").select("id_empresa").eq("idpedido", idpedido).maybeSingle()
+    if (!cab) return { success: false, message: "El pedido no existe." }
+    const idEmpresa = cab.id_empresa ?? (await getCurrentEmpresaIdForInsert())
+
+    const { error: delErr } = await supabase.from("pedidosdetalle").delete().eq("idpedido", idpedido)
+    if (delErr) return { success: false, message: "Error al eliminar detalles anteriores" }
+
+    const { data: lastDetail } = await supabase
+      .from("pedidosdetalle")
+      .select("transid")
+      .order("transid", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    let nextTransId = (Number(lastDetail?.transid) || 0) + 1
+    const filas = detalles.map((d) => ({ transid: nextTransId++, idpedido, id_empresa: idEmpresa, ...d }))
+    if (filas.length) {
+      const { error } = await supabase.from("pedidosdetalle").insert(filas)
+      if (error) return { success: false, message: "Error al insertar nuevos detalles" }
+    }
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, message: e?.message || "No se pudieron guardar las líneas." }
+  }
+}
+
+/** Proyecciones › eliminar una proyección (fila de cabeceraoc). */
+export async function eliminarProyeccion(id: number): Promise<{ success: boolean; message?: string }> {
+  const motivoAccion = await motivoSinAccion(["Proyecciones"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
+  try {
+    const supabase = await getSupabaseAdmin()
+    const { error } = await supabase.from("cabeceraoc").delete().eq("id", id)
+    if (error) return { success: false, message: error.message }
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, message: e?.message || "No se pudo eliminar la proyección." }
+  }
+}
+
+/** Proyecciones › actualizar fecha y auxiliares de una proyección ya guardada. */
+export async function actualizarProyeccionTolva(
+  id: number,
+  datos: { fechaFabricacion: string; auxiliares: string },
+): Promise<{ success: boolean; message?: string }> {
+  const motivoAccion = await motivoSinAccion(["Proyecciones"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
+  try {
+    const supabase = await getSupabaseAdmin()
+    const timeString = new Date().toISOString().split("T")[1]?.split(".")[0] || "00:00:00"
+    const { error } = await supabase
+      .from("cabeceraoc")
+      .update({ fechacargue: datos.fechaFabricacion, fincargue: timeString, pesajefinal: timeString, auxiliares: datos.auxiliares })
+      .eq("id", id)
+    if (error) return { success: false, message: error.message }
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, message: e?.message || "No se pudo actualizar la proyección." }
+  }
+}
+
+/** Ver Tolva › eliminar una tolva: sus líneas (detalleoc) y luego la cabecera. */
+export async function eliminarTolva(id: number): Promise<{ success: boolean; message?: string }> {
+  const motivoAccion = await motivoSinAccion(["Ver Tolva", "Ver ingresos de producción"], "eliminar", "Eliminar tolva")
+  if (motivoAccion) return { success: false, message: motivoAccion }
+  try {
+    const supabase = await getSupabaseAdmin()
+    const { error: detErr } = await supabase.from("detalleoc").delete().eq("idorden", id)
+    if (detErr) return { success: false, message: "Error al eliminar los detalles de la tolva" }
+    const { error: cabErr } = await supabase.from("cabeceraoc").delete().eq("id", id)
+    if (cabErr) return { success: false, message: "Error al eliminar la tolva" }
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, message: e?.message || "Error inesperado al eliminar la tolva" }
   }
 }

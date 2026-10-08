@@ -23,11 +23,12 @@
  * idénticos; duplicar la tabla sería duplicar ese código.
  *
  * NO calcula IVA ni retenciones: igual que la prefactura existente, esto es
- * base neta. El IVA y el retefuente los suma Gestión de Facturas al emitir.
+ * base neta. El IVA y el retefuente los suma Solicitar Facturas al emitir.
  */
 
-import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 import { segundoFactorPendiente } from "@/lib/seguridad-servidor"
+import { exigirModulo, autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
 import { getConciliacionAvimol, type AlertaAvimol } from "@/lib/conciliacion-avimol-actions"
 import { getReversosPorIdempresa } from "@/lib/transacciones-codigo-actions"
@@ -275,8 +276,25 @@ const TOLERANCIA_LOTE_FECHAPROD_DIAS = 2
  * Tolva vs Tolva f: domingo de la fecha del LOTE (mismo criterio que
  * `tipoOperacionTolva` en lib/liquidacion-tolva-actions.ts).
  */
+/**
+ * PUERTA DE PERMISO (2026-10-07). Una server action es una URL: cualquiera con sesión
+ * puede llamarla aunque la pantalla esté escondida para él. Aquí se exige el MISMO módulo
+ * que la pantalla ya exige para mostrarse, así que quien puede ver Prefactura de Producción
+ * pasa igual que siempre, y quien no, nunca debió poder llamarla.
+ *
+ * Va en el accesor al cliente porque TODAS las acciones de este archivo pasan por él, y
+ * porque sus `catch` ya devuelven `e.message`: el motivo le llega limpio al usuario.
+ *
+ * Comprobado antes de ponerla: el único que importa este archivo es
+ * `components/prefactura-produccion.tsx`, su propia pantalla. No rompe a nadie más.
+ */
+async function clienteConPermiso(): Promise<any> {
+  await exigirModulo(["Prefactura de Producción"], "prefactura-produccion")
+  return await getSupabaseAdmin()
+}
+
 async function armarIndupan(desde: string, hasta: string) {
-  const admin: any = await getSupabaseAdmin()
+  const admin: any = await clienteConPermiso()
 
   const { data: tarifas, error: errT } = await admin
     .from("tarifasoperacion")
@@ -731,7 +749,7 @@ async function armarIndupan(desde: string, hasta: string) {
 
 /** Prefacturas APROBADAS del mismo proyecto y origen que se cruzan con el rango. */
 async function buscarSolapes(idempresa: number, desde: string, hasta: string) {
-  const admin: any = await getSupabaseAdmin()
+  const admin: any = await clienteConPermiso()
   const { data } = await admin
     .from("prefacturas")
     .select("id, periodo_desde, periodo_hasta, total, aprobado_por")
@@ -817,6 +835,9 @@ export async function guardarPrefacturaProduccion(payload: {
    *  igual que ya se ve en los eventos del Ciclo de Facturación. */
   usuarioOverride?: string
 }): Promise<{ success: boolean; id?: number; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Prefactura de Producción"], "crear", "Crear prefactura")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   // Segundo factor (2026-10-05): solo detiene a quien lo tiene activado y no lo verificó.
   const segundoFactor = await segundoFactorPendiente("prefactura-produccion:guardar")
   if (segundoFactor) return { success: false, message: segundoFactor }
@@ -847,7 +868,7 @@ export async function guardarPrefacturaProduccion(payload: {
       }
     }
 
-    const admin: any = await getSupabaseAdmin()
+    const admin: any = await clienteConPermiso()
     const usuario = payload.usuarioOverride || (await getCurrentUsuarioForInsert())
     const { data, error } = await admin
       .from("prefacturas")
@@ -893,7 +914,7 @@ export async function listarPrefacturasProduccion(
   idempresa?: number | null,
 ): Promise<{ success: boolean; data: PrefacturaProduccionGuardada[]; message?: string }> {
   try {
-    const admin: any = await getSupabaseAdmin()
+    const admin: any = await clienteConPermiso()
     let q = admin
       .from("prefacturas")
       .select("*")
@@ -910,13 +931,17 @@ export async function listarPrefacturasProduccion(
 }
 
 /** Aprobar deja el documento en firme, REGISTRA QUIÉN lo aprobó, y arranca el Ciclo de Facturación. */
-export async function aprobarPrefacturaProduccion(id: number): Promise<{ success: boolean; message?: string }> {
+export async function aprobarPrefacturaProduccion(id: number, clave?: string): Promise<{ success: boolean; message?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Prefactura de Producción", "aprobar", { clave: clave ?? "", idempresa: (await (await getSupabaseAdminAsSystem()).from("prefacturas").select("idempresa").eq("id", id).maybeSingle()).data?.idempresa ?? null, referencia: `aprobar prefactura producción ${id}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   if (!id) return { success: false, message: "Prefactura inválida." }
   // Segundo factor (2026-10-05): solo detiene a quien lo tiene activado y no lo verificó.
   const segundoFactor = await segundoFactorPendiente("prefactura-produccion:aprobar")
   if (segundoFactor) return { success: false, message: segundoFactor }
   try {
-    const admin: any = await getSupabaseAdmin()
+    const admin: any = await clienteConPermiso()
     const usuario = await getCurrentUsuarioForInsert()
     const { data, error } = await admin
       .from("prefacturas")
@@ -941,10 +966,14 @@ export async function aprobarPrefacturaProduccion(id: number): Promise<{ success
 }
 
 /** Reabrir devuelve a borrador y limpia el rastro de aprobación. Bloqueado si el Ciclo de Facturación ya avanzó (anexo enviado o más), salvo que se fuerce. */
-export async function reabrirPrefacturaProduccion(id: number, forzar?: boolean): Promise<{ success: boolean; message?: string }> {
+export async function reabrirPrefacturaProduccion(id: number, forzar?: boolean, clave?: string): Promise<{ success: boolean; message?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Prefactura de Producción", "aprobar", { clave: clave ?? "", idempresa: (await (await getSupabaseAdminAsSystem()).from("prefacturas").select("idempresa").eq("id", id).maybeSingle()).data?.idempresa ?? null, referencia: `reabrir prefactura producción ${id}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   if (!id) return { success: false, message: "Prefactura inválida." }
   try {
-    const admin: any = await getSupabaseAdmin()
+    const admin: any = await clienteConPermiso()
     if (!forzar) {
       const { data: actual } = await admin.from("prefacturas").select("estado_ciclo").eq("id", id).maybeSingle()
       if (actual && actual.estado_ciclo && actual.estado_ciclo !== "pendiente_anexo") {
@@ -970,11 +999,14 @@ export async function reabrirPrefacturaProduccion(id: number, forzar?: boolean):
 
 /** Solo se elimina un BORRADOR: una aprobada ya se le pasó al cliente. */
 export async function eliminarPrefacturaProduccion(id: number): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Prefactura de Producción"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!id) return { success: false, message: "Prefactura inválida." }
   const segundoFactor = await segundoFactorPendiente("prefactura-produccion:eliminar")
   if (segundoFactor) return { success: false, message: segundoFactor }
   try {
-    const admin: any = await getSupabaseAdmin()
+    const admin: any = await clienteConPermiso()
     const { data, error } = await admin
       .from("prefacturas")
       .delete()

@@ -1,8 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { createServerClient } from "@/lib/supabase-server"
+import { exigirAccionApi } from "@/lib/puerta-api"
 
 export async function POST(request: NextRequest) {
+  const puerta = await exigirAccionApi(["Head Count", "Gestión de Colaboradores"], "editar")
+  if (puerta) return puerta
   try {
     const formData = await request.formData()
     const file = formData.get("file") as File

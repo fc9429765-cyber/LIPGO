@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { registrarErrorServidor } from "@/lib/errores-servidor"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import { diasHabilesEntre, type VacacionResumen, type SolicitudVacaciones } from "@/lib/vacaciones-types"
+import { autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
 
 // Días hábiles de vacaciones que se causan por año de servicio (ley colombiana).
 const DIAS_VAC_ANIO = 15
@@ -173,6 +174,9 @@ export async function crearSolicitudVacaciones(
   input: { cedula: string; nombre?: string; cargo?: string; fecha_inicio: string; fecha_fin: string; observaciones?: string },
   empresaId?: number | null,
 ) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Vacaciones"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const sb: any = await getSupabaseAdmin()
     const emp = empresaId || (await getCurrentEmpresaIdForInsert())
@@ -201,6 +205,9 @@ export async function crearSolicitudVacaciones(
 }
 
 export async function rechazarSolicitudVacaciones(id: string, motivo?: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Vacaciones"], "anular", "Rechazar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const sb: any = await getSupabaseAdmin()
     const { error } = await sb
@@ -218,6 +225,9 @@ export async function rechazarSolicitudVacaciones(id: string, motivo?: string) {
 // control diario (registroasistencia) por cada día hábil → así se refleja en el
 // control diario y la nómina, y cuenta como día disfrutado en el saldo.
 export async function aprobarSolicitudVacaciones(id: string, aprobadoPor?: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Vacaciones"], "aprobar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const sb: any = await getSupabaseAdmin()
     const { data: s } = await sb.from("vacaciones_solicitudes").select("*").eq("id", id).maybeSingle()
@@ -286,7 +296,12 @@ export async function aprobarSolicitudVacaciones(id: string, aprobadoPor?: strin
 export async function registrarLiquidacionVacaciones(
   input: { cedula: string; nombre?: string; dias: number; valor_dia: number; observaciones?: string },
   empresaId?: number | null,
+  clave?: string,
 ) {
+  // Acción CON CLAVE (nom_vacaciones_liquidar): registra un pago. En modo aviso pasa
+  // sin clave y deja rastro; en bloquear la pantalla pide la clave personal.
+  const autorizacionAccion = await autorizarAccion("Vacaciones", "cerrar", { clave: clave ?? "", idempresa: empresaId ?? null, referencia: `liquidar vacaciones ${input?.cedula ?? ""}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   try {
     const sb: any = await getSupabaseAdmin()
     const emp = empresaId || (await getCurrentEmpresaIdForInsert())

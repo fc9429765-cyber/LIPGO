@@ -22,6 +22,11 @@ import { DatePickerField } from "@/components/ui/date-picker-field"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/components/auth-provider"
 import { getUserPermissions } from "@/lib/permissions-actions"
+import BotonFacturarSiigo from "@/components/facturacion/boton-facturar-siigo"
+import { Checkbox } from "@/components/ui/checkbox"
+import { emitirFacturaOrden, emitirFacturaPrefactura, getConfigEmision } from "@/lib/siigo-emision-actions"
+import { CORTE_CICLO_SIIGO } from "@/lib/ciclo-facturacion-shared"
+import { getValoresNetosOrden } from "@/lib/facturacion-control-actions"
 import {
   listarCicloFacturacion,
   getEventosCiclo,
@@ -55,6 +60,7 @@ import { AdjuntosUploader } from "@/components/ciclo-facturacion/adjuntos-upload
 import { SoporteAnexo } from "@/components/cuadro-control-facturacion"
 import type { SoporteLinea } from "@/lib/facturacion-control-actions"
 import { AlertTriangle, Check, ChevronDown, ChevronUp, Clock, FileClock, Inbox, Loader2, Receipt, RefreshCw, Settings2, Wallet, X } from "lucide-react"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 const money = (v: number) => `$${Math.round(v).toLocaleString("es-CO")}`
 
@@ -157,6 +163,8 @@ export default function CicloFacturacion() {
 
   const [data, setData] = useState<PrefacturaCiclo[]>([])
   const [loading, setLoading] = useState(true)
+  // Prefacturas marcadas para facturar en Siigo (solo las de anexo firmado).
+  const [selPref, setSelPref] = useState<number[]>([])
 
   // Proyecto por ID + período -- aplica EN VIVO apenas cambia cualquier campo
   // (antes era un patrón pending/aplicado calcado de Cuadro de Control,
@@ -437,6 +445,10 @@ export default function CicloFacturacion() {
             )}
           </div>
 
+          {permisos.jefe && (vista === "todas" || vista === "jefe") && (
+            <CortePorRango empresas={empresas} empresaId={filtros.empresaId} usuario={usuario} onGenerado={cargar} />
+          )}
+
           {vista === "contado" ? (
             <PagosContadoPanel empresaId={filtros.empresaId} periodoDesde={filtros.periodoDesde} periodoHasta={filtros.periodoHasta} />
           ) : loading ? (
@@ -459,10 +471,24 @@ export default function CicloFacturacion() {
             </div>
           ) : (
             <div className="space-y-2">
+              {permisos.jefe && (
+                <BarraFacturarPrefacturas
+                  prefacturas={filtrados}
+                  sel={selPref}
+                  setSel={setSelPref}
+                  onCambio={cargar}
+                />
+              )}
               {filtrados.map((p) => (
                 <FilaCiclo
                   key={p.id}
                   p={p}
+                  seleccionado={selPref.includes(p.id)}
+                  onSeleccion={
+                    permisos.jefe && prefacturaFacturable(p)
+                      ? (on: boolean) => setSelPref((prev) => (on ? [...prev, p.id] : prev.filter((x) => x !== p.id)))
+                      : undefined
+                  }
                   abierto={seleccionId === p.id}
                   onToggle={() => setSeleccionId(seleccionId === p.id ? null : p.id)}
                   permisos={permisos}
@@ -489,6 +515,8 @@ function FilaCiclo({
   permisos,
   usuario,
   onCambio,
+  seleccionado = false,
+  onSeleccion,
 }: {
   p: PrefacturaCiclo
   abierto: boolean
@@ -496,15 +524,24 @@ function FilaCiclo({
   permisos: { jefe: boolean; coordinador: boolean }
   usuario: string
   onCambio: () => void
+  seleccionado?: boolean
+  /** Presente solo si la prefactura se puede facturar ya (anexo firmado). */
+  onSeleccion?: (on: boolean) => void
 }) {
   const rolPaso = p.estado_ciclo !== "cerrado" ? PASOS[IDX_ESTADO[p.estado_ciclo]]?.rol : null
   const necesitaMiAccion = (rolPaso === "jefe" && permisos.jefe) || (rolPaso === "coordinador" && permisos.coordinador)
   return (
-    <div className={"rounded-md border " + (necesitaMiAccion ? "border-amber-300 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/10" : "")}>
+    <div className={"rounded-md border " + (seleccionado ? "border-primary/50 bg-primary/5 " : "") + (necesitaMiAccion ? "border-amber-300 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/10" : "")}>
+      <div className="flex items-stretch">
+      {onSeleccion && (
+        <label className="flex items-center border-r px-2.5" title="Seleccionar para facturar en Siigo">
+          <Checkbox checked={seleccionado} onCheckedChange={(c) => onSeleccion(!!c)} />
+        </label>
+      )}
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-left hover:bg-muted/40"
+        className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2 px-3 py-2 text-left hover:bg-muted/40"
       >
         <div className="min-w-0">
           <div className="text-sm font-medium">
@@ -536,7 +573,215 @@ function FilaCiclo({
           {abierto ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
         </div>
       </button>
+      </div>
+      {/* El botón de facturar va FUERA del botón que expande la fila: no se
+          pueden anidar, y emitir no debe compartir zona de clic con "ver el
+          detalle".
+
+          Solo con el anexo firmado (`pendiente_factura`): el ciclo es
+          obligatorio. En las etapas anteriores se dice qué falta en vez de
+          ofrecer un botón que el servidor va a rechazar. Al emitir, la
+          prefactura pasa sola a "Factura enviada". */}
+      {p.numero_factura_siigo ? (
+        <div className="flex items-center justify-end gap-1.5 border-t px-3 py-1.5 text-[10px] text-emerald-700">
+          <Check className="h-3 w-3" /> Facturada en Siigo · {p.numero_factura_siigo}
+        </div>
+      ) : p.estado_ciclo === "pendiente_factura" ? (
+        <div className="flex items-center justify-end gap-2 border-t px-3 py-1.5">
+          <span className="text-[10px] text-muted-foreground">Anexo firmado por el cliente · lista para facturar</span>
+          <BotonFacturarSiigo
+            prefacturaId={p.id}
+            orden={`${p.owner || p.proyecto || "Prefactura"} · ${p.periodo_desde || "?"} a ${p.periodo_hasta || "?"}`}
+            cliente={p.owner || null}
+            valor={p.total}
+            onEmitida={onCambio}
+          />
+        </div>
+      ) : IDX_ESTADO[p.estado_ciclo] < IDX_ESTADO.pendiente_factura ? (
+        <div className="flex items-center justify-end border-t px-3 py-1.5 text-[10px] text-muted-foreground">
+          Para facturar en Siigo falta: {p.estado_ciclo === "pendiente_anexo" ? "enviar el anexo y que el cliente lo firme" : "que el cliente firme el anexo"}
+        </div>
+      ) : null}
       {abierto && <DetalleCiclo prefactura={p} permisos={permisos} usuario={usuario} onCambio={onCambio} />}
+    </div>
+  )
+}
+
+/** ¿Se puede facturar ya en Siigo? Mismas reglas que puedeFacturarPrefactura. */
+function prefacturaFacturable(p: PrefacturaCiclo): boolean {
+  return p.estado_ciclo === "pendiente_factura" && !p.numero_factura_siigo && Number(p.total) > 0
+}
+
+/**
+ * CORTE POR RANGO DE FECHAS
+ *
+ * El período del ciclo deja de depender solo de la cadencia automática: el
+ * Jefe elige desde/hasta y se genera la prefactura (una por owner) de ese
+ * tramo, que entra al ciclo en "Anexo enviado". Antes esto existía escondido
+ * como "rango manual (excepción)" dentro del panel de automatización, uno por
+ * proyecto; aquí es la forma normal de cortar.
+ *
+ * Sin proyecto elegido corta TODOS los proyectos del selector. Si el "desde"
+ * no empata con el período anterior, la prefactura sale igual pero con
+ * advertencia (regla de generarPrefacturaAhora).
+ */
+function CortePorRango({
+  empresas,
+  empresaId,
+  usuario,
+  onGenerado,
+}: {
+  empresas: Array<{ id: number; nombre: string }>
+  empresaId: number | null
+  usuario: string
+  onGenerado: () => void
+}) {
+  const { toast } = useToast()
+  const hoy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
+  const piso = (d: string) => (d && d > CORTE_CICLO_SIIGO ? d : CORTE_CICLO_SIIGO)
+  const [desde, setDesde] = useState(piso(`${hoy.slice(0, 7)}-01`))
+  const [hasta, setHasta] = useState(hoy)
+  const [generando, setGenerando] = useState(false)
+
+  const objetivo = empresaId ? empresas.filter((e) => e.id === empresaId) : empresas
+
+  const generar = async () => {
+    if (!desde || !hasta || desde > hasta) {
+      toast({ title: "Rango inválido", description: "Revisa las fechas: 'desde' no puede ser posterior a 'hasta'.", variant: "destructive" })
+      return
+    }
+    const nombres = objetivo.map((e) => e.nombre).join(", ")
+    if (!confirm(`¿Generar el corte ${desde} a ${hasta} para ${objetivo.length === 1 ? nombres : `${objetivo.length} proyectos (${nombres})`}?\n\nSe crea una prefactura por cada owner con actividad en el rango, y entra al ciclo en "Anexo enviado".`)) return
+    setGenerando(true)
+    const lineas: string[] = []
+    let generadas = 0
+    for (const e of objetivo) {
+      const r = await generarPrefacturaAhora(e.id, usuario, { desde, hasta })
+      for (const ro of r.resultados) {
+        if (ro.estado === "generada") generadas++
+        lineas.push(`${e.nombre} · ${ro.owner}: ${ro.estado}`)
+      }
+      if (!r.resultados.length && !r.success) lineas.push(`${e.nombre}: ${r.mensaje}`)
+    }
+    setGenerando(false)
+    toast({
+      title: generadas ? `${generadas} prefactura(s) generada(s)` : "Nada que generar en ese rango",
+      description: lineas.slice(0, 8).join("\n") || undefined,
+    })
+    onGenerado()
+  }
+
+  return (
+    <div className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-2.5">
+      <div className="mr-1">
+        <p className="text-xs font-semibold">Corte por rango de fechas</p>
+        <p className="text-[10px] text-muted-foreground">
+          {empresaId ? objetivo[0]?.nombre ?? "Proyecto" : "Todos los proyectos"} · una prefactura por owner
+        </p>
+      </div>
+      <div className="flex flex-col gap-1">
+        <Label className="text-[10px] text-muted-foreground">Desde</Label>
+        <DatePickerField value={desde} onChange={(v) => setDesde(piso(v))} className="h-8 w-[140px] text-xs" />
+      </div>
+      <div className="flex flex-col gap-1">
+        <Label className="text-[10px] text-muted-foreground">Hasta</Label>
+        <DatePickerField value={hasta} onChange={setHasta} className="h-8 w-[140px] text-xs" />
+      </div>
+      <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={generar} disabled={generando || objetivo.length === 0}>
+        {generando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileClock className="h-3.5 w-3.5" />}
+        Generar corte
+      </Button>
+    </div>
+  )
+}
+
+/**
+ * Selección múltiple de prefacturas con el anexo firmado y facturación en
+ * lote: una factura por prefactura (cada una ya es la agrupación de un owner
+ * y un período). En serie y sin parar al primer error; al final se dice
+ * cuáles fallaron y por qué.
+ */
+function BarraFacturarPrefacturas({
+  prefacturas,
+  sel,
+  setSel,
+  onCambio,
+}: {
+  prefacturas: PrefacturaCiclo[]
+  sel: number[]
+  setSel: (f: (prev: number[]) => number[]) => void
+  onCambio: () => void
+}) {
+  const { toast } = useToast()
+  const { conClave, pedirClave } = useClaveAccion()
+  const [lote, setLote] = useState<{ hechas: number; total: number } | null>(null)
+  const listas = useMemo(() => prefacturas.filter(prefacturaFacturable), [prefacturas])
+  // Si cambian los filtros, la selección se queda solo con lo visible.
+  useEffect(() => {
+    setSel((prev) => prev.filter((id) => listas.some((p) => p.id === id)))
+  }, [listas, setSel])
+  const elegidas = listas.filter((p) => sel.includes(p.id))
+  const total = elegidas.reduce((s, p) => s + Number(p.total || 0), 0)
+  if (listas.length === 0) return null
+
+  const facturar = async () => {
+    const cfg = await getConfigEmision()
+    const oficial = cfg.data?.enviarDian === true
+    if (
+      !confirm(
+        `Vas a emitir ${elegidas.length} factura(s) en Siigo, una por prefactura, por ${money(total)} en total.\n\n` +
+          (oficial ? "Saldrán FIRMADAS Y OFICIALES ante la DIAN. No se pueden borrar: solo anular con nota crédito.\n\n" : "Quedarán como borrador en Siigo.\n\n") +
+          "Cada una pasa a «Factura enviada» en el ciclo. ¿Continuar?",
+      )
+    )
+      return
+    const fallas: string[] = []
+    let ok = 0
+    // Una sola clave para todo el lote (en modo bloquear); en aviso no se pide.
+    const claveLote = await pedirClave("Ciclo de Facturación", "aprobar", { titulo: `Emitir ${elegidas.length} facturas en Siigo` })
+    if (claveLote === null) return
+    setLote({ hechas: 0, total: elegidas.length })
+    for (let i = 0; i < elegidas.length; i++) {
+      const p = elegidas[i]
+      const r = await emitirFacturaPrefactura(p.id, undefined, claveLote)
+      if (r.success) ok++
+      else fallas.push(`${p.owner} (${p.periodo_desde} a ${p.periodo_hasta}): ${r.message ?? "error"}`)
+      setLote({ hechas: i + 1, total: elegidas.length })
+    }
+    setLote(null)
+    setSel(() => [])
+    toast({
+      title: `${ok} de ${elegidas.length} facturas emitidas`,
+      description: fallas.length ? `Fallaron: ${fallas.slice(0, 3).join(" · ")}${fallas.length > 3 ? " …" : ""}` : undefined,
+      variant: fallas.length ? "destructive" : undefined,
+    })
+    onCambio()
+  }
+
+  return (
+    <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border bg-card p-2 shadow-sm">
+      <label className="flex items-center gap-2 text-xs">
+        <Checkbox
+          checked={elegidas.length > 0 && elegidas.length === listas.length}
+          disabled={!!lote}
+          onCheckedChange={(c) => setSel(() => (c ? listas.map((p) => p.id) : []))}
+        />
+        {listas.length} lista(s) para facturar (anexo firmado)
+      </label>
+      {elegidas.length > 0 && (
+        <span className="text-xs text-muted-foreground">
+          · <strong className="text-foreground">{elegidas.length}</strong> seleccionada(s) · <strong className="text-foreground tabular-nums">{money(total)}</strong>
+        </span>
+      )}
+      <Button size="sm" className="ml-auto h-7 gap-1.5 text-xs" onClick={facturar} disabled={!elegidas.length || !!lote}>
+        {lote ? (
+          <>
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> {lote.hechas}/{lote.total}
+          </>
+        ) : (
+          <>Facturar seleccionadas en Siigo</>
+        )}
+      </Button>
     </div>
   )
 }
@@ -903,6 +1148,7 @@ function ModalPago({
   onOk: () => void
 }) {
   const { toast } = useToast()
+  const { conClave } = useClaveAccion()
   const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10))
   const [valor, setValor] = useState(saldo)
   const [observacion, setObservacion] = useState("")
@@ -910,7 +1156,9 @@ function ModalPago({
 
   const guardar = async () => {
     setGuardando(true)
-    const r = await registrarPago(prefacturaId, { fecha, valor: Number(valor) || 0, observacion: observacion.trim() || undefined, usuario })
+    const r = await conClave("Ciclo de Facturación", "crear", (clave) =>
+      registrarPago(prefacturaId, { fecha, valor: Number(valor) || 0, observacion: observacion.trim() || undefined, usuario }, clave),
+    )
     setGuardando(false)
     if (r.success) {
       toast({ title: "Pago registrado" })
@@ -992,7 +1240,7 @@ function FrecuenciaGeneracionPrefacturaPanel() {
   // Aviso proactivo: cuánto de cada proyecto sigue SIN validar por el
   // Coordinador (quedaría fuera del próximo corte) -- pedido explícito del
   // usuario 2026-09-14, "que sirva para gestionar" (no solo informar): el
-  // aviso trae un link directo a Gestión de Facturas, ya filtrado.
+  // aviso trae un link directo a Solicitar Facturas, ya filtrado.
   const [pendientes, setPendientes] = useState<Record<number, PendienteGestionOwner[]>>({})
 
   const cargarPendientes = async (lista: CondicionGeneracionPrefactura[]) => {
@@ -1105,7 +1353,7 @@ function FrecuenciaGeneracionPrefacturaPanel() {
           la corrida automática, pero al instante y con el resultado a la vista. En proyectos no diarios, el cuadro punteado <strong>"Rango manual
           (excepción)"</strong> permite generar un tramo puntual con fechas exactas en vez del período contiguo automático -- para cierres
           anticipados u otros casos fuera de lo normal. <strong>Las órdenes de Cargue/Descargue/Distribución solo entran en el anexo cuando el
-          Coordinador ya las validó en Gestión de Facturas</strong> ("CF - Factura solicitada", con el tiquete de báscula o la foto de la orden) --
+          Coordinador ya las validó en Solicitar Facturas</strong> ("CF - Factura solicitada", con el tiquete de báscula o la foto de la orden) --
           la Tolva/producción no necesita ese paso. Si algo sigue sin validar, aparece abajo con un link directo para ir a gestionarlo.
         </CardDescription>
       </CardHeader>
@@ -1402,12 +1650,12 @@ function CondicionesPagoPanel() {
 // ---------------------------------------------------------------------------
 // Pagos de Contado -- pestaña de RECONCILIACIÓN BANCARIA (2026-09-14, pedido
 // del usuario). Las órdenes de pago de contado (mediopago="Contado") se
-// gestionan hoy en Gestión de Facturas -- el Coordinador sube ahí la FOTO del
+// gestionan hoy en Solicitar Facturas -- el Coordinador sube ahí la FOTO del
 // comprobante (`cabeceraoc.comprobante`), pero antes de esto no existía
 // ninguna pantalla que agrupara esos comprobantes para cruzarlos contra el
 // extracto bancario: quedaban enterrados en cada orden, uno por uno. Esta
 // pestaña NO agrega ningún dato nuevo, solo hace consultable/filtrable lo que
-// ya se captura (misma fuente que Gestión de Facturas: `/api/gestion-facturas`,
+// ya se captura (misma fuente que Solicitar Facturas: `/api/gestion-facturas`,
 // filtrado por `medioPago=Contado`, reusa el Proyecto/Período de la barra de
 // arriba del módulo).
 // ---------------------------------------------------------------------------
@@ -1423,6 +1671,10 @@ interface OrdenContado {
   cuentatransferencia: string | null
   comprobante: string | null
   estadofactura: string | null
+  /** La API ya lo devolvía; faltaba declararlo para poder saber si ya se facturó. */
+  facturasiigo?: string | null
+  /** Para calcular el neto: la tarifa depende de la empresa de cada orden. */
+  idempresa?: number | null
 }
 
 function comprobanteUrls(raw: string | null): string[] {
@@ -1450,12 +1702,32 @@ function PagosContadoPanel({
   periodoHasta: string
 }) {
   const { toast } = useToast()
+  const { conClave, pedirClave } = useClaveAccion()
   const [ordenes, setOrdenes] = useState<OrdenContado[]>([])
   const [loading, setLoading] = useState(true)
   const [soloSinComprobante, setSoloSinComprobante] = useState(false)
   const [cuentaFiltro, setCuentaFiltro] = useState("")
   const [viendoComprobante, setViendoComprobante] = useState<OrdenContado | null>(null)
   const [indiceImagen, setIndiceImagen] = useState(0)
+  /*
+   * Fuerza recargar la lista tras emitir una factura: la orden pasa a tener
+   * `facturasiigo` y debe dejar de ofrecer el botón.
+   *
+   * Es un contador y no sacar `cargar` del efecto porque aquel maneja
+   * cancelación con una bandera local; extraerlo obligaría a rehacer esa parte
+   * para ganar lo mismo.
+   */
+  const [recarga, setRecarga] = useState(0)
+  /*
+   * Valor NETO por orden -- operación x tarifa, el mismo cálculo del cuadro y
+   * de la prefactura.
+   *
+   * `valorpago` SOLO se llena cuando alguien confirma la factura en Solicitar
+   * Facturas, asi que antes de eso llega en cero y la pantalla mostraba $0 en
+   * todo. Solicitar Facturas ya resolvia esto calculando el neto aparte; aqui
+   * faltaba, y sin el no se puede facturar sin pasar antes por alla.
+   */
+  const [valoresNetos, setValoresNetos] = useState<Record<string, number>>({})
 
   useEffect(() => {
     let cancelado = false
@@ -1471,7 +1743,17 @@ function PagosContadoPanel({
         for (;;) {
           const params = new URLSearchParams({ medioPago: "Contado", pageSize: "500", page: String(page) })
           if (empresaId) params.set("empresaId", String(empresaId))
-          if (periodoDesde) params.set("fechaCargueDesde", periodoDesde)
+          /*
+           * El corte manda sobre el filtro de la pantalla.
+           *
+           * Se arranca de cero el 1 de octubre para emitir en Siigo desde este
+           * mes: lo anterior ya se facturó por fuera, y mostrarlo aquí
+           * invitaría a volver a facturarlo. Si alguien pide una fecha
+           * anterior, se usa la del corte.
+           */
+          const desde =
+            periodoDesde && periodoDesde > CORTE_CICLO_SIIGO ? periodoDesde : CORTE_CICLO_SIIGO
+          params.set("fechaCargueDesde", desde)
           if (periodoHasta) params.set("fechaCargueHasta", periodoHasta)
           const res = await fetch(`/api/gestion-facturas?${params.toString()}`)
           const json = await res.json()
@@ -1495,7 +1777,55 @@ function PagosContadoPanel({
     return () => {
       cancelado = true
     }
-  }, [empresaId, periodoDesde, periodoHasta, toast])
+  }, [empresaId, periodoDesde, periodoHasta, toast, recarga])
+
+  /*
+   * El valor neto se pide DESPUES de tener las ordenes, igual que en Solicitar
+   * Facturas: solo el de las ordenes ya cargadas, no el del historial entero.
+   *
+   * Se calcula POR EMPRESA DE CADA ORDEN, no por el filtro del modulo: la
+   * tarifa depende de la empresa, y el filtro arranca en "Todos los
+   * proyectos". Con el filtro vacio antes no se calculaba nada y toda la
+   * pestaña salia en $0 (reportado 2026-10-07).
+   */
+  useEffect(() => {
+    if (ordenes.length === 0) {
+      setValoresNetos({})
+      return
+    }
+    let cancelado = false
+    const porEmpresa = new Map<number, string[]>()
+    for (const o of ordenes) {
+      const e = Number(o.idempresa ?? empresaId ?? 0)
+      if (!e || !o.ordendecargue) continue
+      porEmpresa.set(e, [...(porEmpresa.get(e) ?? []), o.ordendecargue])
+    }
+    Promise.all(Array.from(porEmpresa.entries()).map(([e, nums]) => getValoresNetosOrden(e, nums)))
+      .then((rs) => {
+        if (cancelado) return
+        const m: Record<string, number> = {}
+        for (const r of rs) if (r.success) Object.assign(m, r.data)
+        setValoresNetos(m)
+      })
+      .catch(() => {})
+    return () => {
+      cancelado = true
+    }
+  }, [empresaId, ordenes])
+
+  /*
+   * Lo que se muestra y lo que se factura.
+   *
+   * Se prefiere `valorpago` cuando existe --es el valor ya confirmado, con IVA
+   * y retefuente aplicados-- y se cae al neto calculado cuando todavia no se
+   * ha confirmado la factura. Al reves se pisaria un valor acordado con una
+   * estimacion.
+   */
+  const valorDe = (o: OrdenContado) => {
+    const pagado = Number(o.valorpago || 0)
+    if (pagado > 0) return pagado
+    return Number(valoresNetos[o.ordendecargue] || 0)
+  }
 
   const cuentas = useMemo(
     () => Array.from(new Set(ordenes.map((o) => o.cuentatransferencia).filter(Boolean))) as string[],
@@ -1512,14 +1842,65 @@ function PagosContadoPanel({
     [ordenes, soloSinComprobante, cuentaFiltro],
   )
 
-  const total = filtradas.reduce((s, o) => s + Number(o.valorpago || 0), 0)
+  const total = filtradas.reduce((s, o) => s + valorDe(o), 0)
   const sinComprobante = filtradas.filter((o) => !o.comprobante).length
+
+  /*
+   * Selección para facturar en lote. Solo se marcan las que el servidor va a
+   * aceptar: solicitadas en Solicitar Facturas, sin factura y con valor.
+   */
+  const [sel, setSel] = useState<number[]>([])
+  const [lote, setLote] = useState<{ hechas: number; total: number } | null>(null)
+  const facturableContado = (o: OrdenContado) =>
+    String(o.estadofactura ?? "").trim() === "CF - Factura solicitada" && !String(o.facturasiigo ?? "").trim() && valorDe(o) > 0
+  const listas = filtradas.filter(facturableContado)
+  useEffect(() => {
+    setSel((prev) => prev.filter((id) => listas.some((o) => o.id === id)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtradas, valoresNetos])
+  const elegidas = listas.filter((o) => sel.includes(o.id))
+  const totalSel = elegidas.reduce((s, o) => s + valorDe(o), 0)
+  // "Juntas" solo si todas son del mismo cliente: facturarle a uno lo que pagó otro es el error más caro.
+  const clientesSel = Array.from(new Set(elegidas.map((o) => String(o.cliente ?? "").trim())))
+
+  const facturarUnaPorUna = async () => {
+    const cfg = await getConfigEmision()
+    const oficial = cfg.data?.enviarDian === true
+    if (
+      !confirm(
+        `Vas a emitir ${elegidas.length} factura(s) en Siigo, una por orden, por ${money(totalSel)} en total.\n\n` +
+          (oficial ? "Saldrán FIRMADAS Y OFICIALES ante la DIAN. No se pueden borrar: solo anular con nota crédito.\n\n" : "Quedarán como borrador en Siigo.\n\n") +
+          "¿Continuar?",
+      )
+    )
+      return
+    const fallas: string[] = []
+    let ok = 0
+    const claveLote = await pedirClave("Ciclo de Facturación", "aprobar", { titulo: `Emitir ${elegidas.length} facturas en Siigo` })
+    if (claveLote === null) return
+    setLote({ hechas: 0, total: elegidas.length })
+    for (let i = 0; i < elegidas.length; i++) {
+      const o = elegidas[i]
+      const r = await emitirFacturaOrden(o.id, undefined, claveLote)
+      if (r.success) ok++
+      else fallas.push(`${o.ordendecargue}: ${r.message ?? "error"}`)
+      setLote({ hechas: i + 1, total: elegidas.length })
+    }
+    setLote(null)
+    setSel([])
+    toast({
+      title: `${ok} de ${elegidas.length} facturas emitidas`,
+      description: fallas.length ? `Fallaron: ${fallas.slice(0, 4).join(" · ")}${fallas.length > 4 ? " …" : ""}` : undefined,
+      variant: fallas.length ? "destructive" : undefined,
+    })
+    setRecarga((n) => n + 1)
+  }
   const urls = viendoComprobante ? comprobanteUrls(viendoComprobante.comprobante) : []
 
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Órdenes marcadas como pago de <strong>Contado</strong> en Gestión de Facturas, con el comprobante que subió el
+        Órdenes marcadas como pago de <strong>Contado</strong> en Solicitar Facturas, con el comprobante que subió el
         Coordinador -- para cruzar contra el extracto bancario. Usa el filtro de Proyecto/Período de arriba de esta pantalla.
       </p>
       <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 p-2.5">
@@ -1551,10 +1932,56 @@ function PagosContadoPanel({
       ) : filtradas.length === 0 ? (
         <div className="py-8 text-center text-xs text-muted-foreground">No hay pagos de contado en este rango.</div>
       ) : (
+        <div className="space-y-2">
+        {listas.length > 0 && (
+          <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border bg-card p-2 shadow-sm">
+            <span className="text-xs">
+              {listas.length} lista(s) para facturar
+              {elegidas.length > 0 && (
+                <>
+                  {" "}· <strong>{elegidas.length}</strong> seleccionada(s) · <strong className="tabular-nums">{money(totalSel)}</strong>
+                </>
+              )}
+            </span>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {elegidas.length > 1 &&
+                (clientesSel.length === 1 && clientesSel[0] ? (
+                  <BotonFacturarSiigo
+                    ordenIds={elegidas.map((o) => o.id)}
+                    orden={`${clientesSel[0]} · ${elegidas.length} órdenes de contado`}
+                    cliente={clientesSel[0]}
+                    valor={totalSel}
+                    onEmitida={() => {
+                      setSel([])
+                      setRecarga((n) => n + 1)
+                    }}
+                  />
+                ) : (
+                  <span className="text-[10px] text-muted-foreground">{clientesSel.length} clientes distintos: no se juntan en un documento</span>
+                ))}
+              <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={facturarUnaPorUna} disabled={!elegidas.length || !!lote}>
+                {lote ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> {lote.hechas}/{lote.total}
+                  </>
+                ) : (
+                  <>Facturar una por una{elegidas.length ? ` (${elegidas.length})` : ""}</>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
         <div className="overflow-x-auto rounded-md border">
           <table className="w-full text-xs">
             <thead className="bg-muted/50">
               <tr>
+                <th className="w-8 p-2">
+                  <Checkbox
+                    checked={listas.length > 0 && elegidas.length === listas.length}
+                    disabled={!listas.length || !!lote}
+                    onCheckedChange={(c) => setSel(c ? listas.map((o) => o.id) : [])}
+                  />
+                </th>
                 <th className="p-2 text-left">Fecha</th>
                 <th className="p-2 text-left">Orden</th>
                 <th className="p-2 text-left">Placa</th>
@@ -1563,17 +1990,26 @@ function PagosContadoPanel({
                 <th className="p-2 text-right">Valor</th>
                 <th className="p-2 text-center">Comprobante</th>
                 <th className="p-2 text-left">Estado</th>
+                <th className="p-2 text-center">Siigo</th>
               </tr>
             </thead>
             <tbody>
               {filtradas.map((o) => (
-                <tr key={o.id} className="border-t">
+                <tr key={o.id} className={`border-t ${sel.includes(o.id) ? "bg-primary/5" : ""}`}>
+                  <td className="p-2 text-center">
+                    <Checkbox
+                      checked={sel.includes(o.id)}
+                      disabled={!facturableContado(o) || !!lote}
+                      title={facturableContado(o) ? undefined : "Solo se factura lo solicitado en Solicitar Facturas, sin factura y con valor"}
+                      onCheckedChange={(c) => setSel((prev) => (c ? [...prev, o.id] : prev.filter((x) => x !== o.id)))}
+                    />
+                  </td>
                   <td className="p-2">{o.fechacargue}</td>
                   <td className="p-2">{o.ordendecargue}</td>
                   <td className="p-2">{o.placa}</td>
                   <td className="p-2">{o.cliente || "-"}</td>
                   <td className="p-2">{o.cuentatransferencia || "-"}</td>
-                  <td className="p-2 text-right">{money(Number(o.valorpago || 0))}</td>
+                  <td className="p-2 text-right">{money(valorDe(o))}</td>
                   <td className="p-2 text-center">
                     {o.comprobante ? (
                       <Button
@@ -1592,10 +2028,21 @@ function PagosContadoPanel({
                     )}
                   </td>
                   <td className="p-2">{o.estadofactura || "-"}</td>
+                  <td className="p-2 text-center">
+                    <BotonFacturarSiigo
+                      ordenId={o.id}
+                      orden={o.ordendecargue}
+                      cliente={o.cliente}
+                      valor={valorDe(o)}
+                      facturaExistente={o.facturasiigo}
+                      onEmitida={() => setRecarga((n) => n + 1)}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
         </div>
       )}
 

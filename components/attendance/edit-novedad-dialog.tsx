@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { createClient } from "@/lib/supabase-client"
+import { actualizarNovedadAsistencia } from "@/lib/novedades-periodo-actions"
 import { procesarNovedadRetiro } from "@/lib/retiro-actions"
 import { sincronizarBorradorAusentismo } from "@/lib/ausentismos-actions"
 import { NOVEDADES_DIA } from "@/lib/asistencia-catalogos"
@@ -49,14 +49,10 @@ export function EditNovedadDialog({ empresaId, registro, onOpenChange, onSaved }
     if (!registro) return
     setSaving(true)
     try {
-      const supabase = await createClient()
-      const { error } = await supabase
-        .from("registroasistencia")
-        .update({ asistencia: novedad || null })
-        .eq("id", registro.id)
-
-      if (error) {
-        toast({ title: "Error", description: "No se pudo actualizar la novedad", variant: "destructive" })
+      // Server action con puerta (Tabla Asistencia / Novedades / Visor › editar).
+      const r = await actualizarNovedadAsistencia(registro.id, novedad || null)
+      if (!r.success) {
+        toast({ title: "Error", description: r.message || "No se pudo actualizar la novedad", variant: "destructive" })
         return
       }
 

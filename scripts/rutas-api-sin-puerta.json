@@ -1,0 +1,10 @@
+{
+  "_comentario": "Rutas /api que NO exigen sesión, con el motivo. Solo debería encoger. Una ruta nueva sin puerta y sin entrada aquí rompe `pnpm run check:rutas-api`.",
+  "_actualizado": "2026-10-07",
+  "rutas": {
+    "csp-reporte": "El navegador envía los reportes de Content-Security-Policy sin cookies; es un POST de solo escritura en la bitácora de errores.",
+    "file": "Proxy de lectura de archivos de Vercel Blob por URL firmada; no toca la base. Sin consumidores en el código: candidata a borrarse.",
+    "capacitaciones/upload-firma": "La usa el quiz del Portal del Colaborador (components/portal/evaluacion-quiz.tsx), que se identifica por localStorage y NO tiene sesión de Supabase. Sube una imagen al bucket; no lee nada.",
+    "whatsapp/webhook": "Webhook de Meta: se verifica con el token de la plataforma (hub.verify_token / firma), no con sesión."
+  }
+}

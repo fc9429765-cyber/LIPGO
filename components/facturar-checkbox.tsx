@@ -90,7 +90,7 @@ export function FacturarCheckbox({ orden, facturar, idempresa, usuario, modulo, 
               <AlertTriangle className="h-5 w-5 text-amber-500" /> ¿Excluir esta orden de la facturación?
             </DialogTitle>
             <DialogDescription>
-              La orden <strong>{orden.ordendecargue}</strong> NO se cobrará (no aparecerá en Gestión de Facturas).
+              La orden <strong>{orden.ordendecargue}</strong> NO se cobrará (no aparecerá en Solicitar Facturas).
               Esta acción queda <strong>registrada</strong> para análisis posterior.
             </DialogDescription>
           </DialogHeader>

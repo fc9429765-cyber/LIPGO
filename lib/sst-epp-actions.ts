@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase-client"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import type { EppRow } from "@/lib/sst-evidencia-types"
+import { exigirAccion } from "@/lib/puerta-modulo"
 
 async function resolveEmpresaId(fromClient?: number | null): Promise<number | null> {
   if (fromClient && !Number.isNaN(fromClient)) return fromClient
@@ -29,6 +30,8 @@ export async function saveEpp(
   row: Partial<EppRow>,
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Entrega de EPP"], "crear")
   const supabase = await createClient()
   const empresaId = await resolveEmpresaId(empresaIdFromClient)
   const { error } = await supabase.from("sst_entrega_epp").insert([{ ...row, idempresa: empresaId }])

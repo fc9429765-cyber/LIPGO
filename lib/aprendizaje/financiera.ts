@@ -527,7 +527,7 @@ export const APRENDIZAJE_FINANCIERA: ContenidoAprendizaje[] = [
       "Ver en qué paso está cada prefactura y quién debe actuar.",
       "Registrar el envío del anexo y de la factura (Jefe) y la firma del cliente (Coordinador).",
       "Cerrar el ciclo y registrar pagos; ver cartera con días vencidos.",
-      "Saltar a Gestión de Facturas, ya filtrado, para resolver órdenes sin gestionar."
+      "Saltar a Solicitar Facturas, ya filtrado, para resolver órdenes sin gestionar."
     ],
     noPuedes: [
       "Saltarse pasos: cada etapa exige la anterior.",

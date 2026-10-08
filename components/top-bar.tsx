@@ -7,6 +7,7 @@ import { User, LogOut, MessageCircle, Building2, KeyRound, Search } from "lucide
 import { ColombiaClock } from "./colombia-clock"
 import { useAuth } from "@/components/auth-provider"
 import { MiClaveAutorizacionDialog } from "@/components/mi-clave-autorizacion"
+import { AvisoClavePendiente } from "@/components/aviso-clave-pendiente"
 import { CentroNotificaciones } from "@/components/centro-notificaciones"
 import { getAvisoMiClave } from "@/lib/autorizaciones-actions"
 import { useRouter } from "next/navigation"
@@ -45,12 +46,19 @@ export function TopBar() {
   // Punto ámbar en el avatar cuando el usuario tiene procesos autorizados pero
   // aún no creó su clave (o tiene una provisional). Se recalcula al cerrar el diálogo.
   const [avisoClave, setAvisoClave] = useState<"sin_clave" | "provisional" | null>(null)
+  // Fecha en que vencen las claves compartidas y día de hoy en Bogotá: con eso la franja
+  // de abajo dice cuántos días faltan, que es lo que de verdad mueve a crearla.
+  const [transicionHasta, setTransicionHasta] = useState<string | null>(null)
+  const [hoyBogota, setHoyBogota] = useState<string>("")
   useEffect(() => {
     if (!profile?.id || claveDialogOpen) return
     let vivo = true
     getAvisoMiClave()
       .then((r) => {
-        if (vivo) setAvisoClave(r.motivo)
+        if (!vivo) return
+        setAvisoClave(r.motivo)
+        setTransicionHasta(r.transicionHasta)
+        setHoyBogota(r.hoy)
       })
       .catch(() => {})
     return () => {
@@ -218,6 +226,18 @@ export function TopBar() {
           </div>
         </div>
       </div>
+      {/* La franja va DEBAJO de la barra, a la vista. El aviso que vivía solo dentro del
+          menú del avatar llevaba desde el 27-sep sin que nadie lo notara: 19 de 21 personas
+          seguían sin clave a 20 días de que vencieran las compartidas. Quien ya tiene la
+          suya no ve nada. */}
+      {hoyBogota && (
+        <AvisoClavePendiente
+          motivo={avisoClave}
+          transicionHasta={transicionHasta}
+          hoy={hoyBogota}
+          onAbrir={() => setClaveDialogOpen(true)}
+        />
+      )}
     </div>
   )
 }

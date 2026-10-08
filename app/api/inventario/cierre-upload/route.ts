@@ -1,9 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { exigirAccionApi } from "@/lib/puerta-api"
 
 // Sube el acta PDF de cierre mensual de inventario al bucket `archivos`:
 // inventario/cierres/{proyecto_id}/{mes}/acta-conciliacion.pdf
 export async function POST(request: NextRequest) {
+  const puerta = await exigirAccionApi(["Auditoría de Inventario", "Panel LIP Inventario"], "editar")
+  if (puerta) return puerta
   try {
     const formData = await request.formData()
     const file = formData.get("file") as File | null

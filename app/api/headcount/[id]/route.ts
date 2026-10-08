@@ -1,7 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createServerClient } from "@/lib/supabase-server"
+import { exigirAccionApi } from "@/lib/puerta-api"
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const puerta = await exigirAccionApi(["Head Count", "Gestión de Colaboradores"], "editar")
+  if (puerta) return puerta
   try {
     const { id: idParam } = await params
     const body = await request.json()
@@ -58,6 +61,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const puerta = await exigirAccionApi(["Head Count", "Gestión de Colaboradores"], "eliminar")
+  if (puerta) return puerta
   try {
     const { id: idParam } = await params
     const id = Number.parseInt(idParam)

@@ -23,6 +23,7 @@ import type {
   SoporteAdjunto,
   TrabajadorDisciplinario,
 } from "@/lib/disciplinarios-tipos"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const MAX_MB = 25
 
@@ -138,6 +139,9 @@ export async function getDisciplinarios(
 export async function crearProcesoDisciplinario(
   input: CrearProcesoInput,
 ): Promise<{ success: boolean; id?: string; radicado?: string; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Procesos Disciplinarios"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!input.empresaId) return { success: false, message: "Falta la empresa." }
     if (!input.identificacion || !input.nombre) return { success: false, message: "Falta el colaborador." }
@@ -251,6 +255,9 @@ export async function avanzarEstadoDisciplinario(payload: {
   medidaAplicada?: string | null
   nota?: string | null
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Procesos Disciplinarios"], "editar", "Avanzar estado")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const sb: any = await getSupabaseAdmin()
     const usuario = await getCurrentUsuarioForInsert().catch(() => null)
@@ -322,6 +329,9 @@ export async function subirSoporteDisciplinario(
   file: File,
   radicado: string,
 ): Promise<{ success: boolean; data?: SoporteAdjunto; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Procesos Disciplinarios"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!file) return { success: false, message: "No se seleccionó ningún archivo." }
   if (file.size > MAX_MB * 1024 * 1024) {
     return {
@@ -356,6 +366,9 @@ export async function agregarSoporteAlCaso(
   id: string,
   soporte: SoporteAdjunto,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Procesos Disciplinarios"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const sb: any = await getSupabaseAdmin()
     const { data: actual } = await sb
@@ -391,6 +404,9 @@ export async function guardarActaDisciplinaria(payload: {
   identificacion: string
   pdfBase64: string
 }): Promise<{ success: boolean; url?: string; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Procesos Disciplinarios"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const sb: any = await getSupabaseAdmin()
     const limpio = payload.pdfBase64.replace(/^data:application\/pdf;base64,/, "")

@@ -9,26 +9,33 @@ import { getCurrentEmpresaId } from "@/lib/company-filter"
 // valores no async desde archivos con "use server", asi que el mapa no
 // puede vivir aqui. Importamos desde el modulo compartido.
 import { MODULE_PERMISSION_MAP, type UserPermissions } from "@/lib/permissions-map"
+import { cache } from "react"
+
+// UNA lectura de la fila de permisos por request (React `cache`, mismo patrón
+// que `resolverActorId` en lib/supabase-admin.ts). Una server action que exige
+// módulo, acción y segundo factor preguntaba por la misma fila tres veces; y
+// con ~400 columnas (acciones por módulo, SQL 262) cada lectura pesa.
+// También dejó de imprimirse la fila completa en el log del servidor: son los
+// permisos de una persona, no un dato de depuración.
+const leerFilaPermisos = cache(async (userId: string): Promise<UserPermissions | null> => {
+  const supabase = await getSupabaseAdmin()
+  const { data, error } = await supabase.from("permisos_usuarios").select("*").eq("usuario_id", userId).maybeSingle()
+  if (error) {
+    console.error("Error fetching user permissions:", error.message)
+    return null
+  }
+  return (data as UserPermissions) ?? null
+})
 
 export async function getUserPermissions(userId?: string): Promise<UserPermissions | null> {
   try {
-    const supabase = await getSupabaseAdmin()
-
-    // Si no se proporciona userId, usar el usuario actual
-    if (!userId) {
+    let id = userId
+    if (!id) {
       const currentUser = await getCurrentUser()
       if (!currentUser) return null
-      userId = currentUser.id
+      id = currentUser.id
     }
-
-    const { data, error } = await supabase.from("permisos_usuarios").select("*").eq("usuario_id", userId).single()
-
-    if (error) {
-      console.error("Error fetching user permissions:", error)
-      return null
-    }
-
-    return data as UserPermissions
+    return await leerFilaPermisos(id)
   } catch (error) {
     console.error("Error in getUserPermissions:", error)
     return null
@@ -37,30 +44,16 @@ export async function getUserPermissions(userId?: string): Promise<UserPermissio
 
 export async function checkModulePermission(moduleName: string): Promise<boolean> {
   try {
-    console.log("[v0] checkModulePermission: Checking permission for module:", moduleName)
-
     const permissionKey = MODULE_PERMISSION_MAP[moduleName]
     if (!permissionKey) {
-      console.log("[v0] checkModulePermission: Module not found in permission map:", moduleName, "- denying access")
+      console.warn("[permisos] módulo fuera del mapa, se niega:", moduleName)
       return false
     }
-
     const permissions = await getUserPermissions()
-    if (!permissions) {
-      console.log("[v0] checkModulePermission: No permissions found for user - denying access")
-      return false
-    }
-
-    console.log("[v0] checkModulePermission: All permissions for user:", JSON.stringify(permissions, null, 2))
-    console.log("[v0] checkModulePermission: Looking for key:", permissionKey)
-    console.log("[v0] checkModulePermission: Value for key:", permissions[permissionKey])
-    console.log("[v0] checkModulePermission: Value type:", typeof permissions[permissionKey])
-
-    const hasPermission = permissions[permissionKey] === true
-    console.log("[v0] checkModulePermission: Permission for", moduleName, "(", permissionKey, "):", hasPermission)
-    return hasPermission
+    if (!permissions) return false
+    return permissions[permissionKey] === true
   } catch (error) {
-    console.error("[v0] checkModulePermission: Error checking module permission:", error)
+    console.error("[permisos] checkModulePermission:", error)
     return false
   }
 }
@@ -97,8 +90,6 @@ export async function getAllUsersWithPermissions(selectedEmpresaId?: number | nu
       console.error("Error fetching users with permissions:", error)
       return { success: false, error: error.message }
     }
-
-    console.log("[v0] Fetched users with permissions:", JSON.stringify(data, null, 2))
 
     return { success: true, data: data || [] }
   } catch (error) {

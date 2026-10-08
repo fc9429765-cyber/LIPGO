@@ -21,6 +21,7 @@
 // periodo con su fecha_pago real.
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
 
 export type ConceptoPrestacion = "prima" | "cesantias" | "intereses_cesantias"
 
@@ -103,6 +104,9 @@ export async function calcularPrestacionesActivos(
   periodoHasta: string,
   idempresaFiltro?: number | null,
 ): Promise<{ success: boolean; data: PrestacionActivoPersona[]; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Parafiscales", "Liquidaciones"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion, data: [] }
   try {
     const admin: any = await getSupabaseAdmin()
     const pp = await leerParametrosPrestaciones(admin)
@@ -205,6 +209,9 @@ export async function generarCalculoPrestacionesActivos(
   periodoHasta: string,
   idempresaFiltro?: number | null,
 ): Promise<{ success: boolean; personas?: number; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Parafiscales"], "crear", "Generar cálculo de prestaciones")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const r = await calcularPrestacionesActivos(concepto, periodoDesde, periodoHasta, idempresaFiltro)
   if (!r.success) return { success: false, message: r.message }
   try {
@@ -290,6 +297,9 @@ export async function guardarValorRealPrestacionActivo(payload: {
   periodo_hasta: string
   valor_real: number | null
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Parafiscales"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const admin: any = await getSupabaseAdmin()
     const { error } = await admin
@@ -314,7 +324,12 @@ export async function marcarPeriodoPagado(
   periodoDesde: string,
   periodoHasta: string,
   fechaPago: string,
+  clave?: string,
 ): Promise<{ success: boolean; message?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Parafiscales", "cerrar", { clave: clave ?? "", idempresa: null, referencia: "marcar período pagado" })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   try {
     const admin: any = await getSupabaseAdmin()
     const { error } = await admin

@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase-client"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 export interface ExperienciaLaboral {
   empresa: string
@@ -69,6 +70,9 @@ export async function createEntrevista(
   entrevista: Record<string, any>,
   selectedEmpresaId?: number | null,
 ) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Entrevistas"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const empresaId = selectedEmpresaId || (await getCurrentEmpresaIdForInsert())
 
@@ -87,6 +91,9 @@ export async function createEntrevista(
 
 // Actualiza una entrevista existente. No permite cambiar idempresa.
 export async function updateEntrevista(id: string, updates: Record<string, any>) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Entrevistas"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const { idempresa, id: _ignore, created_at, ...rest } = updates
 
@@ -106,6 +113,9 @@ export async function updateEntrevista(id: string, updates: Record<string, any>)
 
 // Elimina una entrevista.
 export async function deleteEntrevista(id: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Entrevistas"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const { error } = await supabase.from("entrevistas").delete().eq("id", id)
 

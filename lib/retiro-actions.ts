@@ -7,6 +7,7 @@
 // vínculo de pagonomina (por fecha_fin_contrato) excluya los días posteriores.
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 // Calca la detección de ausentismos-actions.ts: "retiro" por substring.
 // Local (no exportable: un archivo "use server" solo exporta funciones async).
@@ -20,6 +21,9 @@ export async function procesarNovedadRetiro(params: {
   asistencia?: string | null
   idempresa?: number | null
 }): Promise<{ success: boolean; aplicado?: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Tabla Asistencia", "Novedades de personal", "Visor"], "editar", "Novedad de retiro")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const { identificacion, fecha, asistencia, idempresa } = params
   if (!esNovedadRetiro(asistencia)) return { success: true, aplicado: false }
   const cedula = String(identificacion || "").trim()

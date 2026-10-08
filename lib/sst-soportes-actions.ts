@@ -5,6 +5,7 @@
 // que luego se guarda en sst_autoeval_respuestas.soporte_url (vía guardarRespuesta).
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const sanit = (s: string) => (s || "").replace(/[^a-zA-Z0-9._-]/g, "_")
 
@@ -13,6 +14,9 @@ export async function subirSoporteEstandar(
   autoevaluacionId: number,
   numeral: string,
 ): Promise<{ success: boolean; url?: string; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Repositorio de Soportes"], "crear", "Subir soporte")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const supabaseAdmin = await getSupabaseAdmin()
     const ext = file.name.split(".").pop() || "bin"

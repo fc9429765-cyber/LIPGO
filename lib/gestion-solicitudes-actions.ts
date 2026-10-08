@@ -9,6 +9,7 @@ import {
   cumpleAnticipacionPermiso,
   mensajeAnticipacionPermiso,
 } from "@/lib/permisos-anticipacion"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 /**
  * Registro de solicitud_trabajadores con datos del colaborador (JOIN headcount).
@@ -167,6 +168,9 @@ export async function getSolicitudesTrabajadores(
 export async function aprobarSolicitud(
   id: string,
 ): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Solicitudes", "Aprobación de Solicitudes de Personal"], "aprobar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase = await createClient()
     const fechaAprobacion = await getColombiaDate()
@@ -188,6 +192,9 @@ export async function rechazarSolicitud(
   id: string,
   motivo: string,
 ): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Solicitudes", "Aprobación de Solicitudes de Personal"], "anular", "Rechazar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!motivo || !motivo.trim()) {
       return { success: false, error: "El motivo de rechazo es obligatorio" }
@@ -219,6 +226,9 @@ export async function rechazarSolicitud(
 export async function eliminarSolicitud(
   id: string,
 ): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Solicitudes"], "eliminar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!id) {
       return { success: false, error: "Id de solicitud requerido" }
@@ -261,6 +271,9 @@ export async function gestionarAprobacionPermiso(
   accion: "aprobar" | "rechazar",
   motivo?: string,
 ): Promise<{ success: boolean; nuevoEstadoGlobal?: string; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Solicitudes", "Aprobación de Solicitudes de Personal"], "aprobar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!solicitudId) return { success: false, error: "Solicitud invalida" }
     if (tipoAprobador !== "GH" && tipoAprobador !== "Coord") {
@@ -404,6 +417,9 @@ export async function completarCertificado(
   id: string,
   documentoUrl: string,
 ): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Solicitudes"], "editar", "Completar certificado")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase = await createClient()
     const { error } = await supabase
@@ -519,6 +535,9 @@ export async function generarCertificadoLaboralWord(
   publicUrl?: string
   error?: string
 }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Solicitudes"], "exportar", "Certificado laboral")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   console.log("[v0] generarCertificadoLaboralWord invocado, solicitudId:", solicitudId)
   try {
     if (!solicitudId) {
@@ -1005,6 +1024,9 @@ export async function subirEvidenciaAnticipo(
   solicitudId: string,
   cuotas: number,
 ): Promise<{ success: boolean; publicUrl?: string; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Solicitudes", "Aprobación de Solicitudes de Personal"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!solicitudId) return { success: false, error: "Solicitud invalida" }
     if (!Number.isFinite(cuotas) || cuotas < 1) {

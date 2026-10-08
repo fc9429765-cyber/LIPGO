@@ -15,9 +15,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { AyudaClaveAutorizacion } from "@/components/mi-clave-autorizacion"
 import { toast } from "@/hooks/use-toast"
-import { approveOrder, verifyCarteraPassword, approveCartera, annulOrder, closePendingOrder, closeOrderWithInvoice, getOrderDetails, deleteOrder } from "@/lib/orders-actions"
+import { approveOrder, approveCartera, annulOrder, closePendingOrder, closeOrderWithInvoice, getOrderDetails, deleteOrder } from "@/lib/orders-actions"
 import type { PedidoCola } from "@/lib/pedidos-cola-actions"
 import { fechaCortaAnio } from "./formato"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 export type TipoAccion = "aprobar" | "cartera" | "anular" | "cerrar_pendiente" | "cierre_factura" | "eliminar"
 export interface Accion {
@@ -27,6 +28,7 @@ export interface Accion {
 
 export function AccionesPedidoDialogos({ accion, onClose, onDone }: { accion: Accion | null; onClose: () => void; onDone: () => void }) {
   const [clave, setClave] = useState("")
+  const { conClave } = useClaveAccion()
   const [verClave, setVerClave] = useState(false)
   const [obs, setObs] = useState("")
   const [error, setError] = useState("")
@@ -80,12 +82,8 @@ export function AccionesPedidoDialogos({ accion, onClose, onDone }: { accion: Ac
     setTrabajando(true)
     setError("")
     try {
-      const v = await verifyCarteraPassword(clave, p.idpedido)
-      if (!v.success) {
-        setError(v.message || "Clave incorrecta")
-        return
-      }
-      const r = await approveCartera(p.idpedido, v.nombre!)
+      // La clave se valida dentro de approveCartera (atómica con la escritura).
+      const r = await approveCartera(p.idpedido, clave)
       if (r.success) listo("Aprobación de cartera registrada.")
       else setError(r.message || "No se pudo registrar la aprobación de cartera")
     } finally {
@@ -115,11 +113,10 @@ export function AccionesPedidoDialogos({ accion, onClose, onDone }: { accion: Ac
       return
     }
     setTrabajando(true)
-    const r = await closeOrderWithInvoice(
+    const r = await conClave("Gestionar pedidos", "cerrar", (clave) => closeOrderWithInvoice(
       p.idpedido,
       factura,
-      lineasFactura.map((l) => ({ transid: l.transid, unidadesRecibidas: l.unidadesRecibidas })),
-    )
+      lineasFactura.map((l) => ({ transid: l.transid, unidadesRecibidas: l.unidadesRecibidas })), clave))
     setTrabajando(false)
     if (r.success) listo(r.message || "Cierre con factura registrado.")
     else setError(r.message || "No se pudo registrar el cierre")

@@ -22,6 +22,7 @@ import { useAuth } from "@/components/auth-provider"
 import { getPanelInventarioLIP, getKardexInventario, getMovimientosProducto, getTiposMovimiento, getCuadreDiario, getPreservacionInventario, getConciliacionMensualInventario, guardarCierreMesInventario, getConciliacionPedidosVsSalidas, getConciliacionOrdenVsSalidas, getAuditoriaOrdenPedidoSalida, guardarCuadreManualPedidoSalida, getOrCrearActaCruce, corregirLineaActaCruce, firmarActaCruce, getProductosInventario, getConteoFisicoDelMes } from "@/lib/sig-actions"
 import { Truck, Loader2, Boxes, TrendingDown, ArrowDownToLine, AlertTriangle, RefreshCw, CalendarClock, Layers, FileText, BookOpen, ZoomIn, ClipboardList, ShieldAlert, FolderOpen, ExternalLink, CheckCircle2 } from "lucide-react"
 import { ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 const DONUT_COLORS = ["#1E8449", "#0D3B6E", "#00B4CC", "#E0A800", "#7e57c2", "#C0392B"]
 
@@ -43,6 +44,7 @@ const fechaColombiaUI = (iso: any): string => {
 
 export function PanelInventarioLIP() {
   const { toast } = useToast()
+  const { conClave } = useClaveAccion()
   const { selectedEmpresaId, selectedEmpresaNombre, user, profile } = useAuth()
   const actor = (profile as any)?.nombre || (profile as any)?.usuario || user?.email || "usuario LIPgo"
   const [data, setData] = useState<any>(null)
@@ -323,11 +325,11 @@ export function PanelInventarioLIP() {
         if (!upJson?.url) throw new Error(upJson?.error || "No se pudo subir la firma")
         firmaUrl = upJson.url
       }
-      const r = await firmarActaCruce(cruce.acta.id, {
+      const r = await conClave("Auditoría de Inventario", "aprobar", (clave) => firmarActaCruce(cruce.acta.id, {
         firmante: firmanteCruceNom.trim(),
         firmante_cargo: firmanteCruceCargo.trim() || null,
         firma_url: firmaUrl,
-      })
+      }, clave))
       if (!r.success) throw new Error(r.error || "No se pudo firmar")
       toast({ title: "Acta de cruce firmada", description: `Firmado por ${firmanteCruceNom.trim()}` })
       setFirmandoCruce(false)
@@ -514,7 +516,7 @@ export function PanelInventarioLIP() {
       const conteoFisico = await getConteoFisicoDelMes(selectedEmpresaId, f.mes)
       const fisico = conteoFisico.success ? conteoFisico.data : null
 
-      const save = await guardarCierreMesInventario({
+      const save = await conClave("Auditoría de Inventario", "cerrar", (clave) => guardarCierreMesInventario({
         proyecto_id: selectedEmpresaId,
         mes: f.mes,
         saldo_inicial: f.saldoInicial,
@@ -535,7 +537,7 @@ export function PanelInventarioLIP() {
         fisico_congelado: fisico?.fisicoCongelado ?? null,
         fisico_snapshot: fisico?.fisicoSnapshot ?? null,
         observaciones: `Merma de proceso: reproceso 551 = ${fmt(f.reproceso ?? 0)}, cuadre físico por lote = ${fmt(f.mermaProceso ?? 0)}. Saldo final conciliado = stock físico. Firmado por ${firmanteNom.trim()}${firmanteCargo.trim() ? " (" + firmanteCargo.trim() + ")" : ""}.${fisico ? " Inventario inicial del mes siguiente = conteo físico real de este cierre." : ""}`,
-      })
+      }, clave))
       if (!save.success) throw new Error(save.error || "Error al guardar cierre")
 
       toast({

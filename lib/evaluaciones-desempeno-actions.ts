@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase-client"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import { getCurrentUser } from "@/lib/auth-actions"
 import { liquidable } from "@/lib/nomina-calculo-utils"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 /**
  * Evaluaciones de Desempeno - server actions
@@ -158,6 +159,9 @@ export async function getColaboradoresConUltimaEvaluacion(
 export async function createEvaluacionDesempeno(
   payload: EvaluacionPayload,
 ): Promise<{ success: boolean; id?: string; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Evaluaciones de Desempeño"], "crear", "Evaluar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase = await createClient()
 

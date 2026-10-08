@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 import { registrarEventoCiclo, getCondicionesGeneracionPrefactura, generarPrefacturaAhora } from "@/lib/ciclo-facturacion-actions"
-import { ownerDePrefactura, fechaAyerColombiaISO } from "@/lib/ciclo-facturacion-shared"
+import { ownerDePrefactura, fechaAyerColombiaISO, proyectoEntregado } from "@/lib/ciclo-facturacion-shared"
 import { construirPdfAnexoFacturacion } from "@/lib/anexo-facturacion-pdf"
+import { registrarErrorServidor } from "@/lib/errores-servidor"
 
 /**
  * CRON DIARIO -- dos fases, en este orden:
@@ -84,7 +85,9 @@ async function generarPrefacturasAutomaticas(hoy: number) {
   const { diaMesAyer, diasEnMesAyer } = diaYUltimoDiaDelMesDeAyer()
 
   for (const cond of condiciones.data) {
-    if (!cond.activo) {
+    // Un proyecto entregado no se factura más desde aquí, aunque su condición
+    // siga activa en la base (no se tocan parámetros por proyecto).
+    if (!cond.activo || proyectoEntregado(cond.idempresa)) {
       resultado.omitidas++
       continue
     }
@@ -164,6 +167,11 @@ export async function GET(request: NextRequest) {
     }
 
     for (const p of candidatas || []) {
+      // Un proyecto entregado no recibe más anexos.
+      if (proyectoEntregado(p.idempresa)) {
+        resultados.omitidas++
+        continue
+      }
       try {
         const cond = condicionPorEmpresa.get(p.idempresa)
         const frecuencia = cond?.frecuencia || "semanal"
@@ -207,12 +215,15 @@ export async function GET(request: NextRequest) {
         resultados.procesadas++
       } catch (e: any) {
         resultados.errores.push({ id: p.id, error: e?.message || String(e) })
+        // Hasta hoy un anexo que fallaba todos los días no dejaba rastro en ninguna parte.
+        void registrarErrorServidor("cron.anexos-pendientes.enviar", e, { prefacturaId: p.id, idempresa: p.idempresa })
       }
     }
 
     return NextResponse.json(resultados)
   } catch (error: any) {
     console.error("[cron/anexos-pendientes] error fatal:", error)
+    void registrarErrorServidor("cron.anexos-pendientes", error)
     return NextResponse.json({ error: error?.message || "Error inesperado", ...resultados }, { status: 500 })
   }
 }

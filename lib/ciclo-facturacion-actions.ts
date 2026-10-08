@@ -27,7 +27,8 @@
  * `registrarPago` lleva el saldo. Ver scripts/165_add_ciclo_facturacion.sql.
  */
 
-import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
+import { CORTE_CICLO_SIIGO } from "@/lib/ciclo-facturacion-shared"
 import { segundoFactorPendiente } from "@/lib/seguridad-servidor"
 import { getAccessibleEmpresesFromPermisos } from "@/lib/orders-actions"
 import {
@@ -40,8 +41,10 @@ import {
   type UnidadCobro,
 } from "@/lib/facturacion-control-actions"
 import { valorListoParaAnexo, tonListoParaAnexo } from "@/lib/facturacion-control-shared"
-import { ownerDePrefactura, fechaAyerColombiaISO } from "@/lib/ciclo-facturacion-shared"
+import { ownerDePrefactura, fechaAyerColombiaISO, proyectoEntregado } from "@/lib/ciclo-facturacion-shared"
+import { puedoActuarComoCoordinadorEn } from "@/lib/bandeja-facturacion-actions"
 import { getUserPermissions } from "@/lib/permissions-actions"
+import { autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
 
 export type EstadoCiclo =
   | "pendiente_anexo"
@@ -88,6 +91,8 @@ export interface PrefacturaCiclo {
   periodo_hasta: string | null
   total: number
   estado_ciclo: EstadoCiclo
+  /** Factura de Siigo ya emitida para esta prefactura. Vacio = todavia no se facturo. */
+  numero_factura_siigo: string | null
   ciclo_actualizado_en: string | null
   ultimoEvento: EventoCiclo | null
   // Cartera (solo tiene sentido una vez cerrado)
@@ -146,9 +151,23 @@ const ROL_POR_ESTADO: Record<EstadoCiclo, "jefe" | "coordinador" | null> = {
   cerrado: null,
 }
 
-async function verificarPermisoCiclo(rol: "jefe" | "coordinador"): Promise<string | null> {
+async function verificarPermisoCiclo(rol: "jefe" | "coordinador", idempresa?: number | null): Promise<string | null> {
   const permisos = await getUserPermissions()
-  const tienePermiso = rol === "jefe" ? permisos?.ciclo_facturacion_jefe : permisos?.ciclo_facturacion_coordinador
+  let tienePermiso = rol === "jefe" ? !!permisos?.ciclo_facturacion_jefe : !!permisos?.ciclo_facturacion_coordinador
+  /*
+   * EL COORDINADOR LIP DEL PROYECTO TAMBIÉN PUEDE (2026-10-08).
+   *
+   * El paso del coordinador —la firma del cliente— es de quien coordina ESE
+   * proyecto, no de quien tenga un permiso global del ciclo. Hasta hoy solo
+   * cuatro administradores tenían ese permiso y ningún coordinador de proyecto:
+   * el anexo se enviaba a nadie. Se reconoce al coordinador por su perfil de
+   * autorización «Coordinador LIP» con alcance al proyecto de la prefactura, la
+   * misma fuente con la que ya autoriza con clave. El permiso global sigue
+   * valiendo: nadie pierde nada. Ver lib/ciclo-facturacion-bandeja.ts.
+   */
+  if (!tienePermiso && rol === "coordinador" && idempresa != null) {
+    tienePermiso = await puedoActuarComoCoordinadorEn(idempresa)
+  }
   if (!tienePermiso) {
     return `No tienes el permiso de ${rol === "jefe" ? "Jefe de Facturación" : "Coordinador"} en Ciclo de Facturación -- este paso no te corresponde.`
   }
@@ -188,13 +207,14 @@ export async function listarCicloFacturacion(filtros?: {
   try {
     const sb: any = await getSupabaseAdmin()
     const accesibles = await getAccessibleEmpresesFromPermisos()
-    const idsAccesibles = accesibles.map((e) => e.id)
+    // Un proyecto entregado ya no se factura desde aquí (ID4, Cedi Medellín, 26-sep-2026).
+    const idsAccesibles = accesibles.map((e) => e.id).filter((id) => !proyectoEntregado(id))
     if (idsAccesibles.length === 0) return { success: true, data: [] }
 
     let query = sb
       .from("prefacturas")
       .select(
-        "id, origen, idempresa, proyecto, periodo_desde, periodo_hasta, total, lineas, estado_ciclo, ciclo_actualizado_en, estado_cobro, valor_pagado, dias_plazo, fecha_vencimiento, advertencias",
+        "id, origen, idempresa, proyecto, periodo_desde, periodo_hasta, total, lineas, estado_ciclo, ciclo_actualizado_en, estado_cobro, valor_pagado, dias_plazo, fecha_vencimiento, advertencias, numero_factura_siigo",
       )
       .eq("estado", "aprobada")
       .in("idempresa", idsAccesibles)
@@ -203,6 +223,13 @@ export async function listarCicloFacturacion(filtros?: {
     if (filtros?.idempresa) query = query.eq("idempresa", filtros.idempresa)
     if (filtros?.estado_ciclo) query = query.eq("estado_ciclo", filtros.estado_ciclo)
     if (filtros?.estado_cobro) query = query.eq("estado_cobro", filtros.estado_cobro)
+    /*
+     * El corte. Se aplica SIEMPRE, antes que los filtros de la pantalla: una
+     * prefactura cuyo período terminó antes del 1 de octubre no se muestra ni
+     * aunque se limpien los filtros.
+     */
+    query = query.gte("periodo_hasta", CORTE_CICLO_SIIGO)
+
     if (filtros?.periodo_desde) query = query.gte("periodo_hasta", filtros.periodo_desde)
     if (filtros?.periodo_hasta) query = query.lte("periodo_desde", filtros.periodo_hasta)
 
@@ -238,6 +265,7 @@ export async function listarCicloFacturacion(filtros?: {
         periodo_hasta: r.periodo_hasta,
         total,
         estado_ciclo: r.estado_ciclo,
+        numero_factura_siigo: r.numero_factura_siigo ?? null,
         ciclo_actualizado_en: r.ciclo_actualizado_en,
         ultimoEvento: ultimosPorPrefactura.get(r.id) || null,
         estado_cobro: r.estado_cobro,
@@ -287,19 +315,21 @@ export async function registrarEventoCiclo(
 ): Promise<{ success: boolean; message?: string }> {
   if (!archivos.length) return { success: false, message: "Adjunta al menos un archivo." }
   try {
-    if (!origenSistema) {
-      const rolRequerido = evento === "anexo_enviado" || evento === "factura_enviada" ? "jefe" : "coordinador"
-      const errPermiso = await verificarPermisoCiclo(rolRequerido)
-      if (errPermiso) return { success: false, message: errPermiso }
-    }
     const sb: any = await getSupabaseAdmin()
+    // La prefactura se lee ANTES del permiso: el paso del coordinador se decide por
+    // el PROYECTO de la prefactura (su coordinador LIP), y para eso hay que saber cuál es.
     const { data: pref, error: errPref } = await sb
       .from("prefacturas")
-      .select("id, estado, estado_ciclo")
+      .select("id, idempresa, estado, estado_ciclo")
       .eq("id", prefacturaId)
       .maybeSingle()
     if (errPref) return { success: false, message: errPref.message }
     if (!pref) return { success: false, message: "Prefactura no encontrada." }
+    if (!origenSistema) {
+      const rolRequerido = evento === "anexo_enviado" || evento === "factura_enviada" ? "jefe" : "coordinador"
+      const errPermiso = await verificarPermisoCiclo(rolRequerido, pref.idempresa == null ? null : Number(pref.idempresa))
+      if (errPermiso) return { success: false, message: errPermiso }
+    }
     if (pref.estado !== "aprobada") return { success: false, message: "Esta prefactura todavía no está aprobada." }
 
     const transicion = TRANSICION[evento]
@@ -476,7 +506,12 @@ export async function getSoporteDePrefactura(prefacturaId: number): Promise<{ su
 export async function registrarPago(
   prefacturaId: number,
   pago: { fecha: string; valor: number; observacion?: string; usuario: string },
+  clave?: string,
 ): Promise<{ success: boolean; message?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Ciclo de Facturación", "crear", { clave: clave ?? "", idempresa: (await (await getSupabaseAdminAsSystem()).from("prefacturas").select("idempresa").eq("id", prefacturaId).maybeSingle()).data?.idempresa ?? null, referencia: `registrar pago prefactura ${prefacturaId}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   // Segundo factor (2026-10-05): solo detiene a quien lo tiene activado y no lo verificó.
   const segundoFactor = await segundoFactorPendiente("ciclo-facturacion:registrarPago")
   if (segundoFactor) return { success: false, message: segundoFactor }
@@ -591,6 +626,9 @@ export async function actualizarCondicionEnvioAnexo(
   frecuencia: "diario" | "semanal",
   dia_semana: number | null,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ciclo de Facturación"], "configurar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const segundoFactor = await segundoFactorPendiente("ciclo-facturacion:condicionEnvioAnexo")
   if (segundoFactor) return { success: false, message: segundoFactor }
   if (!idempresa) return { success: false, message: "Falta el proyecto." }
@@ -673,6 +711,9 @@ export async function actualizarCondicionGeneracionPrefactura(
   fecha_inicio: string | null,
   dias_corte: number[] | null = null,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ciclo de Facturación"], "configurar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const segundoFactor = await segundoFactorPendiente("ciclo-facturacion:condicionGeneracionPrefactura")
   if (segundoFactor) return { success: false, message: segundoFactor }
   if (!idempresa) return { success: false, message: "Falta el proyecto." }
@@ -913,7 +954,7 @@ export async function generarPrefacturaAhora(
       // Bloque por grupo (owner|||operación|||unidad) -- necesario para saber,
       // línea por línea del detalle, si pertenece a un grupo "producción" (sin
       // validación por-orden, ej. Tolva) o "operación" (exige que el
-      // Coordinador ya haya validado esa orden en Gestión de Facturas).
+      // Coordinador ya haya validado esa orden en Solicitar Facturas).
       const bloquePorGrupo = new Map(pref.resumen.map((r) => [`${r.owner}|||${r.operacion}|||${r.unidad}`, r.bloque]))
       const soporte = [
         ...pref.origen
@@ -951,7 +992,7 @@ export async function generarPrefacturaAhora(
         for (const al of ctrlR.data.produccionAlertas || []) advertencias.push({ tipo: "produccion_alerta", detalle: al })
       }
       // Órdenes de este owner/período que el Coordinador AÚN no ha validado en
-      // Gestión de Facturas -- se generó igual (con lo que sí está validado),
+      // Solicitar Facturas -- se generó igual (con lo que sí está validado),
       // pero esto queda sin facturar hasta que se valide y entre en un
       // próximo corte. Solo bloque "operación" -- Tolva/producción no aplica.
       const sinGestionar = pref.resumen.filter((r) => r.owner === owner && r.bloque === "operacion" && r.valorPorFacturar > 0)
@@ -962,7 +1003,7 @@ export async function generarPrefacturaAhora(
         ).size
         advertencias.push({
           tipo: "ordenes_sin_gestionar",
-          detalle: `$${valorSinGestionar.toLocaleString("es-CO")} en ${numOrdenes} orden(es) de este período siguen sin validar por el Coordinador (Gestión de Facturas) y quedaron FUERA de este anexo.`,
+          detalle: `$${valorSinGestionar.toLocaleString("es-CO")} en ${numOrdenes} orden(es) de este período siguen sin validar por el Coordinador (Solicitar Facturas) y quedaron FUERA de este anexo.`,
         })
       }
       if (rangoManual && desdeAutomatico && desdeOwner !== desdeAutomatico) {
@@ -1023,7 +1064,7 @@ export interface ResultadoPendienteGestion {
  * Solo-lectura -- NO guarda nada. Para el período que le tocaría generar a
  * este proyecto AHORA MISMO (mismo cálculo de `desde` que usa
  * `generarPrefacturaAhora`), cuánto valor de bloque "operación" sigue SIN
- * validar por el Coordinador en Gestión de Facturas -- o sea, lo que
+ * validar por el Coordinador en Solicitar Facturas -- o sea, lo que
  * quedaría FUERA del próximo anexo si se generara ya. Pensado para el
  * aviso proactivo en la UI, pedido por el usuario 2026-09-14: "que informe
  * si se está quedando alguna de estas órdenes por fuera del corte por no
@@ -1084,6 +1125,9 @@ export async function previsualizarPendienteGestion(idempresa: number): Promise<
 }
 
 export async function actualizarCondicionPagoOwner(owner: string, dias_plazo: number): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ciclo de Facturación"], "configurar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const segundoFactor = await segundoFactorPendiente("ciclo-facturacion:condicionPagoOwner")
   if (segundoFactor) return { success: false, message: segundoFactor }
   if (!owner?.trim()) return { success: false, message: "Falta el owner." }

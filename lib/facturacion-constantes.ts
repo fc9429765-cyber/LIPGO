@@ -5,7 +5,7 @@
 
 // Desde esta fecha el backlog de facturación se gestiona DENTRO de LIPgo
 // (déficit de volumen del Análisis Financiero, "Sin gestionar" del Cuadro de
-// Control, badge de pendientes, Gestión de Facturas). Antes de esta fecha los
+// Control, badge de pendientes, Solicitar Facturas). Antes de esta fecha los
 // cuadros de acuerdo apenas se estaban montando y el backlog de esos meses YA
 // SE FACTURÓ MANUAL, fuera del sistema (confirmado por gerencia 2026-08-02) —
 // seguir mostrándolo como alarma/pendiente abierto sería engañoso. No se borra

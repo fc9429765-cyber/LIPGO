@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase-client"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 // Lectura de QR Estibas: busca en la vista `view_inventario_por_estiba`
 // por el campo `idqr`. Se expone como Route Handler (en lugar de Server
@@ -7,6 +8,8 @@ import { createClient } from "@/lib/supabase-client"
 // de una Server Action, evitando errores de "Server Action not found"
 // ante desincronizaciones de despliegue.
 export async function GET(request: NextRequest) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   const qrId = request.nextUrl.searchParams.get("idqr")?.trim()
 
   if (!qrId) {

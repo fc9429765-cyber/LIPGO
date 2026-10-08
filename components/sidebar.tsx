@@ -712,7 +712,7 @@ export function Sidebar({
 
       {/* Desktop Sidebar */}
       <aside
-        className={`lipgo-sb hidden md:flex flex-col h-screen border-r border-border z-20 transition-all duration-300 ${collapsed ? "w-16 lg:w-20" : "w-56 lg:w-64"}`}
+        className={`lipgo-sb hidden md:flex shrink-0 flex-col h-screen border-r border-border z-20 transition-all duration-300 ${collapsed ? "w-16 lg:w-20" : "w-56 lg:w-64"}`}
       >
         {/* Cabecera de marca (pulido 2026-10-02): sobria y fija. El rombo real
             del logo, LIP·GO y el lema de LIP. Sin animaciones ni adornos. */}

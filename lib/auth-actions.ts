@@ -2,6 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js"
 import { createServerClient } from "@/lib/supabase-server"
+import { cache } from "react"
 
 export interface UserProfile {
   id: string
@@ -64,24 +65,26 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   }
 }
 
-export async function getCurrentUser() {
+// Una validación de la cookie de sesión por request (React `cache`): cada puerta
+// de servidor --módulo, acción, segundo factor, auditoría-- vuelve a preguntar
+// quién es el usuario, y antes cada pregunta era un viaje a Supabase Auth.
+const leerUsuarioActual = cache(async () => {
   const supabase = createServerClient()
-
   try {
     const {
       data: { user },
       error,
     } = await supabase.auth.getUser()
-
-    if (error || !user) {
-      return null
-    }
-
+    if (error || !user) return null
     return user
   } catch (error) {
     console.error("[v0] Error getting current user:", error)
     return null
   }
+})
+
+export async function getCurrentUser() {
+  return leerUsuarioActual()
 }
 
 export async function signIn(email: string, password: string) {

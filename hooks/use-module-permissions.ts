@@ -2,19 +2,30 @@
 
 import { useEffect, useState } from "react"
 import { getUserModulesCached } from "@/lib/user-modules-client-cache"
-
-interface UserModulesResponse {
-  protectedModules: string[]
-  allowedModules: string[]
-}
+import type { Verbo } from "@/lib/permisos-verbos"
+import { claveAccion, nivelDe } from "@/lib/politicas-modulos"
 
 export interface ModulePermissions {
   protectedModules: Set<string>
   allowedModules: Set<string>
+  /** Claves de acción `<llave>__<verbo>` permitidas (plan 2026-10-07). */
+  allowedActions: Set<string>
+  /** 'aviso' (las puertas registran y dejan pasar) o 'bloquear'. */
+  modoPoliticas: "aviso" | "bloquear"
   /** false mientras se carga la primera respuesta de /api/user-modules. */
   loaded: boolean
   /** true si el módulo no está protegido, o si está protegido y permitido. */
   isModuleVisible: (moduleName: string) => boolean
+  /**
+   * ¿Puede hacer `verbo` en `modulo`? Para deshabilitar botones. Mientras carga
+   * devuelve false: el botón deshabilitado es el estado honesto, y la barrera
+   * real es el servidor (exigirAccion). Una acción cuya columna aún no existe
+   * en la base (SQL 262 sin correr) se trata como permitida, igual que en el
+   * servidor. En modo 'aviso' siempre true: nada cambia para el usuario.
+   */
+  puedeAccion: (modulo: string, verbo: Verbo) => boolean
+  /** true si el catálogo declara esa acción CON CLAVE (hay que pedir la clave personal). */
+  accionConClave: (modulo: string, verbo: Verbo) => boolean
 }
 
 /**
@@ -32,6 +43,8 @@ export interface ModulePermissions {
 export function useModulePermissions(): ModulePermissions {
   const [protectedModules, setProtectedModules] = useState<Set<string>>(new Set())
   const [allowedModules, setAllowedModules] = useState<Set<string>>(new Set())
+  const [allowedActions, setAllowedActions] = useState<Set<string>>(new Set())
+  const [modoPoliticas, setModoPoliticas] = useState<"aviso" | "bloquear">("aviso")
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
@@ -44,6 +57,8 @@ export function useModulePermissions(): ModulePermissions {
         if (cancelled) return
         setProtectedModules(new Set(data.protectedModules))
         setAllowedModules(new Set(data.allowedModules))
+        setAllowedActions(new Set(data.allowedActions))
+        setModoPoliticas(data.modoPoliticas)
         setLoaded(true)
       } catch {
         if (!cancelled) setLoaded(true)
@@ -61,5 +76,19 @@ export function useModulePermissions(): ModulePermissions {
     return allowedModules.has(moduleName)
   }
 
-  return { protectedModules, allowedModules, loaded, isModuleVisible }
+  const puedeAccion = (modulo: string, verbo: Verbo): boolean => {
+    if (!loaded) return false
+    if (!allowedModules.has(modulo)) return false
+    if (modoPoliticas === "aviso") return true
+    const nivel = nivelDe(modulo, verbo)
+    // Con clave: el botón se muestra; la clave se pide al pulsar.
+    if (nivel === "clave") return true
+    const key = claveAccion(modulo, verbo)
+    if (!key) return false
+    return allowedActions.has(key)
+  }
+
+  const accionConClave = (modulo: string, verbo: Verbo): boolean => nivelDe(modulo, verbo) === "clave"
+
+  return { protectedModules, allowedModules, allowedActions, modoPoliticas, loaded, isModuleVisible, puedeAccion, accionConClave }
 }

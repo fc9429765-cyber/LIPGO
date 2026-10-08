@@ -57,6 +57,7 @@ import {
   type CruceProyeccionData,
   type AjusteRow,
 } from "@/lib/ajuste-proyeccion-actions"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
 const money = (n: number) => "$" + Math.round(Number(n) || 0).toLocaleString("es-CO", { maximumFractionDigits: 0 })
@@ -1787,6 +1788,7 @@ function ConciliacionBascula() {
 // ---------------------------------------------------------------------------
 function AjusteProyecciones() {
   const { toast } = useToast()
+  const { conClave } = useClaveAccion()
   const hoy = new Date()
   const [anio, setAnio] = useState(hoy.getFullYear())
   const [mes, setMes] = useState(hoy.getMonth() + 1)
@@ -2020,11 +2022,11 @@ function AjusteProyecciones() {
               </CardTitle>
               {sel.size > 0 && (
                 <div className="flex gap-2">
-                  <Button size="sm" disabled={guardando} onClick={() => accion(() => aprobarAjustes([...sel]), "Ajustes aprobados")}>
+                  <Button size="sm" disabled={guardando} onClick={() => accion(() => conClave("Revisión de nómina", "aprobar", (clave) => aprobarAjustes([...sel], clave)), "Ajustes aprobados")}>
                     <Check className="mr-1 h-3 w-3" /> Aprobar {sel.size}
                   </Button>
                   <Button size="sm" variant="outline" disabled={guardando}
-                    onClick={() => accion(() => rechazarAjustes([...sel], "Rechazado desde Ajuste Nómina Anterior"), "Ajustes rechazados")}>
+                    onClick={() => accion(() => conClave("Revisión de nómina", "anular", (clave) => rechazarAjustes([...sel], "Rechazado desde Ajuste Nómina Anterior", clave)), "Ajustes rechazados")}>
                     Rechazar
                   </Button>
                 </div>

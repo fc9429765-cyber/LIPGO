@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase-client"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 export interface HojaDeVida {
   id: string
@@ -68,6 +69,9 @@ function tipoDeUrl(url: string): string | null {
 // acción trae esos datos + el documento al Banco de Hojas de Vida, sin re-subir.
 // Idempotente por cédula: crea las que faltan y actualiza el archivo de las que ya están.
 export async function sincronizarHojasVidaDesdeHeadcount(selectedEmpresaId?: number | null) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Hojas de Vida", "Gestión de Solicitudes"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const admin: any = await getSupabaseAdmin()
   const empresaId = selectedEmpresaId || (await getCurrentEmpresaIdForInsert())
   if (!empresaId) return { success: false, creadas: 0, actualizadas: 0, message: "Sin empresa seleccionada." }
@@ -125,6 +129,9 @@ export async function updateEstadoHojaVida(
   id: string,
   estado: "pendiente" | "aceptado" | "rechazado",
 ) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Hojas de Vida", "Gestión de Solicitudes"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const { error } = await supabase.from("hojas_de_vida").update({ estado }).eq("id", id)
 
@@ -138,6 +145,9 @@ export async function updateEstadoHojaVida(
 
 // Elimina una hoja de vida (archivo en Supabase Storage + metadatos).
 export async function deleteHojaVida(id: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Hojas de Vida", "Gestión de Solicitudes"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   const { data: current } = await supabase

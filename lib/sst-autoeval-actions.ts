@@ -3,6 +3,7 @@
 // Cierre / formalización del acta de autoevaluación SG-SST.
 
 import { createClient } from "@/lib/supabase-client"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 // Actualiza responsable, fecha, estado y firma de la autoevaluación.
 export async function cerrarAutoevaluacion(
@@ -14,6 +15,9 @@ export async function cerrarAutoevaluacion(
     firma?: string | null
   },
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Matriz de Estándares", "Auditoría 0312"], "cerrar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const update: Record<string, any> = {
     estado: patch.estado,

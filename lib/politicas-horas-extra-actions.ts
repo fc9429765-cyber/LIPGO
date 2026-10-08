@@ -16,6 +16,7 @@ import {
   type PoliticaHorasExtra,
   type RedondeoModo,
 } from "@/lib/politicas-horas-extra"
+import { autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
 
 /** Contrato uniforme, como el resto de acciones del proyecto. Nunca lanza. */
 interface Resultado<T = undefined> {
@@ -88,7 +89,12 @@ export async function getPoliticasHorasExtra(): Promise<Resultado<PoliticaHorasE
  */
 export async function guardarPoliticaHorasExtra(
   p: PoliticaHorasExtra,
+  clave?: string,
 ): Promise<Resultado<PoliticaHorasExtra>> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Tabla Asistencia", "configurar", { clave: clave ?? "", idempresa: null, referencia: `política horas extra ${p?.puesto}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   const puesto = String(p?.puesto ?? "").trim()
   if (!puesto) return { success: false, message: "Indica a qué puesto aplica la política." }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(p?.fechaDesde ?? ""))) {
@@ -193,7 +199,12 @@ export async function guardarPoliticaHorasExtra(
 export async function guardarPoliticaEnPuestos(
   plantilla: PoliticaHorasExtra,
   puestos: string[],
+  clave?: string,
 ): Promise<Resultado<{ guardados: string[]; fallidos: Array<{ puesto: string; motivo: string }> }>> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Tabla Asistencia", "configurar", { clave: clave ?? "", idempresa: null, referencia: `política horas extra en ${puestos?.length ?? 0} puestos` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   const lista = [...new Set((puestos ?? []).map((p) => String(p ?? "").trim()).filter(Boolean))]
   if (lista.length === 0) return { success: false, message: "Selecciona al menos un puesto." }
 
@@ -224,7 +235,11 @@ export async function guardarPoliticaEnPuestos(
  * caería al COALESCE de la función SQL — funcionaría, pero la pantalla mostraría
  * un vacío que nadie sabría interpretar.
  */
-export async function eliminarPoliticaHorasExtra(id: number): Promise<Resultado> {
+export async function eliminarPoliticaHorasExtra(id: number, clave?: string): Promise<Resultado> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Tabla Asistencia", "configurar", { clave: clave ?? "", idempresa: null, referencia: `eliminar política horas extra ${id}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   if (!id) return { success: false, message: "No se indicó qué política eliminar." }
   try {
     const admin: any = await getSupabaseAdmin()
@@ -323,6 +338,9 @@ function calcularToken(filas: FilaRecalculo[]): string {
 export async function previsualizarRecalculoExtras(
   filtro: FiltroRecalculo,
 ): Promise<Resultado<PreviewRecalculo>> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Tabla Asistencia"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(filtro?.desde ?? "") || !/^\d{4}-\d{2}-\d{2}$/.test(filtro?.hasta ?? "")) {
     return { success: false, message: "Indica un rango de fechas válido (AAAA-MM-DD)." }
   }
@@ -472,7 +490,13 @@ export async function ejecutarRecalculoExtras(input: {
   ids: number[]
   token: string
   motivo: string
-}): Promise<Resultado<{ actualizadas: number; loteId: string }>> {
+},
+  clave?: string,
+): Promise<Resultado<{ actualizadas: number; loteId: string }>> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Tabla Asistencia", "configurar", { clave: clave ?? "", idempresa: null, referencia: "recalcular horas extra" })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   const ids = (input?.ids ?? []).map(Number).filter(Number.isFinite)
   if (ids.length === 0) return { success: false, message: "No hay filas seleccionadas para recalcular." }
   if (!input?.motivo?.trim()) return { success: false, message: "Indica por qué se recalcula." }

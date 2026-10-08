@@ -5,7 +5,7 @@
 // confirma que es él, y el PERFIL (puesto) dice qué procesos/códigos puede
 // autorizar y en qué proyectos. Quién autorizó queda con nombre real.
 
-export type GrupoProceso = "Inventario" | "Pedidos" | "Financiera"
+export type GrupoProceso = "Inventario" | "Pedidos" | "Financiera" | "Órdenes" | "Facturación" | "Nómina" | "Seguridad"
 
 export interface ProcesoAutorizable {
   codigo: string
@@ -15,6 +15,8 @@ export interface ProcesoAutorizable {
   orden: number
   con_alcance: boolean
   activo: boolean
+  /** true si el proceso está en el catálogo (lib/politicas-modulos.ts) pero todavía no en la base: falta correr el SQL 262. */
+  pendiente_sql?: boolean
 }
 
 /** Proceso que autoriza EJECUTAR un código de inventario (309/102/602/552/312/343). */

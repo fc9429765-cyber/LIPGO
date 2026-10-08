@@ -240,7 +240,7 @@ export default function DashboardPage() {
           que cambia el módulo/grupo seleccionado, así que navegar fuera de un
           módulo roto lo recupera solo. OJO: no usar `key` aquí — remontaría
           MainContent y borraría el estado de los saltos con dato (orden a
-          Báscula, persona a Ausentismos, filtro a Gestión de Facturas,
+          Báscula, persona a Ausentismos, filtro a Solicitar Facturas,
           registro del buscador) antes de que el destino lo lea. */}
       <ErrorBoundary resetKey={`${selectedGroup ?? ""}|${selectedModule ?? ""}`}>
         <MainContent

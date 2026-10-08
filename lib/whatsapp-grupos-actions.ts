@@ -34,6 +34,7 @@
 import { getPlantillasDeMeta } from "@/lib/whatsapp-actions"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const API_VERSION = process.env.WHATSAPP_API_VERSION || "v21.0"
 
@@ -233,6 +234,9 @@ export async function enviarPlantillaAGrupo(input: {
   body: string[]
   origen?: string
 }): Promise<{ success: boolean; messageId?: string; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Notificaciones al Personal"], "crear", "Enviar a grupo")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const { token, phoneId, falta } = credenciales()
   if (falta) return { success: false, message: falta }
   if (!input.grupoId) return { success: false, message: "Indica el grupo." }

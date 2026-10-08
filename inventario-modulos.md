@@ -1712,23 +1712,18 @@ Maestro de vendedores, resuelto por la tabla genérica sobre `vendedores`.
 - **Escribe en:** `vendedores`
 - **Lee de:** —
 
-#### Gestión de Usuarios
+#### Autorizaciones (antes Gestión de Usuarios + Accesos de Usuario + Autorizaciones por clave)
 
-Alta y mantenimiento de usuarios, con sus 142 permisos de módulo y los proyectos a los que tiene acceso. Permite copiar los permisos de otro usuario como punto de partida. Escribe en `permisos_usuarios`, `perfil_acceso_empresas` y `perfil_acceso_owners`.
+Desde el 2026-10-07 es **una sola pantalla** con tres pestañas y **un solo perfil** (`autorizacion_perfiles`, script 252), que es el puesto: las empresas, owners y módulos que abre, y los procesos que autoriza con clave personal.
 
-- **Archivo:** `components/configuration/user-permissions-management.tsx`
-- **Permiso:** `gestion_usuarios`
-- **Escribe en:** `perfil_acceso_empresas`, `perfil_acceso_owners`, `permisos_usuarios`, `profiles`
-- **Lee de:** `empresas_permisos`, `owners`
+- **Usuarios** (`components/configuration/user-permissions-management.tsx`): cada persona. Su pestaña Perfil muestra el acceso efectivo (cuánto viene de perfiles y cuánto a mano) y los perfiles como tarjetas para marcar y aplicar; Módulos y Empresas y owners quedan como ajuste fino, con etiqueta en lo que trae un perfil. Al aplicar, el servidor recalcula y escribe el acceso efectivo; lo marcado a mano se conserva.
+- **Perfiles** (`components/configuration/perfiles-acceso.tsx`): el puesto. Se crean, duplican, desactivan y se arrancan "a partir de un usuario". Pestañas Empresas, Owners, Módulos, Autoriza (procesos) y Usuarios (quién lo tiene). Al editar un perfil se recalcula a todos los que lo tienen. El alcance de la clave sigue a las empresas del perfil cuando las define.
+- **Claves** (`components/configuration/autorizaciones-clave.tsx` con `soloClaves`): la clave personal de cada uno, alcance fino, excepciones, correo de recuperación, transición y bitácora.
 
-#### Accesos de Usuario
-
-Gestiona a qué proyectos y owners puede acceder cada usuario, que es lo que filtra toda la información del sistema.
-
-- **Archivo:** `components/user-access-module.tsx`
-- **Permiso:** `accesos_usuario`
-- **Escribe en:** `perfil_acceso_empresas`, `perfil_acceso_owners`
-- **Lee de:** `empresas_permisos`, `owners`, `profiles`
+- **Archivo contenedor:** `components/configuration/seguridad-accesos.tsx`
+- **Permiso:** `gestion_usuarios` (las acciones de autorizaciones aceptan también `autorizaciones_clave`)
+- **Escribe en:** `autorizacion_perfiles`, `autorizacion_perfil_procesos`, `autorizacion_usuario_perfiles`, `acceso_perfil_empresas`, `acceso_perfil_owners`, `acceso_perfil_permisos`, `acceso_perfil_materializado` y, vía recálculo, `perfil_acceso_empresas`, `perfil_acceso_owners`, `permisos_usuarios`; además `profiles`, `autorizacion_claves`, `autorizacion_usuario_procesos`, `autorizacion_log`
+- **Lee de:** `empresas_permisos`, `owners`, `autorizacion_procesos`, `profiles`
 
 #### Bitácora de Auditoría
 

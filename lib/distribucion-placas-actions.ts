@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { checkModulePermission } from "@/lib/permissions-actions"
 import { invalidarCachePlacas } from "@/lib/distribucion-placas"
 import type { DistribucionPlaca } from "@/lib/distribucion-placas-types"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const MODULO = "Placas de Distribución"
 const norm = (s: string | null | undefined) => String(s ?? "").trim().toUpperCase()
@@ -30,6 +31,9 @@ export async function agregarPlacaDistribucion(input: {
   placa: string
   observacion?: string
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Placas de Distribución"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!(await checkModulePermission(MODULO))) return { success: false, message: "No autorizado" }
     const idempresa = Number(input.idempresa)
@@ -67,6 +71,9 @@ export async function setPlacaDistribucionActivo(
   id: number,
   activo: boolean,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Placas de Distribución"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!(await checkModulePermission(MODULO))) return { success: false, message: "No autorizado" }
     const sb = await getSupabaseAdmin()
@@ -80,6 +87,9 @@ export async function setPlacaDistribucionActivo(
 }
 
 export async function eliminarPlacaDistribucion(id: number): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Placas de Distribución"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!(await checkModulePermission(MODULO))) return { success: false, message: "No autorizado" }
     const sb = await getSupabaseAdmin()

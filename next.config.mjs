@@ -43,8 +43,12 @@ const nextConfig = {
           //   · style: Tailwind y los `style={{}}` de las pantallas → 'unsafe-inline'.
           //   · img: fotos y PDFs de Supabase Storage, logos en Vercel Blob, mapa (OpenStreetMap)
           //     e iconos de Leaflet (unpkg), más data:/blob: de cámara, QR y PDF en memoria.
-          //   · connect: Supabase (REST y realtime wss), Vercel Vitals, y el túnel ngrok de la
-          //     impresora de estibas (pallet-transfer-form / qr-pallet-registration).
+          //   · connect: Supabase (REST y realtime wss), Vercel Vitals, el túnel ngrok de la
+          //     impresora de estibas (pallet-transfer-form / qr-pallet-registration) y —
+          //     añadidos el 2026-10-07 tras leer los 29 informes reales— jsDelivr y Vercel Blob:
+          //     el SERVICE WORKER (/sw.js) los descarga con fetch() para su caché, y un fetch()
+          //     es connect-src aunque el recurso sea un script o una imagen, así que estar en
+          //     script-src/img-src no bastaba. Eran los 29 informes: 24 del jsQR y 5 de los logos.
           //   · frame: PDFs de Storage y blobs (ciclo de facturación, facturas, reglamento, turnos).
           // Cuando el aviso diario no traiga informes CSP en dos semanas de uso normal, se pasa
           // a Content-Security-Policy (modo estricto) con la misma lista.
@@ -56,7 +60,7 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https://*.supabase.co https://hebbkx1anhila5yf.public.blob.vercel-storage.com https://unpkg.com https://*.tile.openstreetmap.org https://tile.openstreetmap.org",
               "font-src 'self' data:",
-              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://vitals.vercel-insights.com https://vercel.live https://duct-dose-gentleman.ngrok-free.dev",
+              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://vitals.vercel-insights.com https://vercel.live https://duct-dose-gentleman.ngrok-free.dev https://cdn.jsdelivr.net https://hebbkx1anhila5yf.public.blob.vercel-storage.com",
               "frame-src 'self' blob: data: https://*.supabase.co https://vercel.live",
               "media-src 'self' blob: data:",
               "worker-src 'self' blob:",

@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect } from "react"
-import { updateOrder, getOrderDetails } from "@/lib/orders-actions"
+import { updateOrder, getOrderDetails, reemplazarDetallesPedido } from "@/lib/orders-actions"
 import {
   getVendedores,
   getClientes,
@@ -23,7 +23,6 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Loader2, Plus, Trash2 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
-import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import { useAuth } from "@/components/auth-provider"
 
 interface OrderEditDialogProps {
@@ -356,53 +355,24 @@ export function OrderEditDialog({ isOpen, onClose, order, onSave }: OrderEditDia
         throw new Error("Error al actualizar cabecera")
       }
 
-      // Update details: delete all and re-insert
-      const supabase = await import("@/lib/supabase-client").then((m) => m.createClient())
-      const client = await supabase
-
-      // Delete existing details
-      const { error: deleteError } = await client.from("pedidosdetalle").delete().eq("idpedido", order.idpedido)
-
-      if (deleteError) {
-        throw new Error("Error al eliminar detalles anteriores")
-      }
-
-      // Get next transid
-      const { data: lastDetail } = await client
-        .from("pedidosdetalle")
-        .select("transid")
-        .order("transid", { ascending: false })
-        .limit(1)
-        .single()
-
-      let nextTransId = 1
-      if (lastDetail) {
-        nextTransId = (lastDetail.transid || 0) + 1
-      }
-
-      // Get current empresa ID for insert
-      const empresaId = await getCurrentEmpresaIdForInsert()
-
-      // Insert new details
-      const detailsToInsert = products.map((product, index) => ({
-        transid: nextTransId + index,
-        idpedido: order.idpedido,
-        id_empresa: empresaId, // This will be handled by the server action now
-        producto: product.producto,
-        unidades: product.cantidad,
-        precio_und: product.precioUnitario,
-        total_linea: product.totalLinea,
-        iva: product.descuentoIVA,
-        descuentopp: product.descuentoPP,
-        subtotal: product.subtotal,
-        peso: product.peso,
-        categoria: product.categoria,
-      }))
-
-      const { error: insertError } = await client.from("pedidosdetalle").insert(detailsToInsert)
-
-      if (insertError) {
-        throw new Error("Error al insertar nuevos detalles")
+      // Las líneas se reemplazan en el servidor, con puerta (Gestionar pedidos › editar).
+      // Antes este diálogo borraba e insertaba pedidosdetalle desde el navegador.
+      const det = await reemplazarDetallesPedido(
+        order.idpedido,
+        products.map((product) => ({
+          producto: product.producto,
+          unidades: product.cantidad,
+          precio_und: product.precioUnitario,
+          total_linea: product.totalLinea,
+          iva: product.descuentoIVA,
+          descuentopp: product.descuentoPP,
+          subtotal: product.subtotal,
+          peso: product.peso,
+          categoria: product.categoria,
+        })),
+      )
+      if (!det.success) {
+        throw new Error(det.message || "Error al guardar las líneas del pedido")
       }
 
       toast({

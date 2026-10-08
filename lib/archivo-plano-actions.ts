@@ -24,6 +24,7 @@
  */
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { autorizarAccion } from "@/lib/puerta-modulo"
 
 export interface FilaArchivoPlano {
   identificacionempleado: string | null
@@ -66,7 +67,12 @@ export async function getArchivoPlano(
   idempresa: number,
   mes?: string | null,
   quincena?: string | null,
+  clave?: string,
 ): Promise<{ success: boolean; data: FilaArchivoPlano[]; message?: string }> {
+  // Acción CON CLAVE (nom_archivo_plano): el archivo plano es lo que se carga al banco.
+  // En modo aviso pasa sin clave y deja rastro; en bloquear la pantalla pide la clave.
+  const autorizacionAccion = await autorizarAccion("Nominapersonal", "exportar", { clave: clave ?? "", idempresa: idempresa || null, referencia: `archivo plano ${mes ?? ""} ${quincena ?? ""}`.trim() })
+  if (!autorizacionAccion.ok) return { success: false, data: [], message: autorizacionAccion.error || "Sin autorización." }
   if (!idempresa) return { success: false, data: [], message: "Selecciona una empresa." }
 
   try {

@@ -10,8 +10,9 @@
 // códigos: a diferencia de los movimientos de inventario, las correcciones de
 // orden son demasiado variadas para forzarlas en categorías fijas.
 
-import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
+import { autorizarAccion } from "@/lib/puerta-modulo"
 
 export interface OrdenCorreccionCabecera {
   id: number
@@ -131,7 +132,12 @@ function validarPayload(payload: GuardarCorreccionOrdenPayload): string | null {
 
 export async function guardarCorreccionOrden(
   payload: GuardarCorreccionOrdenPayload,
+  clave?: string,
 ): Promise<{ success: boolean; message?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Corrección de Órdenes", "editar", { clave: clave ?? "", idempresa: (await (await getSupabaseAdminAsSystem()).from("cabeceraoc").select("idempresa").eq("ordendecargue", payload?.ordendecargue).maybeSingle()).data?.idempresa ?? null, referencia: `corregir orden ${payload?.ordendecargue}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   const errorValidacion = validarPayload(payload)
   if (errorValidacion) return { success: false, message: errorValidacion }
 

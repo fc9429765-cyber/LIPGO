@@ -48,6 +48,7 @@ import { SigHeader, SigFilterBar, SigKpi } from "@/components/sst/sig-ui"
 import { SignaturePad, type SignaturePadHandle } from "@/components/rrhh/signature-pad"
 import type { SigInventarioCuadre, SigInventarioCuadreDetalle, SigInventarioAjuste } from "@/lib/sig-types"
 import { Loader2, ClipboardCheck, Plus, Lock, Trash2, FileCheck2, ArrowLeft, Pencil, BookOpen, CheckCircle2, ArrowDownToLine, ArrowUpFromLine, PackageSearch, User, ChevronDown, ChevronRight, ListChecks, Wand2, RotateCcw, Undo2, Settings2, Repeat, ShieldCheck } from "lucide-react"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 const ESTADO_CUADRE: Record<string, { label: string; color: string }> = {
   borrador: { label: "Borrador", color: "#94a3b8" },
@@ -83,6 +84,7 @@ function codigoDe(tipo: string, direccion: string): string {
 
 export function CuadreInventario() {
   const { toast } = useToast()
+  const { conClave } = useClaveAccion()
   const { selectedEmpresaId, selectedEmpresaNombre, user, profile } = useAuth()
   const proyecto = selectedEmpresaId ? String(selectedEmpresaId) : "" // lo define el selector global
   // Usuario que realiza la transacción (auditoría).
@@ -386,7 +388,7 @@ export function CuadreInventario() {
     if (!sel) return
     if (!confirm("CIERRE MENSUAL\n\nSe contabilizarán las correcciones del cuadre como movimientos reales de inventario (mueven el stock: faltantes salen, sobrantes entran) y el saldo del sistema quedará igual al conteo físico. Esta acción no se puede deshacer.\n\n¿Cerrar el mes?")) return
     setSaving(true)
-    const r = await cerrarMesCuadre(sel.id, actor)
+    const r = await conClave("Cuadre de Inventario", "cerrar", (clave) => cerrarMesCuadre(sel.id, clave))
     setSaving(false)
     if (r.success) {
       toast({ title: "Mes cerrado", description: `${r.posteados ?? 0} correcciones contabilizadas · stock ajustado` })
@@ -431,7 +433,7 @@ export function CuadreInventario() {
   async function aprobar(a: SigInventarioAjuste) {
     const signo = (a.cantidad ?? 0) < 0 ? "salida (descuenta stock)" : "entrada (suma stock)"
     if (!confirm(`Aprobar y CONTABILIZAR la corrección de ${a.producto || a.codproducto}.\n\nSe generará un movimiento real de ${signo} en el inventario (mueve el saldo). Aprobado por ${actor}.\n\n¿Continuar?`)) return
-    const r = await aprobarAjusteInventario(a.id, actor)
+    const r = await aprobarAjusteInventario(a.id)
     if (r.success) { toast({ title: "Corrección contabilizada", description: "Stock ajustado" }); cargar() }
     else toast({ title: "No se pudo aprobar", description: r.error })
   }

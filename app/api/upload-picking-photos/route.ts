@@ -6,6 +6,7 @@ import { generarIngresoProduccionDesdeDescargue } from "@/lib/orders-actions"
 import { computarRosterPagoGlobal, esDescargueSinPersonalRequerido } from "@/lib/picking-actions"
 import { esModoCargaRequerido } from "@/lib/sla-acordados"
 import { reportarInterno } from "@/lib/reporte-interno-actions"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 // Subimos un solo archivo (o pocos) por request para evitar el limite
 // duro de ~4.5MB por body en Vercel serverless. Cuando un movil envia
@@ -22,6 +23,8 @@ import { reportarInterno } from "@/lib/reporte-interno-actions"
 //    de URLs ya subidas y actualiza `cabeceraoc.fotospicking` y
 //    `fincargue` para cerrar la orden.
 export async function POST(request: NextRequest) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const formData = await request.formData()
     const orderId = formData.get("orderId") as string

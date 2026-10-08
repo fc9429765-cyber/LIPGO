@@ -25,6 +25,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { clasificarDiaCotizacion } from "@/lib/parafiscales"
+import { exigirAccion } from "@/lib/puerta-modulo"
 
 export interface FilaAcumuladoLIPgo {
   identificacion: string
@@ -97,6 +98,8 @@ export async function getAcumuladosLIPgo(
   mesDesde: number,
   mesHasta: number,
 ): Promise<{ success: boolean; data: FilaAcumuladoLIPgo[]; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Acumulados LIPgo"], "ver")
   if (!idempresa || !anio || !mesDesde || !mesHasta) return { success: false, data: [], message: "Filtros incompletos." }
   try {
     const admin: any = await getSupabaseAdmin()

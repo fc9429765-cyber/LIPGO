@@ -1,6 +1,6 @@
 "use server"
 
-// Cuadro de Mando de Facturación (pestaña dentro de Gestión de Facturas).
+// Cuadro de Mando de Facturación (pestaña dentro de Solicitar Facturas).
 // FUENTE DE VERDAD: las órdenes de servicio procesadas (cabeceraoc con fincargue
 // y facturar != false). Se cruzan con lo que YA se facturó (estadofactura) para
 // garantizar que todo lo procesado se facture — y detectar lo que quedó sin gestionar.
@@ -8,7 +8,7 @@
 // misma fuente que la facturación real). El cobro de cartera (que el cliente pague)
 // es el paso siguiente y NO se cruza aquí.
 
-import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 import { segundoFactorPendiente } from "@/lib/seguridad-servidor"
 import { esPlacaDistribucion, cargarPlacasDistribucion, ownerDeLinea, esVehiculoPropioAgrupable } from "@/lib/distribucion-placas"
 import { PLACAS_EXCLUIDAS_FACTURAS } from "@/lib/facturas-exclusiones"
@@ -31,6 +31,7 @@ import {
 } from "@/lib/facturacion-medio-pago"
 import { cargueSoloPlacaPropia } from "@/lib/facturacion-cargue-propio"
 import { facturadoAOwner, esProductoPorUnidad } from "@/lib/facturacion-billed-party"
+import { autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
 
 export type CategoriaFactura = "facturado" | "en_proceso" | "sin_gestionar"
 
@@ -420,7 +421,7 @@ export interface PrefacturaResumen {
   tonFacturado: number
   valorFacturado: number // ya facturado — NO volver a facturar (rojo)
   /** Subconjunto de "en_proceso": el Coordinador YA validó la orden en
-   *  Gestión de Facturas (estadofactura="CF - Factura solicitada") Y es
+   *  Solicitar Facturas (estadofactura="CF - Factura solicitada") Y es
    *  Crédito real (no Contado por error de flujo). Esto -- NO
    *  `valorPorFacturar` -- es lo que Ciclo de Facturación debe usar para
    *  bloque "operación" (ver valorListoParaAnexo/tonListoParaAnexo):
@@ -548,6 +549,9 @@ export async function guardarPrefactura(payload: {
   observacion?: string | null
   advertencias?: Advertencia[]
 }): Promise<{ success: boolean; id?: number; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cuadro de Control Facturación"], "crear", "Crear prefactura")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   // Segundo factor (2026-10-05): solo detiene a quien lo tiene activado y no lo verificó.
   const segundoFactor = await segundoFactorPendiente("facturacion:guardarPrefactura")
   if (segundoFactor) return { success: false, message: segundoFactor }
@@ -653,7 +657,12 @@ export async function cambiarEstadoPrefactura(
   id: number,
   estado: "borrador" | "aprobada",
   opciones?: { usuario?: string; forzar?: boolean },
+  clave?: string,
 ): Promise<{ success: boolean; message?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Cuadro de Control Facturación", "aprobar", { clave: clave ?? "", idempresa: (await (await getSupabaseAdminAsSystem()).from("prefacturas").select("idempresa").eq("id", id).maybeSingle()).data?.idempresa ?? null, referencia: `prefactura ${id} → ${estado}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   try {
     const sb: any = await getSupabaseAdmin()
 
@@ -690,6 +699,9 @@ export async function cambiarEstadoPrefactura(
 }
 
 export async function eliminarPrefactura(id: number): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cuadro de Control Facturación"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   // Segundo factor (2026-10-05): solo detiene a quien lo tiene activado y no lo verificó.
   const segundoFactor = await segundoFactorPendiente("facturacion:eliminarPrefactura")
   if (segundoFactor) return { success: false, message: segundoFactor }
@@ -1878,7 +1890,7 @@ export async function getMapaPlacasDistribucion(): Promise<Record<number, string
 /**
  * Valor NETO por orden (mismo cálculo del cuadro/prefactura: cada operación × tarifa por
  * owner/id_empresa/subcategoría; báscula prorrateada en plantas). LIGERO: solo calcula
- * las órdenes que se le pasan (la página visible de Gestión de Facturas). Base antes de
+ * las órdenes que se le pasan (la página visible de Solicitar Facturas). Base antes de
  * IVA/retefuente (la factura de Siigo suma esos). Devuelve { ordendecargue: valorNeto }.
  */
 export async function getValoresNetosOrden(

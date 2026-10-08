@@ -54,12 +54,14 @@ import {
   getFestivos,
 } from "@/lib/vacaciones-actions"
 import { diasHabilesEntre, type VacacionResumen, type SolicitudVacaciones } from "@/lib/vacaciones-types"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 const fmtCOP = (n: number) => "$" + Math.round(n || 0).toLocaleString("es-CO")
 
 export default function Vacaciones() {
   const { selectedEmpresaId, profile } = useAuth()
   const { toast } = useToast()
+  const { conClave } = useClaveAccion()
   const [resumen, setResumen] = useState<VacacionResumen[]>([])
   const [solicitudes, setSolicitudes] = useState<SolicitudVacaciones[]>([])
   const [loading, setLoading] = useState(true)
@@ -168,9 +170,12 @@ export default function Vacaciones() {
     }
     setSavingLiq(true)
     try {
-      const r = await registrarLiquidacionVacaciones(
-        { cedula: liqForm.cedula, nombre: liqForm.nombre, dias, valor_dia: Number(liqForm.valor_dia) || 0, observaciones: liqForm.observaciones },
-        selectedEmpresaId,
+      const r = await conClave("Vacaciones", "cerrar", (clave) =>
+        registrarLiquidacionVacaciones(
+          { cedula: liqForm.cedula, nombre: liqForm.nombre, dias, valor_dia: Number(liqForm.valor_dia) || 0, observaciones: liqForm.observaciones },
+          selectedEmpresaId,
+          clave,
+        ),
       )
       if (r.success) {
         toast({ title: "Liquidación registrada", description: fmtCOP(r.total || 0) })

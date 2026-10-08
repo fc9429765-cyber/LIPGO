@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentEmpresaId } from "@/lib/company-filter"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 /**
  * Normaliza a "HH:MM:SS" lo que devuelva `asistencia.hora`.
@@ -72,6 +73,9 @@ async function buscarHoraEntrada(
 }
 
 export async function savePreoperacional(formData: Record<string, unknown>, selectedEmpresaId?: number | null) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Registro Preoperacional"], "crear")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase = await createClient()
     const empresaId = selectedEmpresaId || await getCurrentEmpresaId()

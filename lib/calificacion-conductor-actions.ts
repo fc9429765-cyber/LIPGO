@@ -18,6 +18,7 @@ import {
   type CargueCalificable,
   type AnalisisCalificacion,
 } from "@/lib/calificacion-conductor"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 1000) / 10 : 0)
 // Minutos desde "HH:mm:ss" (mismo patrón que sig-actions).
@@ -189,6 +190,9 @@ export async function registrarCalificacionConductor(input: {
   emoji: "feliz" | "regular" | "mala"
   comentario?: string | null
 }): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Calificación del Conductor"], "crear", "Calificar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!input.proyectoId) return { success: false, error: "Falta el proyecto" }
     if (!input.refOrden) return { success: false, error: "Falta la orden de cargue" }
@@ -253,6 +257,9 @@ export async function generarHistoricoCalificaciones(opts?: {
   conductor?: { creadas: number; omitidas: number }
   cliente?: { creadas: number }
 }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Calificación del Conductor"], "configurar", "Generar histórico")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const perms = await getUserPermissions()
     if (!perms?.gestion_usuarios) return { success: false, error: "Solo un administrador puede generar el histórico." }
@@ -427,6 +434,9 @@ export async function limpiarHistoricoCalificaciones(opts?: {
   empresaId?: number | null
   tipos?: ("conductor" | "cliente")[]
 }): Promise<{ success: boolean; error?: string; borradas?: number }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Calificación del Conductor"], "configurar", "Limpiar histórico")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const perms = await getUserPermissions()
     if (!perms?.gestion_usuarios) return { success: false, error: "Solo un administrador puede limpiar el histórico." }

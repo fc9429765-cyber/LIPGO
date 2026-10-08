@@ -1,7 +1,10 @@
 import { createClient } from "@/lib/supabase"
 import { NextResponse } from "next/server"
+import { exigirSesionApi, exigirAccionApi } from "@/lib/puerta-api"
 
 export async function GET(request: Request) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const { searchParams } = new URL(request.url)
     const idempresa = searchParams.get("idempresa")
@@ -40,6 +43,8 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const puerta = await exigirAccionApi(["Generar Órdenes de Descargue", "Generar Órdenes de Cargue", "Ver Vehículos"], "editar")
+  if (puerta) return puerta
   try {
     const body = await request.json()
     const { id, estatus, ocargue } = body

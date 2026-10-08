@@ -121,3 +121,50 @@ export function ordenesDelPedido(
   }
   return [...m.values()].sort((a, b) => String(a.fecha ?? "").localeCompare(String(b.fecha ?? "")) || a.ocargue.localeCompare(b.ocargue))
 }
+
+export interface PedidoDeOrden {
+  idpedido: number
+  /** Unidades de ese pedido que se llevó la orden. */
+  unidades: number
+  /** Dónde vive el vínculo: el libro (SQL 226), la línea (`pedidosdetalle.ocargue`) o la cabecera. */
+  fuente: "libro" | "linea" | "cabecera"
+}
+
+/**
+ * Los pedidos que atendió UNA orden, mirando los tres sitios donde puede vivir el vínculo:
+ *   · el libro auxiliar (`pedidodetalle_ocargue`): cuando un pedido sale en varias órdenes la
+ *     línea solo recuerda UNA (`pedidosdetalle.ocargue`), y la otra orden aparecía en la vista
+ *     360 como "sin pedido ligado" (7 órdenes de los últimos 14 días, 2 de ID1 y 5 de ID2,
+ *     detectado por gerencia el 2026-10-05);
+ *   · la línea (`pedidosdetalle.ocargue`), el caso normal antes del libro;
+ *   · la cabecera (`pedidoscabecera.ocargue`): en ID3 hay órdenes ligadas solo ahí.
+ * Las unidades son las que ESA orden se llevó: las del libro cuando el pedido tiene filas en el
+ * libro; si no, las de las líneas que apuntan a la orden; solo cabecera = 0 (no se sabe).
+ */
+export function pedidosDeLaOrden(
+  libro: { idpedido: number; unidades: number }[],
+  lineas: { idpedido: number; unidades: number }[],
+  cabeceras: number[],
+): PedidoDeOrden[] {
+  const m = new Map<number, PedidoDeOrden>()
+  for (const f of libro) {
+    const id = Number(f.idpedido)
+    if (!id) continue // fila del libro cuya línea ya no existe: no hay pedido que mostrar
+    const r = m.get(id) ?? { idpedido: id, unidades: 0, fuente: "libro" as const }
+    r.unidades += n0(f.unidades)
+    m.set(id, r)
+  }
+  for (const f of lineas) {
+    const id = Number(f.idpedido)
+    if (!id) continue
+    const r = m.get(id)
+    if (r?.fuente === "libro") continue // el libro ya dijo cuánto se llevó esta orden
+    m.set(id, { idpedido: id, unidades: (r?.unidades ?? 0) + n0(f.unidades), fuente: "linea" })
+  }
+  for (const c of cabeceras) {
+    const id = Number(c)
+    if (!id || m.has(id)) continue
+    m.set(id, { idpedido: id, unidades: 0, fuente: "cabecera" })
+  }
+  return [...m.values()].sort((a, b) => a.idpedido - b.idpedido)
+}

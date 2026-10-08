@@ -6,6 +6,7 @@ import { generateAndUploadLoadOrderPDF } from "@/lib/pdf-actions"
 import { generarDistribucionAutomatica, autoGenerarDescarguesCedi } from "@/lib/orders-actions"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import { getCurrentUser, getUserProfile } from "@/lib/auth-actions"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 /**
  * Obtiene los IDs de empresa accesibles para el usuario actual desde
@@ -78,6 +79,9 @@ export async function registerVehicleAppointment(data: {
   tipo_despacho?: string
   selectedEmpresaId?: number
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Registrar Vehículos"], "crear")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     // Check if placa already exists with open status
     const { exists, error: checkError } = await checkPlacaExists(data.placa)
@@ -200,6 +204,9 @@ export async function getVehiclesForBascula(selectedEmpresaId?: number) {
 }
 
 export async function updateVehicleWeighingTime(vehicleId: number, horaInicio: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Báscula"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase = await createClient()
 
@@ -243,6 +250,9 @@ export async function getVehiclesForSanitaryWithoutOrder(selectedEmpresaId?: num
 }
 
 export async function updateVehicleSanitaryTime(vehicleId: number, horaRegistro: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Registro sanitario"], "crear")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase = await createClient()
 
@@ -315,6 +325,9 @@ export async function getVehiclesForDistribution(selectedEmpresaId?: number) {
 }
 
 export async function updateVehicleStatusToProcesado(placa: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ver Vehículos", "Generar Órdenes de Descargue", "Generar Órdenes de Cargue"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase = await createClient()
     const empresaId = await getCurrentEmpresaIdForInsert()
@@ -340,6 +353,9 @@ export async function updateVehicleStatusToProcesado(placa: string) {
 }
 
 export async function assignVehicleToLoadOrder(orderId: number, vehicleId: number) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Generar Órdenes de Cargue", "Ver Vehículos"], "crear", "Asignar vehículo")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase = await createClient()
 

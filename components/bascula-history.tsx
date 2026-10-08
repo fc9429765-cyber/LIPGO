@@ -15,6 +15,9 @@ import { useAuth } from "@/components/auth-provider"
 import { useSubmoduloFiltro } from "@/components/submodulo-filtro-context"
 import { BasculaOrderDetailsDialog } from "@/components/bascula-order-details-dialog"
 import { KpiCard } from "@/components/orders/dashboard-pedidos/kpi-card"
+import { Chip, Cifra, Esqueleto, EstadoVacio, Eyebrow } from "@/components/ui/lipgo"
+import { cn } from "@/lib/utils"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 const EDIT_PASSWORD = "Jeff123456"
 
@@ -46,6 +49,7 @@ interface BasculaHistoryRecord {
 
 export function BasculaHistory() {
   const { selectedEmpresaId } = useAuth()
+  const { conClave } = useClaveAccion()
   // Solo las PLANTAS (idempresa 1/2) tienen báscula física. Los CEDIS (3/4 y
   // cualquier otra empresa) por ahora no la tienen: su peso se calcula desde
   // los productos de la orden, no desde un pesaje real — este historial no
@@ -154,12 +158,11 @@ export function BasculaHistory() {
     setSaving(true)
     try {
       const trimmedTransporte = newTransporte.trim()
-      const result = await updateBasculaRecord(
+      const result = await conClave("Historial Báscula", "editar", (clave) => updateBasculaRecord(
         editRecord.id,
         parsed,
         newTiquete,
-        trimmedTransporte,
-      )
+        trimmedTransporte, clave))
       if (!result.success) {
         toast({ title: "Error", description: result.error || "No se pudo actualizar el registro.", variant: "destructive" })
         return
@@ -262,12 +265,25 @@ export function BasculaHistory() {
     setTiqueteFilter("")
   }
 
+  // ---- Solo presentación (gerencia 2026-10-05): filtros, cálculos, exportación, diálogos y la edición con
+  // contraseña quedan como estaban. Aquí solo cambia cómo se ve la pantalla. ----
+  const hayFiltros = Boolean(desdeFilter || hastaFilter || placaFilter || ordenFilter || tiqueteFilter)
+  const NUM = (v: number) => v.toLocaleString("es-CO", { maximumFractionDigits: 0 })
+  const DEC = (v: number | null | undefined, d = 2) => (v == null ? "—" : Number(v).toLocaleString("es-CO", { maximumFractionDigits: d }))
+
   return (
-    <div className="space-y-4 p-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-bold">Historial Báscula</h2>
-        <Button onClick={handleExportToExcel} disabled={exporting || filteredData.length === 0} size="sm">
-          {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+    <div className="flex flex-col gap-4 p-3 sm:p-4">
+      {/* Cabecera */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <Eyebrow>Recepción y Despacho · Báscula · Historial</Eyebrow>
+          <h1 className="text-xl font-bold leading-tight sm:text-2xl">Historial de báscula</h1>
+          <p className="lg-num text-sm text-muted-foreground">
+            {loading ? "Cargando…" : `${NUM(filteredData.length)} de ${NUM(data.length)} órdenes · ${(Math.round(toneladasFiltradas * 10) / 10).toLocaleString("es-CO")} t pesadas en el periodo filtrado`}
+          </p>
+        </div>
+        <Button onClick={handleExportToExcel} disabled={exporting || filteredData.length === 0} size="sm" variant="outline" className="gap-1.5">
+          {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
           Exportar a Excel
         </Button>
       </div>
@@ -284,149 +300,153 @@ export function BasculaHistory() {
       )}
 
       {/* Pendientes por ingresar — toda orden debe tener tiquete y peso de báscula */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <KpiCard
-          label="Tiquetes pendientes por ingresar"
-          value={`${tiquetesPendientes.length}`}
-          subtext={resumenPendientes(tiquetesPendientes)}
-          icon={Receipt}
-          variant={tiquetesPendientes.length > 0 ? "danger" : "success"}
-          onClick={tiquetesPendientes.length > 0 ? () => setPendingDialogTipo("tiquete") : undefined}
-        />
-        <KpiCard
-          label="Pesos de báscula pendientes por ingresar"
-          value={`${pesosPendientes.length}`}
-          subtext={pesosPendientes.length > 0 ? `${resumenPendientes(pesosPendientes)} · bloquean facturación` : resumenPendientes(pesosPendientes)}
-          icon={Scale}
-          variant={pesosPendientes.length > 0 ? "danger" : "success"}
-          onClick={pesosPendientes.length > 0 ? () => setPendingDialogTipo("peso") : undefined}
-        />
-      </div>
+      <section className="lg-card grid grid-cols-1 gap-y-4 p-5 sm:grid-cols-2 sm:gap-x-6" aria-label="Pendientes de báscula">
+        <button
+          type="button"
+          className="text-left sm:border-r sm:border-border sm:pr-6 disabled:cursor-default"
+          onClick={() => setPendingDialogTipo("tiquete")}
+          disabled={tiquetesPendientes.length === 0}
+        >
+          <Cifra
+            label="Tiquetes pendientes por ingresar"
+            valor={NUM(tiquetesPendientes.length)}
+            tono={tiquetesPendientes.length > 0 ? "critico" : "ok"}
+            sub={resumenPendientes(tiquetesPendientes)}
+            chips={tiquetesPendientes.length > 0 ? <Chip tono="critico">toda orden debe tener su tiquete</Chip> : <Chip tono="ok">al día</Chip>}
+          />
+        </button>
+        <button
+          type="button"
+          className="text-left sm:pl-6 disabled:cursor-default"
+          onClick={() => setPendingDialogTipo("peso")}
+          disabled={pesosPendientes.length === 0}
+        >
+          <Cifra
+            label="Pesos de báscula pendientes"
+            valor={NUM(pesosPendientes.length)}
+            tono={pesosPendientes.length > 0 ? "critico" : "ok"}
+            sub={resumenPendientes(pesosPendientes)}
+            chips={pesosPendientes.length > 0 ? <Chip tono="critico">bloquean la facturación</Chip> : <Chip tono="ok">al día</Chip>}
+          />
+        </button>
+      </section>
 
       {/* Filtros */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="space-y-1">
-          <Label htmlFor="desde" className="text-xs">Fecha desde</Label>
-          <DatePickerField id="desde" value={desdeFilter} onChange={setDesdeFilter} className="h-9 text-sm" />
+      <section className="lg-card p-4" aria-label="Filtros">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-5">
+          <div className="space-y-1">
+            <Label htmlFor="desde" className="text-xs">Fecha desde</Label>
+            <DatePickerField id="desde" value={desdeFilter} onChange={setDesdeFilter} className="h-9 bg-background text-sm" />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="hasta" className="text-xs">Fecha hasta</Label>
+            <DatePickerField id="hasta" value={hastaFilter} onChange={setHastaFilter} className="h-9 bg-background text-sm" />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="placa" className="text-xs">Placa</Label>
+            <Input id="placa" type="text" placeholder="Buscar placa…" value={placaFilter} onChange={(e) => setPlacaFilter(e.target.value)} className="h-9 bg-background text-sm" />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="orden" className="text-xs">Orden de cargue</Label>
+            <Input id="orden" type="text" placeholder="Buscar orden…" value={ordenFilter} onChange={(e) => setOrdenFilter(e.target.value)} className="h-9 bg-background text-sm" />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="tiquete" className="text-xs">Tiquete de báscula</Label>
+            <Input id="tiquete" type="text" placeholder="Buscar tiquete…" value={tiqueteFilter} onChange={(e) => setTiqueteFilter(e.target.value)} className="h-9 bg-background text-sm" />
+          </div>
         </div>
-        <div className="space-y-1">
-          <Label htmlFor="hasta" className="text-xs">Fecha hasta</Label>
-          <DatePickerField id="hasta" value={hastaFilter} onChange={setHastaFilter} className="h-9 text-sm" />
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">El filtro de fechas (sobre la fecha de la orden) también actualiza la tarjeta de toneladas de arriba.</p>
+          {hayFiltros && (
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={clearFilters}>Limpiar filtros</Button>
+          )}
         </div>
-        <div className="space-y-1">
-          <Label htmlFor="placa" className="text-xs">Placa</Label>
-          <Input id="placa" type="text" placeholder="Buscar placa..." value={placaFilter} onChange={(e) => setPlacaFilter(e.target.value)} className="h-9 text-sm" />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="orden" className="text-xs">Orden de Cargue</Label>
-          <Input id="orden" type="text" placeholder="Buscar orden..." value={ordenFilter} onChange={(e) => setOrdenFilter(e.target.value)} className="h-9 text-sm" />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="tiquete" className="text-xs">Tiquete Báscula</Label>
-          <Input id="tiquete" type="text" placeholder="Buscar tiquete..." value={tiqueteFilter} onChange={(e) => setTiqueteFilter(e.target.value)} className="h-9 text-sm" />
-        </div>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        El filtro "Fecha desde/hasta" (sobre fecha de orden) también actualiza la tarjeta de toneladas de arriba.
-      </p>
-
-      {(desdeFilter || hastaFilter || placaFilter || ordenFilter || tiqueteFilter) && (
-        <div className="flex justify-end">
-          <Button variant="outline" size="sm" onClick={clearFilters}>Limpiar Filtros</Button>
-        </div>
-      )}
+      </section>
 
       {/* Tabla */}
-      <div className="w-full overflow-x-auto rounded-md border bg-white">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="text-xs whitespace-nowrap font-semibold">Orden de Cargue</TableHead>
-              <TableHead className="text-xs whitespace-nowrap font-semibold">Fecha Orden</TableHead>
-              <TableHead className="text-xs whitespace-nowrap font-semibold">Fecha Cargue</TableHead>
-              <TableHead className="text-xs whitespace-nowrap font-semibold">Placa</TableHead>
-              <TableHead className="text-xs whitespace-nowrap font-semibold">Tiquete Báscula</TableHead>
-              <TableHead className="text-xs whitespace-nowrap font-semibold">Peso Orden (kg)</TableHead>
-              <TableHead className="text-xs whitespace-nowrap font-semibold">Peso Báscula (kg)</TableHead>
-              <TableHead className="text-xs whitespace-nowrap font-semibold">Ton Producto</TableHead>
-              <TableHead className="text-xs whitespace-nowrap font-semibold">Diferencia</TableHead>
-              <TableHead className="text-xs whitespace-nowrap font-semibold w-24 text-center">Acciones</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={10} className="h-24 text-center text-xs">
-                  <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-                </TableCell>
-              </TableRow>
-            ) : filteredData.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={10} className="h-24 text-center text-xs">No se encontraron registros.</TableCell>
-              </TableRow>
-            ) : (
-              filteredData.map((row) => {
-                const tiquete = row.tiquetebascula?.trim()
-                const tiqueteDuplicado = !!tiquete && (tiqueteCounts[tiquete] || 0) > 1
-                return (
-                <TableRow key={row.id}>
-                  <TableCell className="text-xs whitespace-nowrap">{row.ordendecargue || "-"}</TableCell>
-                  <TableCell className="text-xs whitespace-nowrap">{row.fechaorden || "-"}</TableCell>
-                  <TableCell className="text-xs whitespace-nowrap">{row.fechacargue || "-"}</TableCell>
-                  <TableCell className="text-xs whitespace-nowrap">{row.placa || "-"}</TableCell>
-                  <TableCell
-                    className={`text-xs whitespace-nowrap ${tiqueteDuplicado ? "font-semibold text-destructive" : ""}`}
-                    title={tiqueteDuplicado ? "Tiquete duplicado: este número de tiquete se repite en más de una orden" : undefined}
-                  >
-                    {row.tiquetebascula || "-"}
-                  </TableCell>
-                  <TableCell className="text-xs whitespace-nowrap">{row.pesoorden || "-"}</TableCell>
-                  <TableCell className="text-xs whitespace-nowrap">{row.pesovascula || "-"}</TableCell>
-                  <TableCell className="text-xs whitespace-nowrap">{row.tonProducto ?? "-"}</TableCell>
-                  <TableCell
-                    className={`text-xs whitespace-nowrap ${diferenciaAnomala(row.diferencia, row.tonProducto) ? "font-semibold text-destructive" : ""}`}
-                    title={
-                      diferenciaAnomala(row.diferencia, row.tonProducto)
-                        ? "Diferencia mayor al 10% entre el peso de báscula y el producto de la orden: revisa el tiquete."
-                        : undefined
-                    }
-                  >
-                    {row.diferencia ?? "-"}
-                  </TableCell>
-                  <TableCell className="text-xs whitespace-nowrap text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() => openDetails(row)}
-                        title="Ver detalle de productos y lotes"
-                        disabled={!row.ordendecargue}
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() => openEditDialog(row)}
-                        title="Editar Peso Báscula"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
+      <section className="lg-card overflow-hidden" aria-label="Órdenes pesadas">
+        {loading ? (
+          <div className="p-4"><Esqueleto lineas={6} /></div>
+        ) : filteredData.length === 0 ? (
+          <div className="p-4"><EstadoVacio titulo="No hay registros con esos filtros" /></div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Orden de cargue</TableHead>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead>Placa</TableHead>
+                  <TableHead>Tiquete</TableHead>
+                  <TableHead className="text-right">Peso orden (kg)</TableHead>
+                  <TableHead className="text-right">Peso báscula (kg)</TableHead>
+                  <TableHead className="text-right">Producto (t)</TableHead>
+                  <TableHead className="text-right">Diferencia (t)</TableHead>
+                  <TableHead className="w-24 text-center"><span className="sr-only">Acciones</span></TableHead>
                 </TableRow>
-                )
-              })
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      <div className="text-sm text-muted-foreground">
-        Mostrando {filteredData.length} de {data.length} registros · {(Math.round(toneladasFiltradas * 10) / 10).toLocaleString("es-CO")} t en el periodo filtrado
-      </div>
+              </TableHeader>
+              <TableBody>
+                {filteredData.map((row) => {
+                  const tiquete = row.tiquetebascula?.trim()
+                  const tiqueteDuplicado = !!tiquete && (tiqueteCounts[tiquete] || 0) > 1
+                  const sinTiquete = !tiquete
+                  const sinPeso = row.pesovascula == null || Number(row.pesovascula) <= 0
+                  const anomala = diferenciaAnomala(row.diferencia, row.tonProducto)
+                  return (
+                    <TableRow key={row.id} className={cn((sinTiquete || sinPeso) && "bg-critico-bg/40")}>
+                      <TableCell>
+                        <div className="lg-num font-semibold">{row.ordendecargue || "—"}</div>
+                        {row.transporte && <div className="text-xs text-muted-foreground">{row.transporte}</div>}
+                      </TableCell>
+                      <TableCell className="lg-num whitespace-nowrap">
+                        <div>{row.fechaorden || "—"}</div>
+                        {row.fechacargue && row.fechacargue !== row.fechaorden && <div className="text-xs text-muted-foreground">cargue {row.fechacargue}</div>}
+                      </TableCell>
+                      <TableCell className="lg-num">{row.placa || "—"}</TableCell>
+                      <TableCell>
+                        {sinTiquete ? (
+                          <Chip tono="critico">sin tiquete</Chip>
+                        ) : tiqueteDuplicado ? (
+                          <Chip tono="critico" title="Tiquete duplicado: este número de tiquete se repite en más de una orden">{row.tiquetebascula} · repetido</Chip>
+                        ) : (
+                          <span className="lg-num">{row.tiquetebascula}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="lg-num text-right">{DEC(row.pesoorden, 0)}</TableCell>
+                      <TableCell className="lg-num text-right">
+                        {sinPeso ? <Chip tono="critico">sin peso</Chip> : <span className="font-semibold">{DEC(row.pesovascula, 0)}</span>}
+                      </TableCell>
+                      <TableCell className="lg-num text-right">{DEC(row.tonProducto, 2)}</TableCell>
+                      <TableCell className="text-right">
+                        {row.diferencia == null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : anomala ? (
+                          <Chip tono="atencion" title="Diferencia mayor al 10% entre el peso de báscula y el producto de la orden: revisa el tiquete.">{DEC(row.diferencia, 2)}</Chip>
+                        ) : (
+                          <span className="lg-num">{DEC(row.diferencia, 2)}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openDetails(row)} title="Ver detalle de productos y lotes" aria-label="Ver detalle de productos y lotes" disabled={!row.ordendecargue}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(row)} title="Editar peso de báscula" aria-label="Editar peso de báscula">
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+        <p className="lg-num border-t border-border px-4 py-2 text-xs text-muted-foreground">
+          Mostrando {NUM(filteredData.length)} de {NUM(data.length)} registros · {(Math.round(toneladasFiltradas * 10) / 10).toLocaleString("es-CO")} t en el periodo filtrado · en rojo las órdenes sin tiquete o sin peso; en naranja una diferencia mayor al 10 %.
+        </p>
+      </section>
 
       <BasculaOrderDetailsDialog
         open={detailsOpen}
@@ -447,14 +467,14 @@ export function BasculaHistory() {
                 : "sin tiquete de báscula registrado."}
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-[60vh] overflow-y-auto rounded-md border">
+          <div className="max-h-[60vh] overflow-y-auto rounded-xl border border-border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-xs whitespace-nowrap">Orden de Cargue</TableHead>
-                  <TableHead className="text-xs whitespace-nowrap">Fecha Orden</TableHead>
-                  <TableHead className="text-xs whitespace-nowrap">Placa</TableHead>
-                  <TableHead className="text-xs whitespace-nowrap">Transporte</TableHead>
+                  <TableHead>Orden de cargue</TableHead>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead>Placa</TableHead>
+                  <TableHead>Transporte</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -465,10 +485,10 @@ export function BasculaHistory() {
                 ) : (
                   pendingDialogRows.map((r) => (
                     <TableRow key={r.id}>
-                      <TableCell className="text-xs whitespace-nowrap">{r.ordendecargue || "-"}</TableCell>
-                      <TableCell className="text-xs whitespace-nowrap">{r.fechaorden || "-"}</TableCell>
-                      <TableCell className="text-xs whitespace-nowrap">{r.placa || "-"}</TableCell>
-                      <TableCell className="text-xs whitespace-nowrap">{r.transporte || "-"}</TableCell>
+                      <TableCell className="lg-num font-semibold">{r.ordendecargue || "—"}</TableCell>
+                      <TableCell className="lg-num">{r.fechaorden || "—"}</TableCell>
+                      <TableCell className="lg-num">{r.placa || "—"}</TableCell>
+                      <TableCell>{r.transporte || "—"}</TableCell>
                     </TableRow>
                   ))
                 )}
@@ -487,9 +507,9 @@ export function BasculaHistory() {
           {editStep === "password" ? (
             <>
               <DialogHeader>
-                <DialogTitle>Verificación de Identidad</DialogTitle>
+                <DialogTitle>Verificación de identidad</DialogTitle>
                 <DialogDescription>
-                  Ingresa la contraseña para editar el Peso Báscula de la orden <span className="font-semibold">{editRecord?.ordendecargue}</span>.
+                  Ingresa la contraseña para editar el peso de báscula de la orden <span className="lg-num font-semibold">{editRecord?.ordendecargue}</span>.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-2 py-2">
@@ -508,6 +528,7 @@ export function BasculaHistory() {
                     type="button"
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                     onClick={() => setShowPassword(v => !v)}
+                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -521,9 +542,9 @@ export function BasculaHistory() {
           ) : (
             <>
               <DialogHeader>
-                <DialogTitle>Editar Registro Báscula</DialogTitle>
+                <DialogTitle>Editar registro de báscula</DialogTitle>
                 <DialogDescription>
-                  Orden: <span className="font-semibold">{editRecord?.ordendecargue}</span>{" | "}Placa: <span className="font-semibold">{editRecord?.placa}</span>
+                  Orden <span className="lg-num font-semibold">{editRecord?.ordendecargue}</span> · placa <span className="lg-num font-semibold">{editRecord?.placa}</span>
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3 py-2">
@@ -539,17 +560,17 @@ export function BasculaHistory() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="new-tiquete">Tiquete Báscula</Label>
+                  <Label htmlFor="new-tiquete">Tiquete de báscula</Label>
                   <Input
                     id="new-tiquete"
                     type="text"
                     value={newTiquete}
                     onChange={(e) => setNewTiquete(e.target.value)}
-                    placeholder="Numero de tiquete"
+                    placeholder="Número de tiquete"
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="new-peso">Peso Báscula (kg)</Label>
+                  <Label htmlFor="new-peso">Peso de báscula (kg)</Label>
                   <Input
                     id="new-peso"
                     type="number"

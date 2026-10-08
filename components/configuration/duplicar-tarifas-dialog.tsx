@@ -16,6 +16,7 @@ import { useAuth } from "@/components/auth-provider"
 import { Copy, Loader2, Search } from "lucide-react"
 import { listarTarifas, duplicarTarifas, type TarifaItem } from "@/lib/tarifas-actions"
 import { emitTablaChanged } from "@/lib/sync-events"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 export function DuplicarTarifasDialog({
   open,
@@ -29,6 +30,7 @@ export function DuplicarTarifasDialog({
   titulo: string
 }) {
   const { selectedEmpresaId } = useAuth()
+  const { conClave } = useClaveAccion()
   const { toast } = useToast()
   const [items, setItems] = useState<TarifaItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -80,12 +82,12 @@ export function DuplicarTarifasDialog({
       return
     }
     setDup(true)
-    const r = await duplicarTarifas({
+    const r = await conClave("Tarifas", "configurar", (clave) => duplicarTarifas({
       tableName,
       ids: seleccionados.map((i) => i.id),
       nuevaFechaIni: nuevaIni,
       nuevaFechaFin: nuevaFin,
-    })
+    }, clave))
     setDup(false)
     if (r.success) {
       toast({ title: `${r.creadas} tarifa(s) duplicada(s)`, description: `Nueva vigencia ${nuevaIni} → ${nuevaFin}` })

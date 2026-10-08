@@ -83,6 +83,7 @@ import {
   type ResumenAutorizaciones,
   type UsuarioAutorizacion,
 } from "@/lib/autorizaciones"
+import { esGrupoSoloLip } from "@/lib/permisos-financieros"
 
 const TODOS = "0"
 
@@ -131,7 +132,13 @@ const RESULTADO_INTERNO_LABEL: Record<string, string> = {
   fecha_actualizada: "Fecha de transición actualizada",
 }
 
-export default function AutorizacionesClave() {
+/**
+ * `soloClaves`: dentro de la pantalla única (Usuarios · Perfiles · Claves) los
+ * perfiles se editan en su propia pestaña, así que aquí se esconde la de
+ * "Perfiles y procesos" y queda lo que es de la clave: estado, alcance fino,
+ * excepciones, correo, transición y bitácora.
+ */
+export default function AutorizacionesClave({ soloClaves = false }: { soloClaves?: boolean } = {}) {
   const { toast } = useToast()
   // El selector GLOBAL de proyecto (ID) gobierna la pantalla, como en el resto
   // de LIPgo: usuarios del proyecto, alcance por defecto y bitácora.
@@ -180,15 +187,24 @@ export default function AutorizacionesClave() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-            <KeyRound className="h-7 w-7" /> Autorizaciones por clave
+            <KeyRound className="h-7 w-7" /> {soloClaves ? "Claves de autorización" : "Autorizaciones por clave"}
           </h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            <b className="text-foreground">Gestión de Usuarios</b> dice qué pantallas ve cada usuario. <b className="text-foreground">Aquí</b> se
-            define qué <b className="text-foreground">procesos</b> puede <b className="text-foreground">autorizar</b> con su clave personal
-            (aprobar un 702, liberar cuarentena, anular un pedido, cartera, financiera…) y en qué proyectos. Los permisos se dan por{" "}
-            <b className="text-foreground">puesto</b> (perfil) y, si hace falta, con excepciones por persona. Cada usuario crea y recupera su
-            propia clave desde el menú de usuario › “Mi clave de autorización”.
-          </p>
+          {soloClaves ? (
+            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+              Qué <b className="text-foreground">procesos</b> autoriza cada puesto se define en la pestaña{" "}
+              <b className="text-foreground">Perfiles</b>; a quién se le da el perfil, en <b className="text-foreground">Usuarios</b>. Aquí
+              queda lo que es de la <b className="text-foreground">clave personal</b>: su estado, el alcance fino por proyecto, las
+              excepciones por persona, el correo de recuperación, la transición de claves compartidas y la bitácora de quién autorizó qué.
+            </p>
+          ) : (
+            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+              <b className="text-foreground">Gestión de Usuarios</b> dice qué pantallas ve cada usuario. <b className="text-foreground">Aquí</b> se
+              define qué <b className="text-foreground">procesos</b> puede <b className="text-foreground">autorizar</b> con su clave personal
+              (aprobar un 702, liberar cuarentena, anular un pedido, cartera, financiera…) y en qué proyectos. Los permisos se dan por{" "}
+              <b className="text-foreground">puesto</b> (perfil) y, si hace falta, con excepciones por persona. Cada usuario crea y recupera su
+              propia clave desde el menú de usuario › “Mi clave de autorización”.
+            </p>
+          )}
           <p className="mt-2 max-w-3xl text-xs text-muted-foreground">
             <Lock className="mr-1 inline h-3.5 w-3.5" />
             <b className="text-foreground">Lo financiero es propiedad de LIP.</b> Los procesos del grupo “Financiera” solo pueden otorgarse y
@@ -292,9 +308,11 @@ export default function AutorizacionesClave() {
               <TabsTrigger value="usuarios" className="gap-1.5">
                 <Users className="h-4 w-4" /> Usuarios
               </TabsTrigger>
-              <TabsTrigger value="perfiles" className="gap-1.5">
-                <ShieldCheck className="h-4 w-4" /> Perfiles y procesos
-              </TabsTrigger>
+              {!soloClaves && (
+                <TabsTrigger value="perfiles" className="gap-1.5">
+                  <ShieldCheck className="h-4 w-4" /> Perfiles y procesos
+                </TabsTrigger>
+              )}
               <TabsTrigger value="bitacora" className="gap-1.5">
                 <History className="h-4 w-4" /> Bitácora
               </TabsTrigger>
@@ -302,9 +320,11 @@ export default function AutorizacionesClave() {
             <TabsContent value="usuarios" className="mt-4">
               <UsuariosTab data={data} recargar={cargar} empresaId={selectedEmpresaId} nombreProyecto={nombreProyecto} />
             </TabsContent>
-            <TabsContent value="perfiles" className="mt-4">
-              <PerfilesTab data={data} recargar={cargar} />
-            </TabsContent>
+            {!soloClaves && (
+              <TabsContent value="perfiles" className="mt-4">
+                <PerfilesTab data={data} recargar={cargar} />
+              </TabsContent>
+            )}
             <TabsContent value="bitacora" className="mt-4">
               <BitacoraTab data={data} empresaId={selectedEmpresaId} nombreProyecto={nombreProyecto} />
             </TabsContent>
@@ -838,10 +858,10 @@ function DialogAsignar({
                       <div key={g}>
                         <p className="px-2 py-1 text-[10px] font-semibold uppercase text-muted-foreground">
                           {g}
-                          {g === "Financiera" ? " · solo LIP" : ""}
+                          {esGrupoSoloLip(g) ? " · solo LIP" : ""}
                         </p>
                         {data.procesos
-                          .filter((p) => p.grupo === g)
+                          .filter((p) => p.grupo === g && !p.pendiente_sql)
                           .map((p) => (
                             <SelectItem key={p.codigo} value={p.codigo}>
                               {p.nombre}
@@ -889,11 +909,11 @@ function DialogAsignar({
               )}
             </div>
           )}
-          {((tipo === "excepcion" && procesoSel?.grupo === "Financiera") ||
+          {((tipo === "excepcion" && esGrupoSoloLip(procesoSel?.grupo)) ||
             (tipo === "perfil" &&
               data.perfiles
                 .find((p) => String(p.id) === perfilId)
-                ?.procesos.some((c) => data.procesos.find((x) => x.codigo === c)?.grupo === "Financiera"))) && (
+                ?.procesos.some((c) => esGrupoSoloLip(data.procesos.find((x) => x.codigo === c)?.grupo)))) && (
             <p className="flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900">
               <Lock className="mt-0.5 h-3 w-3 shrink-0" />
               Incluye procesos financieros (propiedad de LIP). Solo se puede otorgar a usuarios que ya tengan módulos de Gestión Financiera en
@@ -1039,7 +1059,7 @@ function PerfilCard({
           <div key={g}>
             <p className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase text-muted-foreground">
               {g}
-              {g === "Financiera" && (
+              {esGrupoSoloLip(g) && (
                 <Badge variant="outline" className="h-4 gap-0.5 px-1 text-[9px] normal-case text-amber-800" title="Solo usuarios de LIP con módulos de Gestión Financiera">
                   <Lock className="h-2.5 w-2.5" /> solo LIP
                 </Badge>
@@ -1049,9 +1069,12 @@ function PerfilCard({
               {procesos
                 .filter((p) => p.grupo === g)
                 .map((p) => (
-                  <label key={p.codigo} className="flex items-start gap-2 rounded-md border p-1.5 text-xs hover:bg-muted/40" title={p.descripcion ?? ""}>
-                    <Checkbox checked={sel.has(p.codigo)} onCheckedChange={(c) => toggle(p.codigo, Boolean(c))} className="mt-0.5" />
-                    <span>{p.nombre}</span>
+                  <label key={p.codigo} className="flex items-start gap-2 rounded-md border p-1.5 text-xs hover:bg-muted/40" title={p.pendiente_sql ? "Todavía no existe en la base: corre scripts/262_permisos_acciones.sql" : p.descripcion ?? ""}>
+                    <Checkbox checked={sel.has(p.codigo)} disabled={p.pendiente_sql} onCheckedChange={(c) => toggle(p.codigo, Boolean(c))} className="mt-0.5" />
+                    <span>
+                      {p.nombre}
+                      {p.pendiente_sql && <span className="ml-1.5 rounded bg-amber-100 px-1 py-px text-[9px] font-semibold uppercase text-amber-800">falta SQL 262</span>}
+                    </span>
                   </label>
                 ))}
             </div>

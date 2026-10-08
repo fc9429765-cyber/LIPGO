@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { checkModulePermission } from "@/lib/permissions-actions"
 import { invalidarCacheMuelles } from "@/lib/muelles-empresa"
 import type { MuelleEmpresa } from "@/lib/muelles-empresa-types"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const MODULO = "Muelles de Cargue"
 
@@ -29,6 +30,9 @@ export async function agregarMuelleEmpresa(input: {
   muelle: number
   observacion?: string
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Muelles de Cargue"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!(await checkModulePermission(MODULO))) return { success: false, message: "No autorizado" }
     const idempresa = Number(input.idempresa)
@@ -81,6 +85,9 @@ export async function setMuelleEmpresaActivo(
   id: number,
   activo: boolean,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Muelles de Cargue"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!(await checkModulePermission(MODULO))) return { success: false, message: "No autorizado" }
     const sb = await getSupabaseAdmin()
@@ -100,6 +107,9 @@ export async function setMuelleEmpresaActivo(
 }
 
 export async function eliminarMuelleEmpresa(id: number): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Muelles de Cargue"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!(await checkModulePermission(MODULO))) return { success: false, message: "No autorizado" }
     const sb = await getSupabaseAdmin()

@@ -43,6 +43,7 @@ import { categoriaDeNovedad } from "@/lib/ausentismo-categorias"
 import { resolverPuesto } from "@/lib/puestos-turno-alias"
 import { normalizeName } from "@/lib/nomina-calculo-utils"
 import { agruparHorariosPorPuesto, horarioMasUsado } from "@/lib/horarios-actividad-utils"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const INDUPAN = 1
 const AVIMOL = 2
@@ -178,6 +179,9 @@ export async function sugerirRotacion(
   empresaId: number,
   fecha: string,
 ): Promise<{ success: boolean; data?: SugerenciaRotacion; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Programación de turnos"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!empresaId) return { success: false, message: "Empresa no seleccionada." }
   if (!fecha) return { success: false, message: "Fecha requerida." }
 

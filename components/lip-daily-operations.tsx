@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Chip, Cifra, Esqueleto, Progreso, type Tono } from "@/components/ui/lipgo"
+import { cn } from "@/lib/utils"
 import {
   Loader2, CalendarDays, RefreshCw, TrendingUp, TrendingDown, Minus,
   Truck, Target, Users, TicketCheck, AlertTriangle, Trophy, ArrowUpRight, ArrowDownRight,
@@ -39,6 +41,14 @@ const COLORS = {
   indigo: "#6366f1",
 }
 const PIE_COLORS = [COLORS.primary, COLORS.emerald, COLORS.amber, COLORS.rose, COLORS.violet, COLORS.cyan]
+// Clases estáticas para el ícono de cada cifra (Tailwind no genera clases armadas en tiempo de ejecución).
+const ICONO_TONO: Record<Tono, string> = {
+  ok: "bg-ok-bg text-ok-fg",
+  atencion: "bg-atencion-bg text-atencion-fg",
+  critico: "bg-critico-bg text-critico-fg",
+  info: "bg-info-bg text-info-fg",
+  neutro: "bg-muted text-foreground",
+}
 
 function DeltaBadge({ current, previous, suffix = "" }: { current: number; previous: number; suffix?: string }) {
   if (previous === 0) return null
@@ -262,86 +272,93 @@ export function LipDailyOperations() {
     return dt.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
   }
 
+  // ---- Solo presentación (gerencia 2026-10-05: cero cambios de comportamiento). Mismos filtros, mismas
+  // tarjetas, mismas gráficas y la misma tabla; cambian tipografía, tarjetas y chips. ----
+  const tonoCumpl = (v: number): Tono => (v >= 100 ? "ok" : v >= 80 ? "atencion" : "critico")
+
   if (loading) {
-    return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+    return (
+      <div className="flex flex-col gap-4" aria-busy aria-label="Cargando la operación del día">
+        <div className="lg-card p-5"><Esqueleto lineas={3} /></div>
+        <div className="grid gap-4 lg:grid-cols-3"><div className="lg-card p-5 lg:col-span-2"><Esqueleto lineas={5} /></div><div className="lg-card p-5"><Esqueleto lineas={5} /></div></div>
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-end">
         <div>
-          <h2 className="text-xl font-bold text-foreground">Operacion del Dia</h2>
-          <p className="text-sm text-muted-foreground capitalize">{formatDate(currentDate)}</p>
+          <h2 className="text-lg font-semibold leading-tight">Operacion del Dia</h2>
+          <p className="text-sm capitalize text-muted-foreground">{formatDate(currentDate)}</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex flex-wrap items-center gap-2">
           <Select value={filterProducto} onValueChange={setFilterProducto}>
-            <SelectTrigger className="h-8 text-xs w-[160px]"><SelectValue placeholder="Producto" /></SelectTrigger>
+            <SelectTrigger className="h-9 w-[170px] bg-background text-sm"><SelectValue placeholder="Producto" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos los Productos</SelectItem>
               {productos.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filterOperacion} onValueChange={setFilterOperacion}>
-            <SelectTrigger className="h-8 text-xs w-[150px]"><SelectValue placeholder="Operacion" /></SelectTrigger>
+            <SelectTrigger className="h-9 w-[160px] bg-background text-sm"><SelectValue placeholder="Operacion" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas las Ops.</SelectItem>
               {operaciones.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
             </SelectContent>
           </Select>
           <div className="flex items-center gap-1">
-            <CalendarDays className="h-4 w-4 text-muted-foreground" />
-            <DatePickerField value={selectedDate} onChange={handleDateChange} className="h-8 w-40 text-xs" maxDate={getTodayColombia()} />
+            <CalendarDays className="h-4 w-4 text-muted-foreground" aria-hidden />
+            <DatePickerField value={selectedDate} onChange={handleDateChange} className="h-9 w-40 bg-background text-sm" maxDate={getTodayColombia()} />
           </div>
-          {!isToday && <Button variant="outline" size="sm" onClick={handleToday} className="h-8 text-xs">Hoy</Button>}
-          <Button variant="outline" size="sm" onClick={() => loadData()} className="h-8"><RefreshCw className="h-3.5 w-3.5" /></Button>
+          {!isToday && <Button variant="outline" size="sm" onClick={handleToday} className="h-9 text-sm">Hoy</Button>}
+          <Button variant="outline" size="sm" onClick={() => loadData()} className="h-9 gap-1.5" aria-label="Actualizar"><RefreshCw className="h-3.5 w-3.5" /><span className="hidden sm:inline">Actualizar</span></Button>
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="lg-card grid grid-cols-1 gap-y-5 p-5 sm:grid-cols-2 sm:gap-x-6 lg:grid-cols-4 lg:gap-y-0" aria-label="Cifras del día">
         {[
-          { title: "Toneladas Procesadas", value: totalTon.toFixed(1), prev: prevTon, icon: Truck, color: "text-blue-500", bg: "bg-blue-500/10" },
-          { title: "Cumplimiento Global", value: `${avgCumplimiento}%`, prev: prevCumplimiento, icon: Target, color: avgCumplimiento >= 100 ? "text-emerald-500" : avgCumplimiento >= 80 ? "text-amber-500" : "text-rose-500", bg: avgCumplimiento >= 100 ? "bg-emerald-500/10" : avgCumplimiento >= 80 ? "bg-amber-500/10" : "bg-rose-500/10" },
-          { title: "Operadores Activos", value: totalOperadores.toString(), prev: prevOperadores, icon: Users, color: "text-violet-500", bg: "bg-violet-500/10" },
-          { title: "Viajes / Tickets", value: totalViajes.toString(), prev: prevViajes, icon: TicketCheck, color: "text-cyan-500", bg: "bg-cyan-500/10" },
+          { title: "Toneladas Procesadas", value: totalTon.toFixed(1), prev: prevTon, icon: Truck, tono: "neutro" as Tono, unidad: "t" },
+          { title: "Cumplimiento Global", value: `${avgCumplimiento}%`, prev: prevCumplimiento, icon: Target, tono: tonoCumpl(avgCumplimiento), unidad: undefined },
+          { title: "Operadores Activos", value: totalOperadores.toString(), prev: prevOperadores, icon: Users, tono: "neutro" as Tono, unidad: undefined },
+          { title: "Viajes / Tickets", value: totalViajes.toString(), prev: prevViajes, icon: TicketCheck, tono: "neutro" as Tono, unidad: undefined },
         ].map((kpi, i) => (
-          <Card key={i} className="relative overflow-hidden">
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between">
-                <div className="space-y-1">
-                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{kpi.title}</p>
-                  <p className="text-2xl font-bold tracking-tight">{kpi.value}</p>
-                  <DeltaBadge current={typeof kpi.prev === "number" && kpi.title === "Cumplimiento Global" ? avgCumplimiento : Number(kpi.value.replace("%", "").replace(",", ""))} previous={kpi.prev as number} suffix=" vs ayer" />
-                </div>
-                <div className={`${kpi.bg} ${kpi.color} p-2.5 rounded-xl`}>
-                  <kpi.icon className="h-5 w-5" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <div key={i} className={cn("flex items-start gap-3", i < 3 && "lg:border-r lg:border-border lg:pr-6", i > 0 && "lg:pl-6")}>
+            <span className={cn("mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", ICONO_TONO[kpi.tono])}>
+              <kpi.icon className="h-4 w-4" aria-hidden />
+            </span>
+            <Cifra
+              tamano="compacta"
+              label={kpi.title}
+              valor={kpi.unidad ? kpi.value : kpi.value}
+              unidad={kpi.unidad}
+              tono={kpi.tono}
+              chips={<DeltaBadge current={typeof kpi.prev === "number" && kpi.title === "Cumplimiento Global" ? avgCumplimiento : Number(kpi.value.replace("%", "").replace(",", ""))} previous={kpi.prev as number} suffix=" vs ayer" />}
+              className="min-w-0"
+            />
+          </div>
         ))}
-      </div>
+      </section>
 
       {/* Por unidad (Huevos / Empaque MP): no son el core del ID y no son
           toneladas. Tarjeta pequeña, aparte, para que no contaminen nada. */}
       {porUnidad.viajes > 0 && (
-        <div className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+        <div className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-atencion-bd bg-atencion-bg px-3 py-1.5 text-xs text-atencion-fg">
           <span className="font-semibold">{porUnidad.productos.join(" / ") || "Por unidad"}</span>
-          <span>{porUnidad.viajes} descargue{porUnidad.viajes === 1 ? "" : "s"}</span>
-          <span>{porUnidad.unidades.toLocaleString("es-CO")} unidades</span>
-          <span className="text-amber-700/80 dark:text-amber-300/80">control de facturación · no suman toneladas</span>
+          <span className="lg-num">{porUnidad.viajes} descargue{porUnidad.viajes === 1 ? "" : "s"}</span>
+          <span className="lg-num">{porUnidad.unidades.toLocaleString("es-CO")} unidades</span>
+          <span className="opacity-80">control de facturación · no suman toneladas</span>
         </div>
       )}
 
       {/* Sparkline + Alerts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* 7-day trend */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Tendencia 7 Dias - Cumplimiento %</CardTitle>
-          </CardHeader>
-          <CardContent className="pb-3">
+        <section className="lg-card lg:col-span-2" aria-label="Tendencia de 7 días">
+          <div className="border-b border-border px-4 py-2.5"><h3 className="text-sm font-semibold">Tendencia 7 Dias - Cumplimiento %</h3></div>
+          <div className="p-3">
             {sparklineData.length > 0 ? (
               <ResponsiveContainer width="100%" height={160}>
                 <AreaChart data={sparklineData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
@@ -359,45 +376,41 @@ export function LipDailyOperations() {
                   <Area type="monotone" dataKey="cumplimiento" stroke="#3b82f6" fill="url(#sparkGrad)" strokeWidth={2} dot={{ r: 3, fill: "#3b82f6" }} />
                 </AreaChart>
               </ResponsiveContainer>
-            ) : <p className="text-xs text-muted-foreground text-center py-8">Sin datos de tendencia</p>}
-          </CardContent>
-        </Card>
+            ) : <p className="py-8 text-center text-xs text-muted-foreground">Sin datos de tendencia</p>}
+          </div>
+        </section>
 
         {/* Alerts */}
-        <Card className="border-rose-200 dark:border-rose-900/40">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-rose-500" />
-              <CardTitle className="text-sm font-semibold text-rose-600 dark:text-rose-400">Alertas de Rendimiento</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-2">
+        <section className="lg-card" aria-label="Alertas de rendimiento">
+          <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+            <AlertTriangle className="h-4 w-4 text-critico-fg" aria-hidden />
+            <h3 className="text-sm font-semibold">Alertas de Rendimiento</h3>
+          </div>
+          <div className="flex flex-col gap-2 p-3">
             {lowPerformers.length > 0 ? lowPerformers.map((p, i) => (
-              <div key={i} className="flex items-center justify-between bg-rose-50 dark:bg-rose-950/30 px-3 py-2 rounded-lg">
-                <div>
-                  <p className="text-xs font-semibold">{p.operador}</p>
-                  <p className="text-[10px] text-muted-foreground">{p.operaciones}</p>
+              <div key={i} className="flex items-center justify-between rounded-xl border border-critico-bd bg-critico-bg px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-semibold">{p.operador}</p>
+                  <p className="text-[11px] text-muted-foreground">{p.operaciones}</p>
                 </div>
-                <Badge variant="destructive" className="text-[10px]">{p.toneladas} ton</Badge>
+                <Chip tono="critico">{p.toneladas} ton</Chip>
               </div>
             )) : (
               <div className="flex flex-col items-center justify-center py-6 text-center">
-                <div className="bg-emerald-500/10 p-2 rounded-full mb-2"><TrendingUp className="h-5 w-5 text-emerald-500" /></div>
+                <span className="mb-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-ok-bg text-ok-fg"><TrendingUp className="h-4 w-4" aria-hidden /></span>
                 <p className="text-xs text-muted-foreground">Sin alertas. Todos rinden bien.</p>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       </div>
 
-      {/* Fulfillment Bars + Radial Gauges + Product Pie */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Fulfillment Bars + Product Pie */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Bar chart: Actual vs Meta */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Toneladas vs Meta por Producto / Operacion</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <section className="lg-card lg:col-span-2" aria-label="Toneladas vs meta">
+          <div className="border-b border-border px-4 py-2.5"><h3 className="text-sm font-semibold">Toneladas vs Meta por Producto / Operacion</h3></div>
+          <div className="p-3">
             {fulfillmentBars.length > 0 ? (
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={fulfillmentBars} margin={{ top: 5, right: 10, left: -10, bottom: 40 }} barGap={4}>
@@ -410,16 +423,14 @@ export function LipDailyOperations() {
                   <Bar dataKey="meta" name="Meta" fill="#e2e8f0" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            ) : <p className="text-xs text-muted-foreground text-center py-12">Sin datos</p>}
-          </CardContent>
-        </Card>
+            ) : <p className="py-12 text-center text-xs text-muted-foreground">Sin datos</p>}
+          </div>
+        </section>
 
         {/* Product Pie */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Distribucion por Producto</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center">
+        <section className="lg-card" aria-label="Distribución por producto">
+          <div className="border-b border-border px-4 py-2.5"><h3 className="text-sm font-semibold">Distribucion por Producto</h3></div>
+          <div className="flex flex-col items-center p-3">
             {productPie.length > 0 ? (
               <>
                 <ResponsiveContainer width="100%" height={200}>
@@ -430,28 +441,26 @@ export function LipDailyOperations() {
                     <Tooltip formatter={(v: number) => [`${v.toFixed(2)} ton`, ""]} contentStyle={{ fontSize: 11 }} />
                   </PieChart>
                 </ResponsiveContainer>
-                <div className="flex flex-wrap gap-2 mt-1 justify-center">
+                <div className="mt-1 flex flex-wrap justify-center gap-2">
                   {productPie.map((p, i) => (
-                    <span key={i} className="flex items-center gap-1 text-[10px]">
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
+                    <span key={i} className="flex items-center gap-1 text-[11px]">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
                       {p.name}
                     </span>
                   ))}
                 </div>
               </>
-            ) : <p className="text-xs text-muted-foreground text-center py-12">Sin datos</p>}
-          </CardContent>
-        </Card>
+            ) : <p className="py-12 text-center text-xs text-muted-foreground">Sin datos</p>}
+          </div>
+        </section>
       </div>
 
       {/* Radial Gauges per Operation */}
       {radialData.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Cumplimiento por Tipo de Operacion</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <section className="lg-card" aria-label="Cumplimiento por tipo de operación">
+          <div className="border-b border-border px-4 py-2.5"><h3 className="text-sm font-semibold">Cumplimiento por Tipo de Operacion</h3></div>
+          <div className="p-3">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
               {radialData.map((g, i) => (
                 <div key={i} className="flex flex-col items-center">
                   <ResponsiveContainer width={120} height={120}>
@@ -459,93 +468,81 @@ export function LipDailyOperations() {
                       <RadialBar background={{ fill: "#f1f5f9" }} dataKey="value" cornerRadius={5} />
                     </RadialBarChart>
                   </ResponsiveContainer>
-                  <p className="text-lg font-bold -mt-6" style={{ color: g.fill }}>{g.value}%</p>
-                  <p className="text-[11px] font-medium text-muted-foreground mt-1">{g.name}</p>
-                  <p className="text-[10px] text-muted-foreground">{g.tons} / {g.meta} ton</p>
+                  <p className="lg-num -mt-6 text-lg font-bold" style={{ color: g.fill }}>{g.value}%</p>
+                  <p className="mt-1 text-[11px] font-medium text-muted-foreground">{g.name}</p>
+                  <p className="lg-num text-[11px] text-muted-foreground">{g.tons} / {g.meta} ton</p>
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       )}
 
       {/* Top Performers */}
       {topPerformers.length > 0 && (
-        <Card className="border-emerald-200 dark:border-emerald-900/40">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-amber-500" />
-              <CardTitle className="text-sm font-semibold">Top Operadores del Dia</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <section className="lg-card" aria-label="Top operadores del día">
+          <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+            <Trophy className="h-4 w-4 text-atencion-fg" aria-hidden />
+            <h3 className="text-sm font-semibold">Top Operadores del Dia</h3>
+          </div>
+          <div className="p-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               {topPerformers.map((p, i) => (
-                <div key={i} className={`flex items-center gap-3 p-3 rounded-xl ${i === 0 ? "bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40" : "bg-muted/50 border"}`}>
-                  <div className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold ${i === 0 ? "bg-amber-500 text-white" : i === 1 ? "bg-slate-400 text-white" : "bg-orange-400 text-white"}`}>
+                <div key={i} className={cn("flex items-center gap-3 rounded-xl border p-3", i === 0 ? "border-atencion-bd bg-atencion-bg" : "border-border bg-muted/40")}>
+                  <div className={cn("flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white", i === 0 ? "bg-amber-500" : i === 1 ? "bg-slate-400" : "bg-orange-400")}>
                     {i + 1}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{p.operador}</p>
-                    <p className="text-[10px] text-muted-foreground">{p.operaciones} - {p.viajes} viajes</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{p.operador}</p>
+                    <p className="text-[11px] text-muted-foreground">{p.operaciones} - {p.viajes} viajes</p>
                   </div>
-                  <Badge className={`text-[11px] ${i === 0 ? "bg-amber-500 hover:bg-amber-600" : "bg-primary"}`}>{p.toneladas} ton</Badge>
+                  <Chip tono={i === 0 ? "atencion" : "info"}>{p.toneladas} ton</Chip>
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       )}
 
       {/* Operator Leaderboard Table */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold">Productividad por Operador</CardTitle>
-          <CardDescription className="text-xs">{operatorLeaderboard.length} operadores activos</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-auto max-h-[400px]">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-[11px] w-8">#</TableHead>
-                  <TableHead className="text-[11px]">Operador</TableHead>
-                  <TableHead className="text-[11px]">Operaciones</TableHead>
-                  <TableHead className="text-[11px] text-center">Viajes</TableHead>
-                  <TableHead className="text-[11px] text-right">Toneladas</TableHead>
-                  <TableHead className="text-[11px] w-[140px]">Rendimiento</TableHead>
+      <section className="lg-card" aria-label="Productividad por operador">
+        <div className="border-b border-border px-4 py-2.5">
+          <h3 className="text-sm font-semibold">Productividad por Operador</h3>
+          <p className="text-xs text-muted-foreground">{operatorLeaderboard.length} operadores activos</p>
+        </div>
+        <div className="max-h-[400px] overflow-auto">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-background">
+              <TableRow>
+                <TableHead className="w-8">#</TableHead>
+                <TableHead>Operador</TableHead>
+                <TableHead>Operaciones</TableHead>
+                <TableHead className="text-center">Viajes</TableHead>
+                <TableHead className="text-right">Toneladas</TableHead>
+                <TableHead className="w-[160px]">Rendimiento</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {operatorLeaderboard.length > 0 ? operatorLeaderboard.map((op, i) => (
+                <TableRow key={i} className="hover:bg-muted/50">
+                  <TableCell className="lg-num text-xs font-semibold text-muted-foreground">{i + 1}</TableCell>
+                  <TableCell className="text-sm font-medium">{op.operador}</TableCell>
+                  <TableCell className="text-xs">{op.operaciones}</TableCell>
+                  <TableCell className="lg-num text-center text-sm">{op.viajes}</TableCell>
+                  <TableCell className="lg-num text-right text-sm font-semibold">{op.toneladas}</TableCell>
+                  <TableCell>
+                    <Progreso pct={Math.min((op.toneladas / maxTon) * 100, 100)} tono={op.toneladas / maxTon > 0.7 ? "ok" : op.toneladas / maxTon > 0.4 ? "atencion" : "critico"} />
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {operatorLeaderboard.length > 0 ? operatorLeaderboard.map((op, i) => (
-                  <TableRow key={i} className="hover:bg-muted/50">
-                    <TableCell className="text-xs font-semibold text-muted-foreground">{i + 1}</TableCell>
-                    <TableCell className="text-xs font-medium">{op.operador}</TableCell>
-                    <TableCell className="text-xs">{op.operaciones}</TableCell>
-                    <TableCell className="text-xs text-center">{op.viajes}</TableCell>
-                    <TableCell className="text-xs text-right font-semibold">{op.toneladas}</TableCell>
-                    <TableCell>
-                      <div className="w-full bg-muted rounded-full h-2">
-                        <div
-                          className="h-2 rounded-full transition-all"
-                          style={{
-                            width: `${Math.min((op.toneladas / maxTon) * 100, 100)}%`,
-                            backgroundColor: op.toneladas / maxTon > 0.7 ? COLORS.emerald : op.toneladas / maxTon > 0.4 ? COLORS.amber : COLORS.rose
-                          }}
-                        />
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )) : (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-8">Sin datos de operadores</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+              )) : (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">Sin datos de operadores</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </section>
     </div>
   )
 }

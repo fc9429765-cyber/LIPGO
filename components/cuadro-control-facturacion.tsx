@@ -1,6 +1,6 @@
 "use client"
 
-// Cuadro de Control de Facturación (pestaña dentro de Gestión de Facturas).
+// Cuadro de Control de Facturación (pestaña dentro de Solicitar Facturas).
 // Cruza las ÓRDENES DE SERVICIO procesadas (fuente de verdad) con lo facturado,
 // por owner/proyecto, para garantizar que todo lo procesado se facture. En ROJO
 // lo "sin gestionar" (procesado sin facturar) y lo "sin tarifa". De aquí salen
@@ -54,6 +54,7 @@ import { FacturacionReglasHeader } from "@/components/facturacion-reglas-header"
 import { CierreFinanciero } from "@/components/cierre-financiero"
 import { GESTION_LIPGO_DESDE } from "@/lib/facturacion-constantes"
 import { esVehiculoPropioAgrupable } from "@/lib/distribucion-placas"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 const money = (n: number) => "$" + Math.round(Number(n) || 0).toLocaleString("es-CO")
 // Tarifas por unidad (ej. Huevo $2,95) pierden el sentido si se redondean a
@@ -304,6 +305,7 @@ const defaultFiltros = (): FiltrosControl => ({ ...emptyFiltros(), desde: GESTIO
 
 export function CuadroControlFacturacion() {
   const { selectedEmpresaId, user } = useAuth() as any
+  const { conClave } = useClaveAccion()
   const { toast } = useToast()
   const [data, setData] = useState<ControlFacturacion | null>(null)
   const [loading, setLoading] = useState(true)
@@ -698,7 +700,7 @@ export function CuadroControlFacturacion() {
   }
 
   const aprobar = async (id: number, estado: "borrador" | "aprobada", forzar?: boolean) => {
-    const r = await cambiarEstadoPrefactura(id, estado, { usuario: user?.email || user?.nombre || null, forzar })
+    const r = await conClave("Cuadro de Control Facturación", "aprobar", (clave) => cambiarEstadoPrefactura(id, estado, { usuario: user?.email || user?.nombre || null, forzar }, clave))
     if (r.success) {
       toast({ title: estado === "aprobada" ? "Prefactura aprobada" : "Reabierta a borrador" })
       cargarGuardadas()
@@ -1479,7 +1481,7 @@ export function CuadroControlFacturacion() {
                             <button
                               type="button"
                               className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800 hover:bg-amber-200 dark:bg-amber-950/50 dark:text-amber-300"
-                              title="Ir a Gestión de Facturas a validar las órdenes marcadas 'sin validar' abajo"
+                              title="Ir a Solicitar Facturas a validar las órdenes marcadas 'sin validar' abajo"
                               onClick={() =>
                                 window.dispatchEvent(
                                   new CustomEvent("lipgo:ir-a-gestionar-facturas", {
@@ -1522,7 +1524,7 @@ export function CuadroControlFacturacion() {
                                 {x.bloque === "operacion" && x.valorPorFacturar > 0 && (
                                   <span
                                     className="ml-1 rounded bg-amber-100 px-1 py-px text-[9px] font-semibold uppercase text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
-                                    title="El Coordinador aún no validó estas órdenes en Gestión de Facturas -- Ciclo de Facturación no las incluirá en el próximo anexo"
+                                    title="El Coordinador aún no validó estas órdenes en Solicitar Facturas -- Ciclo de Facturación no las incluirá en el próximo anexo"
                                   >
                                     sin validar
                                   </span>

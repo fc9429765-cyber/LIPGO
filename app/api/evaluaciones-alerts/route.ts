@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { liquidable } from "@/lib/nomina-calculo-utils"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 /**
  * Evaluaciones de Desempeno - Alertas de pendientes.
@@ -15,6 +16,8 @@ import { liquidable } from "@/lib/nomina-calculo-utils"
  * Siempre se filtra por la empresa seleccionada (idempresa).
  */
 export async function GET(request: NextRequest) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const { searchParams } = new URL(request.url)
     const empresaId = searchParams.get("empresaId")

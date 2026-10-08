@@ -17,6 +17,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useAuth } from "@/components/auth-provider"
+import { BandejaAnexosCoordinador } from "@/components/facturacion/bandeja-anexos-coordinador"
 import { getValoresNetosOrden } from "@/lib/facturacion-control-actions"
 import { GESTION_LIPGO_DESDE } from "@/lib/facturacion-constantes"
 
@@ -80,7 +81,7 @@ const CUENTAS_TRANSFERENCIA = [
 ]
 
 export default function GestionFacturas({ onBack, filtroInicial, onFiltroInicialConsumido }: GestionFacturasProps) {
-  const { selectedEmpresaId } = useAuth()
+  const { selectedEmpresaId, user } = useAuth() as any
   const [loading, setLoading] = useState(true)
   const [ordenes, setOrdenes] = useState<OrdenCargue[]>([])
   // Valor NETO por orden (operación × tarifa por owner/id_empresa, igual que el cuadro).
@@ -1085,11 +1086,9 @@ export default function GestionFacturas({ onBack, filtroInicial, onFiltroInicial
       return
     }
 
-    // Validar que si es Contado, tenga cuenta de transferencia
-    if (formData.mediopago === "Contado" && !formData.cuentatransferencia) {
-      toast({ title: "Error", description: "Seleccione una cuenta de transferencia", variant: "destructive" })
-      return
-    }
+    /* La cuenta de transferencia ya NO se pide aquí (ver el formulario), así
+       que tampoco se exige: dejar la validación bloquearía el guardado por un
+       campo que nadie puede llenar. Se captura al procesar la factura. */
 
     // Para SIN FACTURA se requiere comprobante
     if (currentFlow === "sin_factura" && comprobanteUrls.length === 0) {
@@ -1309,6 +1308,11 @@ export default function GestionFacturas({ onBack, filtroInicial, onFiltroInicial
   const listView = (
     <div className="space-y-4">
       {facturaSiigoInput}
+      {/* La bandeja del coordinador LIP: lo que Cartera le envió a su proyecto y espera la
+          firma del cliente. Solo aparece cuando hay algo; para los demás no ocupa nada.
+          Vive aquí, y no en Ciclo de Facturación, porque aquí es donde el coordinador
+          trabaja y no necesita la clave financiera para firmar un anexo de su cliente. */}
+      <BandejaAnexosCoordinador usuario={user?.email || user?.nombre || "usuario"} empresaId={selectedEmpresaId ?? null} />
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -1948,26 +1952,18 @@ export default function GestionFacturas({ onBack, filtroInicial, onFiltroInicial
                   </div>
                 )}
 
-                {formData.mediopago === "Contado" && (
-                  <div className="space-y-2">
-                    <Label htmlFor="cuentatransferencia" className="text-sm">Cuenta de Transferencia *</Label>
-                    <Select
-                      value={formData.cuentatransferencia}
-                      onValueChange={(value) => setFormData({ ...formData, cuentatransferencia: value })}
-                    >
-                      <SelectTrigger id="cuentatransferencia">
-                        <SelectValue placeholder="Seleccionar cuenta" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CUENTAS_TRANSFERENCIA.map((cuenta) => (
-                          <SelectItem key={cuenta} value={cuenta}>
-                            {cuenta}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
+                {/* La CUENTA DE TRANSFERENCIA se quitó de este formulario
+                    (05/10/2026): aquí solo se solicita la factura y se adjuntan
+                    los soportes.
+
+                    La columna sigue existiendo y se sigue capturando al
+                    PROCESAR la factura, más abajo en este mismo módulo, que es
+                    donde de verdad se sabe a qué cuenta entró el pago. Aquí se
+                    pedía antes de que el pago existiera.
+
+                    No se puede dejar de escribir del todo: la reconciliación
+                    bancaria de Ciclo de Facturación la lee para agrupar los
+                    pagos de contado. */}
 
                 {/* Observaciones — disponibles en ambos flujos (SIN FACTURA y CON FACTURA).
                     Se guardan en cabeceraoc.observacionesfactura. */}

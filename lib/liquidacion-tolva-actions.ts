@@ -47,6 +47,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getHorarioTolva } from "@/lib/horario-tolva-actions"
 import { getReversosPorIdempresa } from "@/lib/transacciones-codigo-actions"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const ORIGEN_INGRESO_PRODUCCION = "%ingreso producci%"
 
@@ -437,6 +438,9 @@ export async function registrarTolvaTurno(
   idempresa: number,
   turno: 1 | 2,
 ): Promise<{ success: boolean; message?: string; id?: number; ordendecargue?: string; toneladas?: number }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Liquidación Tolva del día"], "cerrar", "Liquidar turno")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!fecha || !idempresa || !turno) return { success: false, message: "Datos incompletos." }
   try {
     const admin: any = await getSupabaseAdmin()

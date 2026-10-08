@@ -18,6 +18,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentUser, getUserProfile } from "@/lib/auth-actions"
 import { HORA_LIMITE, type CatalogosProgramacion, type CumplimientoResumen, type LineaProgramacion, type ProgramacionCliente, type ProgramacionResumenDia } from "@/lib/programacion-cliente-tipos"
 import { calcularCumplimiento, sumarDias, type CitaResumen } from "@/lib/programacion-cliente-calculo"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 type Resp<T> = { success: true; data: T } | { success: false; message: string }
 
@@ -192,6 +193,9 @@ export async function guardarProgramacion(
   lineas: LineaProgramacion[],
   observaciones?: string | null,
 ): Promise<Resp<ProgramacionCliente>> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Programación del cliente", "Consignar programación del cliente"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!empresaId) return { success: false, message: "Selecciona un proyecto." }
   if (!esFechaISO(fecha)) return { success: false, message: "Fecha inválida." }
   if (fecha < sumarDias(hoyBogota(), -31)) return { success: false, message: "No se puede programar una fecha de hace más de un mes." }

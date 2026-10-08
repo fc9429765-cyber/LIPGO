@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { parseColombianNumber } from "@/lib/parse-colombian-number"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 export async function GET(request: NextRequest) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const { searchParams } = new URL(request.url)
     const numeroOrden = searchParams.get("numeroOrden")

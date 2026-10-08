@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase-client"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 // Valores validos para la columna `tipo` de capacitaciones. Los tres se
 // gestionan en este modulo y se muestran en el portal del trabajador.
@@ -114,6 +115,9 @@ export async function guardarEvidenciaInduccion(
   evaluacionId: string,
   evidenciaUrl: string,
 ): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Evidencia de Inducciones", "Inducciones"], "crear")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!evaluacionId || !evidenciaUrl) {
     return { success: false, error: "Datos incompletos" }
   }
@@ -155,6 +159,9 @@ export async function guardarEvidenciaInduccion(
 export async function eliminarIntentoEvaluacion(
   intentoId: string,
 ): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Evidencia de Inducciones", "Inducciones"], "eliminar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!intentoId) return { success: false, error: "Falta el id del intento" }
   try {
     const supabase = await getSupabaseAdmin()
@@ -298,6 +305,9 @@ function derivarEstado(ejecutada: boolean, trabajadores: number[]): EstadoInducc
 export async function listInduccionesAdmin(
   idempresa?: number | null,
 ): Promise<{ success: boolean; data: InduccionAdmin[]; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Inducciones", "Evidencia de Inducciones"], "ver")
+  if (motivoAccion) return { success: false, error: motivoAccion, data: [] }
   try {
     const supabase = await createClient()
     let query = supabase
@@ -515,6 +525,9 @@ export async function guardarInduccion(input: GuardarInduccionInput): Promise<{
   capacitacionId?: string
   error?: string
 }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Inducciones"], "crear")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase = await createClient()
 
@@ -628,6 +641,9 @@ export async function duplicarInduccionEnEmpresas(
   capacitacionId: string,
   empresaIds: number[],
 ): Promise<{ success: boolean; creadas: number; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Inducciones"], "crear", "Duplicar inducción")
+  if (motivoAccion) return { success: false, error: motivoAccion, creadas: 0 }
   try {
     if (!empresaIds || empresaIds.length === 0) {
       return { success: false, creadas: 0, error: "Debe seleccionar al menos una empresa" }
@@ -704,6 +720,9 @@ export async function eliminarInduccion(capacitacionId: string): Promise<{
   success: boolean
   error?: string
 }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Inducciones"], "eliminar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase = await createClient()
     const { data: ev } = await supabase
@@ -734,6 +753,9 @@ export async function marcarEjecutadaInduccion(
   capacitacionId: string,
   ejecutada: boolean,
 ): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Inducciones"], "cerrar", "Marcar ejecutada")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!capacitacionId) return { success: false, error: "ID requerido" }
   try {
     const supabase = await createClient()
@@ -878,6 +900,9 @@ export async function programarInduccion(
   capacitacionId: string,
   headcountIds: number[],
 ): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Inducciones"], "editar", "Programar inducción")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!capacitacionId) return { success: false, error: "ID requerido" }
   try {
     const supabase = await createClient()

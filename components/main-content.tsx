@@ -11,7 +11,7 @@ import { ModuleCards } from "@/components/module-cards"
 import { ModulesView } from "@/components/modules-view"
 import { ModulePlaceholder } from "@/components/module-placeholder"
 import { configModules } from "@/lib/config-definitions"
-import ConsultaSiigo from "@/components/facturacion/consulta-siigo"
+import SiigoFinanzas from "@/components/facturacion/siigo-finanzas"
 // Producción: maestro de montacargas, QR y bitácora de mantenimiento.
 import { BotonesContextoModulo } from "@/components/contexto-modulo" // Indicadores del área + guía, en panel lateral
 import { ArrowLeft, Compass, Search, Sparkles, Zap } from "lucide-react"
@@ -86,12 +86,12 @@ const PalletInventoryView = dynamic(() => import("@/components/pallet-inventory-
 const MaterialExplosion = dynamic(() => import("@/components/material-explosion"), { loading: ModuleLoading })
 const MontacargasDia = dynamic(() => import("@/components/inventario/montacargas-dia"), { loading: ModuleLoading })
 const Bitacora = dynamic(() => import("@/components/lip/bitacora"), { loading: ModuleLoading })
-const UserPermissionsManagement = dynamic(() => import("@/components/configuration/user-permissions-management").then((m) => m.UserPermissionsManagement), { loading: ModuleLoading })
+// Seguridad y accesos es UNA pantalla (Usuarios · Perfiles · Claves) desde el
+// 2026-10-07; los tres nombres de modulo viejos abren la misma.
+const SeguridadAccesos = dynamic(() => import("@/components/configuration/seguridad-accesos").then((m) => m.SeguridadAccesos), { loading: ModuleLoading })
 const BitacoraAuditoria = dynamic(() => import("@/components/configuration/bitacora-auditoria"), { loading: ModuleLoading })
 const PlacasDistribucion = dynamic(() => import("@/components/configuration/placas-distribucion"), { loading: ModuleLoading })
 const MuellesEmpresaConfig = dynamic(() => import("@/components/configuration/muelles-empresa"), { loading: ModuleLoading })
-const UserAccessModule = dynamic(() => import("@/components/user-access-module").then((m) => m.UserAccessModule), { loading: ModuleLoading })
-const AutorizacionesClave = dynamic(() => import("@/components/configuration/autorizaciones-clave"), { loading: ModuleLoading })
 const HeadcountManagement = dynamic(() => import("@/components/headcount-management"), { loading: ModuleLoading })
 const Tolva = dynamic(() => import("@/components/tolva").then((m) => m.Tolva), { loading: ModuleLoading })
 const VerTolva = dynamic(() => import("@/components/ver-tolva"), { loading: ModuleLoading })
@@ -142,6 +142,7 @@ const Auditoria0312 = dynamic(() => import("@/components/sst/auditoria-0312").th
 const Matriz60Estandares = dynamic(() => import("@/components/sst/matriz-60-estandares").then((m) => m.Matriz60Estandares), { loading: ModuleLoading })
 const RepositorioSoportes = dynamic(() => import("@/components/sst/repositorio-soportes").then((m) => m.RepositorioSoportes), { loading: ModuleLoading })
 const RepositorioISO9001 = dynamic(() => import("@/components/iso9001/repositorio-iso9001").then((m) => m.RepositorioISO9001), { loading: ModuleLoading })
+const AuditoriaISO = dynamic(() => import("@/components/certificaciones/auditoria-iso"), { loading: ModuleLoading })
 const InvestigacionAT = dynamic(() => import("@/components/sst/investigacion-at").then((m) => m.InvestigacionAT), { loading: ModuleLoading })
 const AlertasAT = dynamic(() => import("@/components/sst/alertas-at").then((m) => m.AlertasAT), { loading: ModuleLoading })
 const InvestigacionesRepositorio = dynamic(() => import("@/components/sst/investigaciones-repositorio").then((m) => m.InvestigacionesRepositorio), { loading: ModuleLoading })
@@ -231,7 +232,7 @@ export function MainContent({
   // Identificación a preseleccionar al saltar desde "Ausentismo acumulado" (Visor de Asistencia) hasta Ausentismos.
   const [ausentismosInitialSearch, setAusentismosInitialSearch] = React.useState<string | null>(null)
   // Salto directo desde Ciclo de Facturación/Cuadro de Control ("N órdenes
-  // sin gestionar") hasta Gestión de Facturas, ya filtrado en el proyecto y
+  // sin gestionar") hasta Solicitar Facturas, ya filtrado en el proyecto y
   // período correctos -- para que el aviso sirva para ACTUAR, no solo para
   // informar (usuario 2026-09-14: "que no sea solo lectura que sirva para
   // gestionar").
@@ -331,7 +332,7 @@ export function MainContent({
         fechaDesde: customEvent.detail.fechaDesde,
         fechaHasta: customEvent.detail.fechaHasta,
       })
-      onSelectModule("Gestión de Facturas")
+      onSelectModule("Solicitar Facturas")
     }
 
     const handleAbrirRegistro = (event: Event) => {
@@ -691,17 +692,9 @@ export function MainContent({
             <PermissionGuard moduleName="Explosión de materiales">
               <MaterialExplosion />
             </PermissionGuard>
-          ) : name === "Gestión de Usuarios" ? (
+          ) : name === "Gestión de Usuarios" || name === "Accesos de Usuario" || name === "Autorizaciones por clave" ? (
             <PermissionGuard moduleName="Gestión de Usuarios">
-              <UserPermissionsManagement />
-            </PermissionGuard>
-          ) : name === "Accesos de Usuario" ? (
-            <PermissionGuard moduleName="Accesos de Usuario">
-              <UserAccessModule />
-            </PermissionGuard>
-          ) : name === "Autorizaciones por clave" ? (
-            <PermissionGuard moduleName="Autorizaciones por clave">
-              <AutorizacionesClave />
+              <SeguridadAccesos />
             </PermissionGuard>
           ) : name === "Bitácora de Auditoría" ? (
             <PermissionGuard moduleName="Bitácora de Auditoría">
@@ -991,7 +984,7 @@ export function MainContent({
                   --todas las ventas, a todos los clientes, con sus saldos-- no
                   solo lo que genera LIPgo. */}
               <ClaveFinancieraGuard>
-                <ConsultaSiigo />
+                <SiigoFinanzas />
               </ClaveFinancieraGuard>
             </PermissionGuard>
           ) : name === "Cuadro de Control Facturación" ? (
@@ -1036,8 +1029,8 @@ export function MainContent({
                 <CicloFacturacion />
               </ClaveFinancieraGuard>
             </PermissionGuard>
-          ) : name === "Gestión de Facturas" ? (
-            <PermissionGuard moduleName="Gestión de Facturas">
+          ) : name === "Solicitar Facturas" ? (
+            <PermissionGuard moduleName="Solicitar Facturas">
               <GestionFacturas
                 onBack={onBack}
                 filtroInicial={gestionFacturasFiltroInicial}
@@ -1090,6 +1083,10 @@ export function MainContent({
             <PermissionGuard moduleName="Repositorio ISO 9001">
               <RepositorioISO9001 />
             </PermissionGuard>
+          ) : name === "Auditoría ISO 9001" ? (
+            <PermissionGuard moduleName="Auditoría ISO 9001">
+              <AuditoriaISO />
+            </PermissionGuard>
           ) : name === "Asistente IA" ? (
             <PermissionGuard moduleName="Asistente IA">
               {/*
@@ -1117,8 +1114,15 @@ export function MainContent({
     )
   }
 
+  // `min-w-0` es lo que hace que la pantalla se ajuste al ancho del equipo.
+  // Sin el, un hijo flex NO puede encogerse por debajo del ancho de su
+  // contenido (`min-width:auto` es el valor inicial en CSS flex), asi que una
+  // tabla ancha empujaba este contenedor, se llevaba por delante el sidebar y
+  // aparecia el desplazamiento lateral de TODA la pagina. Con `min-w-0` el
+  // contenedor se ajusta al equipo y el ancho sobrante lo resuelve cada tabla
+  // con su propio scroll, que es donde debe estar.
   return (
-    <div className="flex-1 flex flex-col h-screen overflow-hidden relative z-10">
+    <div className="flex-1 min-w-0 flex flex-col h-screen overflow-hidden relative z-10">
       <TopBar />
 
       {(selectedModule || selectedGroup) && (

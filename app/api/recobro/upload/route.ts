@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { exigirAccionApi } from "@/lib/puerta-api"
 
 /**
  * Soportes del recobro de incapacidades: el soporte clínico de la incapacidad,
@@ -51,6 +52,8 @@ function rutaDestino(id: string, tipo: string, nombreOriginal: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  const puerta = await exigirAccionApi(["Recobro de Incapacidades", "Ausentismos"], "editar")
+  if (puerta) return puerta
   const tipoContenido = request.headers.get("content-type") || ""
 
   // ── Modo 1: emitir URL firmada ────────────────────────────────────────
