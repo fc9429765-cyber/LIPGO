@@ -83,6 +83,7 @@ import {
   type ResumenAutorizaciones,
   type UsuarioAutorizacion,
 } from "@/lib/autorizaciones"
+import { esGrupoSoloLip } from "@/lib/permisos-financieros"
 
 const TODOS = "0"
 
@@ -857,7 +858,7 @@ function DialogAsignar({
                       <div key={g}>
                         <p className="px-2 py-1 text-[10px] font-semibold uppercase text-muted-foreground">
                           {g}
-                          {g === "Financiera" ? " · solo LIP" : ""}
+                          {esGrupoSoloLip(g) ? " · solo LIP" : ""}
                         </p>
                         {data.procesos
                           .filter((p) => p.grupo === g)
@@ -908,11 +909,11 @@ function DialogAsignar({
               )}
             </div>
           )}
-          {((tipo === "excepcion" && procesoSel?.grupo === "Financiera") ||
+          {((tipo === "excepcion" && esGrupoSoloLip(procesoSel?.grupo)) ||
             (tipo === "perfil" &&
               data.perfiles
                 .find((p) => String(p.id) === perfilId)
-                ?.procesos.some((c) => data.procesos.find((x) => x.codigo === c)?.grupo === "Financiera"))) && (
+                ?.procesos.some((c) => esGrupoSoloLip(data.procesos.find((x) => x.codigo === c)?.grupo)))) && (
             <p className="flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900">
               <Lock className="mt-0.5 h-3 w-3 shrink-0" />
               Incluye procesos financieros (propiedad de LIP). Solo se puede otorgar a usuarios que ya tengan módulos de Gestión Financiera en
@@ -1058,7 +1059,7 @@ function PerfilCard({
           <div key={g}>
             <p className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase text-muted-foreground">
               {g}
-              {g === "Financiera" && (
+              {esGrupoSoloLip(g) && (
                 <Badge variant="outline" className="h-4 gap-0.5 px-1 text-[9px] normal-case text-amber-800" title="Solo usuarios de LIP con módulos de Gestión Financiera">
                   <Lock className="h-2.5 w-2.5" /> solo LIP
                 </Badge>

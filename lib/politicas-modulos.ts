@@ -298,9 +298,6 @@ export const POLITICAS: Record<string, PoliticaModulo> = {
   "Bitácora de Auditoría": { silenciosas: ["exportar"] },
 }
 
-/** Grupos de procesos cuyo contenido es de LIP y no se comparte con ningún ID. */
-export const GRUPOS_PROCESOS_SOLO_LIP: ReadonlySet<string> = new Set(["Financiera", "Facturación", "Nómina"])
-
 export type ProcesoNuevo = {
   codigo: string
   nombre: string

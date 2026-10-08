@@ -19,7 +19,7 @@ import "server-only"
 import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 import { getCurrentUser } from "@/lib/auth-actions"
 import { verificarClaveHash } from "@/lib/autorizaciones-crypto"
-import { GRUPO_PROCESOS_SOLO_LIP, tieneAccesoFinanciero } from "@/lib/permisos-financieros"
+import { GRUPOS_PROCESOS_SOLO_LIP, tieneAccesoFinanciero } from "@/lib/permisos-financieros"
 import type { ResultadoAutorizacion } from "@/lib/autorizaciones"
 
 export const MAX_INTENTOS_CLAVE = 5
@@ -66,9 +66,9 @@ export async function nombreProceso(sb: any, proceso: string): Promise<string> {
   return data?.nombre || proceso
 }
 
-/** Códigos de proceso del grupo Financiera: exclusivos de LIP (ver lib/permisos-financieros.ts). */
+/** Códigos de proceso de los grupos Financiera, Facturación y Nómina: exclusivos de LIP (ver lib/permisos-financieros.ts). */
 export async function procesosSoloLip(sb: any): Promise<Set<string>> {
-  const { data } = await sb.from("autorizacion_procesos").select("codigo").eq("grupo", GRUPO_PROCESOS_SOLO_LIP)
+  const { data } = await sb.from("autorizacion_procesos").select("codigo").in("grupo", [...GRUPOS_PROCESOS_SOLO_LIP])
   return new Set((data ?? []).map((r: any) => String(r.codigo)))
 }
 

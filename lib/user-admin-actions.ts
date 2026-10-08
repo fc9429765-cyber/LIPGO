@@ -18,7 +18,8 @@ import { getCurrentUser } from "@/lib/auth-actions"
 import { checkModulePermission } from "@/lib/permissions-actions"
 import { segundoFactorPendiente } from "@/lib/seguridad-servidor"
 import { updateUserPermissions } from "@/lib/permissions-actions"
-import { MODULE_PERMISSION_MAP, type UserPermissions } from "@/lib/permissions-map"
+import type { UserPermissions } from "@/lib/permissions-map"
+import { CLAVES_PERMISO } from "@/lib/permisos-claves"
 import type { CrearUsuarioInput, AuthMetaUsuario } from "@/lib/user-admin-types"
 
 const MODULO_ADMIN = "Gestión de Usuarios"
@@ -32,15 +33,15 @@ async function assertAdmin(): Promise<boolean> {
 }
 
 // Todas las columnas de permiso en `false`. Se construye desde la unica fuente
-// de verdad (`MODULE_PERMISSION_MAP`): cada valor del mapa es el nombre real de
-// una columna booleana en `permisos_usuarios`. Necesario porque esas columnas
-// tienen DEFAULT `true`: si insertaramos una fila "vacia", el usuario nuevo
-// naceria con TODO habilitado. Con este objeto nace SIN permisos y el admin le
-// habilita modulos con el arbol de permisos existente.
+// de verdad (`CLAVES_PERMISO`: módulos, extras y acciones): cada clave es el
+// nombre real de una columna booleana en `permisos_usuarios`. Necesario porque
+// las columnas de módulo tienen DEFAULT `true`: si insertaramos una fila
+// "vacia", el usuario nuevo naceria con TODO habilitado. Con este objeto nace
+// SIN permisos y el admin le habilita modulos con el arbol de permisos.
+// (Antes iteraba solo MODULE_PERMISSION_MAP y las extras nunca se sembraban.)
 function permisosEnFalse(): Partial<UserPermissions> {
-  const claves = Array.from(new Set(Object.values(MODULE_PERMISSION_MAP)))
   const out: Record<string, boolean> = {}
-  for (const k of claves) out[k as string] = false
+  for (const k of CLAVES_PERMISO) out[k] = false
   return out as Partial<UserPermissions>
 }
 

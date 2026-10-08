@@ -25,6 +25,7 @@ import { exigirAdministradorUsuarios } from "@/lib/seguridad-servidor"
 import { updateUserPermissions } from "@/lib/permissions-actions"
 import { adminGuardarPerfil, adminSincronizarPerfilesUsuario } from "@/lib/autorizaciones-actions"
 import { CLAVES_PERMISO } from "@/lib/permisos-claves"
+import { partirClaveAccion } from "@/lib/permisos-verbos"
 import type { UserPermissions } from "@/lib/permissions-map"
 import type {
   CambiosAcceso,
@@ -446,6 +447,12 @@ export async function guardarPerfilAcceso(
   if (desconocidos.length) {
     return { success: false, message: `Permisos que no existen en el sistema: ${desconocidos.join(", ")}.` }
   }
+  // Una acción (`<llave>__<verbo>`) sin su módulo no tiene sentido: el servidor
+  // exige las dos. Si la pantalla mandó una huérfana, se descarta en silencio.
+  const permisosOk = permisos.filter((k) => {
+    const a = partirClaveAccion(k)
+    return !a || permisos.includes(a.llave)
+  })
 
   try {
     const sb: any = await getSupabaseAdmin()
@@ -483,8 +490,8 @@ export async function guardarPerfilAcceso(
       const { error } = await sb.from("acceso_perfil_owners").insert(owners.map((owner) => ({ perfil_id: id, owner })))
       if (error) throw error
     }
-    if (permisos.length) {
-      const { error } = await sb.from("acceso_perfil_permisos").insert(permisos.map((permiso) => ({ perfil_id: id, permiso })))
+    if (permisosOk.length) {
+      const { error } = await sb.from("acceso_perfil_permisos").insert(permisosOk.map((permiso) => ({ perfil_id: id, permiso })))
       if (error) throw error
     }
 

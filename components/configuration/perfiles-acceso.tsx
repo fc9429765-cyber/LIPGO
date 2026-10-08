@@ -69,7 +69,9 @@ import {
 import type { PerfilAcceso, UsuarioDePerfil } from "@/lib/acceso-perfiles-tipos"
 import { adminListarProcesos } from "@/lib/autorizaciones-actions"
 import type { ProcesoAutorizable } from "@/lib/autorizaciones"
-import { PERMISSION_TREE, filtrarArbol, type PermGroup, type PermItem } from "@/lib/permisos-arbol"
+import { PERMISSION_TREE, clavesDeItem, clavesDelArbol, filtrarArbol, type PermGroup, type PermItem } from "@/lib/permisos-arbol"
+import { ChipsAcciones, accionesDeLlave } from "@/components/configuration/chips-acciones"
+import { esClaveAccion } from "@/lib/permisos-verbos"
 
 type Form = {
   nombre: string
@@ -929,12 +931,15 @@ function ArbolPermisos({
     if (q.trim()) setAbiertos(arbol.map((g) => g.title))
   }, [q, arbol])
 
-  const todasLasClaves = useMemo(
-    () => PERMISSION_TREE.flatMap((g) => g.sections.flatMap((s) => s.permissions.map((p) => p.key as string))),
-    [],
-  )
-  const clavesDe = (g: PermGroup) => g.sections.flatMap((s) => s.permissions.map((p) => p.key as string))
+  // "Todo / Nada" incluyen las acciones de cada módulo; los contadores cuentan módulos.
+  const todasLasClaves = useMemo(() => clavesDelArbol({ conAcciones: true }), [])
+  const totalModulos = useMemo(() => clavesDelArbol().length, [])
+  const clavesDe = (g: PermGroup) => g.sections.flatMap((s) => s.permissions.flatMap((p) => clavesDeItem(p, true)))
   const cuenta = (items: PermItem[]) => items.filter((p) => marcados.has(p.key as string)).length
+  const modulosMarcados = seleccion.filter((k) => !esClaveAccion(k)).length
+  const accionesMarcadas = seleccion.length - modulosMarcados
+  // Marcar un módulo enciende todas sus acciones (nadie pierde nada); quitarlo las apaga.
+  const toggleModulo = (k: string, on: boolean) => onToggleVarios([k, ...accionesDeLlave(k)], on)
 
   return (
     <div className="space-y-3">
@@ -950,7 +955,7 @@ function ArbolPermisos({
           Nada
         </Button>
         <span className="text-xs text-muted-foreground tabular-nums">
-          {seleccion.length} de {todasLasClaves.length}
+          {modulosMarcados} de {totalModulos} módulos · {accionesMarcadas} acciones
         </span>
       </div>
 
@@ -961,7 +966,8 @@ function ArbolPermisos({
           <Accordion type="multiple" value={abiertos} onValueChange={setAbiertos} className="space-y-2">
             {arbol.map((g) => {
               const claves = clavesDe(g)
-              const activos = claves.filter((k) => marcados.has(k)).length
+              const soloModulos = claves.filter((k) => !esClaveAccion(k))
+              const activos = soloModulos.filter((k) => marcados.has(k)).length
               return (
                 <AccordionItem
                   key={g.title}
@@ -974,14 +980,14 @@ function ArbolPermisos({
                       <Badge
                         variant="outline"
                         className={`ml-auto h-5 px-1.5 text-[11px] tabular-nums ${
-                          activos === claves.length
+                          activos === soloModulos.length
                             ? "border-emerald-300 bg-emerald-50 text-emerald-700"
                             : activos > 0
                               ? "border-primary/30 bg-primary/10 text-primary"
                               : ""
                         }`}
                       >
-                        {activos}/{claves.length}
+                        {activos}/{soloModulos.length}
                       </Badge>
                     </div>
                   </AccordionTrigger>
@@ -1010,10 +1016,13 @@ function ArbolPermisos({
                           {s.permissions.map((p) => {
                             const k = p.key as string
                             return (
-                              <label key={k} className="flex items-center gap-2 text-sm cursor-pointer p-1 rounded hover:bg-accent/50">
-                                <Checkbox checked={marcados.has(k)} onCheckedChange={(c) => onToggle(k, !!c)} />
-                                <span className="truncate">{p.label}</span>
-                              </label>
+                              <div key={k} className="rounded p-1 hover:bg-accent/50">
+                                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                  <Checkbox checked={marcados.has(k)} onCheckedChange={(c) => toggleModulo(k, !!c)} />
+                                  <span className="truncate">{p.label}</span>
+                                </label>
+                                <ChipsAcciones llave={k} marcados={marcados} verActivo={marcados.has(k)} onToggle={onToggle} compacto />
+                              </div>
                             )
                           })}
                         </div>
@@ -1029,7 +1038,8 @@ function ArbolPermisos({
 
       <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
         <ArrowRight className="h-3 w-3" />
-        Son los mismos módulos del menú: uno nuevo aparece aquí solo.
+        Son los mismos módulos del menú: uno nuevo aparece aquí solo. Debajo de cada módulo, lo que se puede hacer dentro; los chips con
+        candado se otorgan en la pestaña Autoriza.
       </p>
     </div>
   )

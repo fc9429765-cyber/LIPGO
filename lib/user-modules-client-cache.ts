@@ -15,6 +15,10 @@
 export interface UserModulesResponse {
   protectedModules: string[]
   allowedModules: string[]
+  /** Claves de acción `<llave>__<verbo>` en true (plan 2026-10-07). */
+  allowedActions: string[]
+  /** 'aviso': las puertas de acción registran y dejan pasar; 'bloquear': bloquean. */
+  modoPoliticas: "aviso" | "bloquear"
 }
 
 const TTL_MS = 60 * 1000
@@ -26,9 +30,11 @@ export function getUserModulesCached(): Promise<UserModulesResponse> {
     .then(async (res) => {
       if (!res.ok) throw new Error(`/api/user-modules ${res.status}`)
       const data = (await res.json()) as Partial<UserModulesResponse>
-      const resultado = {
+      const resultado: UserModulesResponse = {
         protectedModules: Array.isArray(data?.protectedModules) ? data.protectedModules : [],
         allowedModules: Array.isArray(data?.allowedModules) ? data.allowedModules : [],
+        allowedActions: Array.isArray(data?.allowedActions) ? data.allowedActions : [],
+        modoPoliticas: data?.modoPoliticas === "bloquear" ? "bloquear" : "aviso",
       }
       // Sin módulos permitidos = casi siempre "todavía no hay sesión" (el
       // endpoint responde vacío sin usuario). No se guarda: el siguiente que

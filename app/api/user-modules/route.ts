@@ -4,6 +4,8 @@ import { getUserPermissions } from "@/lib/permissions-actions"
 // porque Next.js no permite exportar valores no async desde un archivo
 // con la directiva "use server".
 import { MODULE_PERMISSION_MAP } from "@/lib/permissions-map"
+import { esClaveAccion } from "@/lib/permisos-verbos"
+import { modoPoliticas } from "@/lib/puerta-modulo"
 
 // Render dinámico explícito: los permisos cambian en caliente (Gestión de
 // Usuarios) y una respuesta cacheada dejaría al usuario sin ver un módulo que
@@ -34,7 +36,7 @@ export async function GET() {
     if (!permissions) {
       // Sin permisos cargados (usuario no autenticado o sin fila en
       // `permisos_usuarios`): no se permite ningun modulo protegido.
-      return NextResponse.json({ protectedModules, allowedModules: [] })
+      return NextResponse.json({ protectedModules, allowedModules: [], allowedActions: [], modoPoliticas: "aviso" })
     }
 
     const allowedModules = protectedModules.filter((moduleName) => {
@@ -42,14 +44,21 @@ export async function GET() {
       return permissions[key] === true
     })
 
-    return NextResponse.json({ protectedModules, allowedModules })
+    // Acciones por módulo (plan 2026-10-07): las columnas `<llave>__<verbo>` en
+    // true. El hook useModulePermissions las usa para deshabilitar botones; la
+    // barrera real sigue siendo el servidor (exigirAccion).
+    const allowedActions = Object.entries(permissions as unknown as Record<string, unknown>)
+      .filter(([k, v]) => v === true && esClaveAccion(k))
+      .map(([k]) => k)
+
+    return NextResponse.json({ protectedModules, allowedModules, allowedActions, modoPoliticas: await modoPoliticas() })
   } catch (error) {
     console.error("[v0] /api/user-modules error:", error)
     // En caso de error devolvemos `protectedModules` vacio para no ocultar
     // accidentalmente modulos por un fallo del backend; el guard del modulo
     // sigue siendo la barrera real de acceso.
     return NextResponse.json(
-      { protectedModules: [], allowedModules: [] },
+      { protectedModules: [], allowedModules: [], allowedActions: [], modoPoliticas: "aviso" },
       { status: 200 },
     )
   }

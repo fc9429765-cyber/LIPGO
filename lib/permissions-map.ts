@@ -10,9 +10,17 @@
  * desde aqui para mantener UNA sola fuente de verdad.
  */
 
+import type { ClaveAccion } from "@/lib/permisos-verbos"
+
 export interface UserPermissions {
   id?: number
   usuario_id: string
+  /**
+   * Acciones por módulo (plan 2026-10-07): una columna `<llave>__<verbo>` por
+   * cada acción silenciosa del catálogo (lib/politicas-modulos.ts, SQL 262).
+   * `undefined` = la columna aún no existe en la base.
+   */
+  [accion: ClaveAccion]: boolean | undefined
   // Gestión de Pedidos
   entrada_pedidos: boolean
   gestionar_pedidos: boolean

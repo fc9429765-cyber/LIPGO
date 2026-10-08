@@ -5,7 +5,7 @@
 // confirma que es él, y el PERFIL (puesto) dice qué procesos/códigos puede
 // autorizar y en qué proyectos. Quién autorizó queda con nombre real.
 
-export type GrupoProceso = "Inventario" | "Pedidos" | "Financiera"
+export type GrupoProceso = "Inventario" | "Pedidos" | "Financiera" | "Órdenes" | "Facturación" | "Nómina" | "Seguridad"
 
 export interface ProcesoAutorizable {
   codigo: string

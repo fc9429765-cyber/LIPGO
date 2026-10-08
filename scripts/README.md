@@ -33,7 +33,7 @@ corre en el pipeline y **falla si aparece uno nuevo**.
 
 | Carpeta | Serie | Qué contiene |
 |---|---|---|
-| `scripts/` | `001`–`248` | Todo lo general: permisos, columnas, vistas, correcciones |
+| `scripts/` | `001`–`263` | Todo lo general: permisos, columnas, vistas, correcciones. **260–269 reservados** para las políticas por acción (2026-10-07): 260 cierre RLS, 261 reversa, 262 columnas de acción (generado: `npx tsx scripts/generar_262_permisos_acciones.mts`), 263 verificación |
 | `scripts/sig/` | `01`–`63` | Sistema Integrado de Gestión. **Serie propia**, no se renumera |
 | `scripts/auditoria/` | `01`–`06` | Triggers de auditoría. Serie propia |
 | `scripts/diccionario/` | `01`– | Diccionario de datos. Serie propia. Ver su [README](diccionario/README.md) |

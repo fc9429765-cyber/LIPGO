@@ -12,8 +12,19 @@
 import { groups } from "@/lib/dashboard-data"
 import { MODULE_PERMISSION_MAP, type UserPermissions } from "@/lib/permissions-map"
 import { EXTRA_PERMS_POR_SUBGRUPO } from "@/lib/permisos-claves"
+import { accionesPorClave, procesosPorClave, type AccionDeClave, type ProcesoDeClave } from "@/lib/politicas-modulos"
 
-export type PermItem = { key: keyof UserPermissions; label: string }
+const ACCIONES = accionesPorClave()
+const PROCESOS = procesosPorClave()
+
+export type PermItem = {
+  key: keyof UserPermissions
+  label: string
+  /** Acciones silenciosas de la llave (columnas `<llave>__<verbo>`), unión de las pantallas que la comparten. */
+  acciones: AccionDeClave[]
+  /** Acciones con clave de la llave (se otorgan como procesos en Autoriza). */
+  conClave: ProcesoDeClave[]
+}
 export type PermSection = { title: string | null; permissions: PermItem[] }
 export type PermGroup = { title: string; sections: PermSection[] }
 
@@ -25,7 +36,7 @@ function collectPerms(modules: { name: string; label?: string }[]): PermItem[] {
     if (!key) continue
     if (seen.has(key as string)) continue
     seen.add(key as string)
-    out.push({ key, label: m.label ?? m.name })
+    out.push({ key, label: m.label ?? m.name, acciones: ACCIONES.get(key as string) ?? [], conClave: PROCESOS.get(key as string) ?? [] })
   }
   return out
 }
@@ -38,7 +49,12 @@ export const PERMISSION_TREE: PermGroup[] = groups
       if (perms.length) sections.push({ title: null, permissions: perms })
     }
     for (const sg of g.subgroups ?? []) {
-      const extra = (EXTRA_PERMS_POR_SUBGRUPO[sg.title] ?? []) as PermItem[]
+      const extra: PermItem[] = (EXTRA_PERMS_POR_SUBGRUPO[sg.title] ?? []).map((x) => ({
+        key: x.key as keyof UserPermissions,
+        label: x.label,
+        acciones: [],
+        conClave: [],
+      }))
       const perms = [...collectPerms(sg.modules), ...extra]
       if (perms.length) sections.push({ title: sg.title, permissions: perms })
     }
@@ -46,9 +62,16 @@ export const PERMISSION_TREE: PermGroup[] = groups
   })
   .filter((g) => g.sections.length > 0)
 
-/** Las claves del árbol, planas y en el orden en que se dibujan. */
-export function clavesDelArbol(): string[] {
-  return PERMISSION_TREE.flatMap((g) => g.sections.flatMap((s) => s.permissions.map((p) => p.key as string)))
+/** Las claves del árbol, planas y en el orden en que se dibujan. Con `conAcciones`, cada módulo va seguido de sus acciones. */
+export function clavesDelArbol(opts?: { conAcciones?: boolean }): string[] {
+  return PERMISSION_TREE.flatMap((g) =>
+    g.sections.flatMap((s) => s.permissions.flatMap((p) => clavesDeItem(p, opts?.conAcciones === true))),
+  )
+}
+
+/** La llave del módulo y, si se pide, sus claves de acción. */
+export function clavesDeItem(p: PermItem, conAcciones: boolean): string[] {
+  return conAcciones ? [p.key as string, ...p.acciones.map((a) => a.key)] : [p.key as string]
 }
 
 /**
@@ -66,7 +89,9 @@ export function filtrarArbol(q: string): PermGroup[] {
           (p) =>
             p.label.toLowerCase().includes(t) ||
             (s.title ?? "").toLowerCase().includes(t) ||
-            g.title.toLowerCase().includes(t),
+            g.title.toLowerCase().includes(t) ||
+            p.acciones.some((a) => a.label.toLowerCase().includes(t)) ||
+            p.conClave.some((c) => c.label.toLowerCase().includes(t)),
         ),
       }))
       .filter((s) => s.permissions.length > 0)

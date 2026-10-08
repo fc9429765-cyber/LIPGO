@@ -51,7 +51,9 @@ import type { Empresa, Owner } from "@/lib/user-access-tipos"
 import type { UserPermissions } from "@/lib/permissions-map"
 import { PROCESOS } from "@/lib/mapa-procesos-tipos"
 import { getProcesosDeUsuario, guardarProcesosDeUsuario } from "@/lib/permisos-mapa-actions"
-import { PERMISSION_TREE, filtrarArbol, type PermGroup, type PermItem } from "@/lib/permisos-arbol"
+import { PERMISSION_TREE, clavesDeItem, filtrarArbol, type PermGroup, type PermItem } from "@/lib/permisos-arbol"
+import { ChipsAcciones, accionesDeLlave } from "@/components/configuration/chips-acciones"
+import { esClaveAccion } from "@/lib/permisos-verbos"
 import {
   listarPerfilesAcceso,
   getPerfilesDeUsuario,
@@ -147,7 +149,12 @@ function permsDeUsuario(u: UserWithPermissions): Partial<UserPermissions> {
   PERMISSION_TREE.forEach((g) =>
     g.sections.forEach((s) =>
       s.permissions.forEach((p) => {
-        ;(out as any)[p.key] = src?.[p.key] === true
+        for (const k of clavesDeItem(p, true)) {
+          // Una acción cuya columna aún no existe en la base (SQL 262 sin
+          // correr) llega como undefined: se muestra apagada, pero el servidor
+          // la trata como permitida hasta que la columna exista.
+          ;(out as any)[k] = (src as any)?.[k] === true
+        }
       }),
     ),
   )
@@ -345,18 +352,30 @@ export function UserPermissionsManagement() {
     return { total, active }
   }
 
+  // Cuenta módulos; las acciones (`<llave>__<verbo>`) van aparte.
   const totalActivos = useMemo(
-    () => Object.values(permissions).filter(Boolean).length,
+    () => Object.entries(permissions).filter(([k, v]) => v && !esClaveAccion(k)).length,
     [permissions],
   )
 
+  // Claves marcadas (módulos y acciones), para los chips.
+  const marcados = useMemo(
+    () => new Set(Object.entries(permissions).filter(([, v]) => v === true).map(([k]) => k)),
+    [permissions],
+  )
+
+  // Marcar un módulo enciende todas sus acciones (nadie pierde nada); quitarlo las apaga.
   const handlePermissionChange = (key: string, checked: boolean) =>
-    setPermissions((prev) => ({ ...prev, [key]: checked }))
+    setPermissions((prev) => {
+      const next: Partial<UserPermissions> = { ...prev, [key]: checked }
+      if (!esClaveAccion(key)) for (const a of accionesDeLlave(key)) (next as any)[a] = checked
+      return next
+    })
 
   const handleSelectAll = (items: PermItem[], checked: boolean) => {
     const updates: Partial<UserPermissions> = {}
     items.forEach((p) => {
-      ;(updates as any)[p.key] = checked
+      for (const k of clavesDeItem(p, true)) (updates as any)[k] = checked
     })
     setPermissions((prev) => ({ ...prev, ...updates }))
   }
@@ -364,7 +383,7 @@ export function UserPermissionsManagement() {
   const handleGlobalAll = (checked: boolean) => {
     const updates: Partial<UserPermissions> = {}
     PERMISSION_TREE.forEach((g) =>
-      g.sections.forEach((s) => s.permissions.forEach((p) => ((updates as any)[p.key] = checked))),
+      g.sections.forEach((s) => s.permissions.forEach((p) => clavesDeItem(p, true).forEach((k) => ((updates as any)[k] = checked)))),
     )
     setPermissions(updates)
   }
@@ -1124,10 +1143,11 @@ export function UserPermissionsManagement() {
                                             return (
                                               <div
                                                 key={perm.key as string}
-                                                className={`flex items-center space-x-2 p-1.5 rounded-md transition-colors ${
+                                                className={`p-1.5 rounded-md transition-colors ${
                                                   isEnabled ? "bg-primary/5" : "hover:bg-accent/50"
                                                 }`}
                                               >
+                                                <div className="flex items-center space-x-2">
                                                 <Checkbox
                                                   id={htmlId}
                                                   checked={!!isEnabled}
@@ -1144,6 +1164,14 @@ export function UserPermissionsManagement() {
                                                   {perm.label}
                                                   {matUsuario.permisos.includes(perm.key as string) && <TagPerfil />}
                                                 </Label>
+                                                </div>
+                                                <ChipsAcciones
+                                                  llave={perm.key as string}
+                                                  marcados={marcados}
+                                                  verActivo={!!isEnabled}
+                                                  onToggle={(k, on) => handlePermissionChange(k, on)}
+                                                  compacto
+                                                />
                                               </div>
                                             )
                                           })}

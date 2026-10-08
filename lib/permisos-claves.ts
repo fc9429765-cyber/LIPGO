@@ -6,6 +6,7 @@
 // en lib/permisos-arbol.ts y lo consumen las pantallas.
 
 import { MODULE_PERMISSION_MAP } from "@/lib/permissions-map"
+import { clavesDeAcciones } from "@/lib/politicas-modulos"
 
 export type PermisoExtra = { key: string; label: string }
 
@@ -36,4 +37,6 @@ export const EXTRA_PERMS_POR_SUBGRUPO: Record<string, PermisoExtra[]> = {
 export const CLAVES_PERMISO: ReadonlySet<string> = new Set<string>([
   ...Object.values(MODULE_PERMISSION_MAP),
   ...Object.values(EXTRA_PERMS_POR_SUBGRUPO).flatMap((xs) => xs.map((x) => x.key)),
+  // Acciones por módulo (plan 2026-10-07): columnas `<llave>__<verbo>` del SQL 262.
+  ...clavesDeAcciones(),
 ])
