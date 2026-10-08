@@ -25,6 +25,7 @@ import {
   type CargueDeLinea,
 } from "@/lib/pedido-ordenes"
 import { autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
+import { resumenPedidosDeLaOrden } from "@/lib/pedido-de-la-orden"
 
 /**
  * Obtiene los IDs de empresa accesibles para el usuario actual desde perfil_acceso_empresas
@@ -1257,6 +1258,29 @@ export async function generateLoadOrder(orderData: {
     }
 
     console.log("[v0] Cabeceraoc inserted successfully")
+
+    /*
+     * DE QUÉ PEDIDO NACIÓ ESTA ORDEN (script 255).
+     *
+     * Va en un UPDATE aparte, y a propósito. Crear una orden de cargue es la operación más
+     * crítica de la app: si estas dos columnas fueran parte del INSERT y la base no las
+     * tuviera todavía (un entorno nuevo, el script sin correr), el insert fallaría y nadie
+     * podría despachar. Así, si el update no puede, la orden ya existe y todo lo demás
+     * sigue igual; solo quedan en nulo y el relleno del 255 las puede recalcular.
+     *
+     * El resumen se deriva de las mismas líneas que alimentan el libro
+     * `pedidodetalle_ocargue`, con la misma regla, para que las dos fuentes no se
+     * contradigan nunca.
+     */
+    try {
+      const resumen = resumenPedidosDeLaOrden(orderData.detailUpdates)
+      const { error: vinculoError } = await supabase.from("cabeceraoc").update(resumen).eq("id", nextId)
+      if (vinculoError) {
+        console.warn("[cargue] no se pudo anotar el pedido en la cabecera de la orden:", vinculoError.message)
+      }
+    } catch (e: any) {
+      console.warn("[cargue] no se pudo anotar el pedido en la cabecera de la orden:", e?.message ?? e)
+    }
 
     // Reporte interno. Va aquí, con la orden ya insertada, y nunca lanza: un
     // problema de WhatsApp no puede impedir crear una orden de cargue.
