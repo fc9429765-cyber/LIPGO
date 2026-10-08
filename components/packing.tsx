@@ -112,6 +112,14 @@ export function Packing() {
       const ctx = canvas.getContext("2d")
       const img = new Image()
       img.crossOrigin = "anonymous"
+      // La URL temporal se libera SIEMPRE. Treinta fotos del carrete, de 3-5 MB cada una,
+      // dejaban treinta objetos vivos en memoria; en un celular eso es suficiente para que
+      // el navegador mate la pestaña a mitad del cierre de la orden.
+      const url = URL.createObjectURL(file)
+      const terminar = (resultado: File) => {
+        URL.revokeObjectURL(url)
+        resolve(resultado)
+      }
 
       img.onload = () => {
         let { width, height } = img
@@ -133,9 +141,9 @@ export function Packing() {
                 type: "image/jpeg",
                 lastModified: Date.now(),
               })
-              resolve(compressedFile)
+              terminar(compressedFile)
             } else {
-              resolve(file) // Fallback to original if compression fails
+              terminar(file) // Fallback to original if compression fails
             }
           },
           "image/jpeg",
@@ -143,8 +151,8 @@ export function Packing() {
         )
       }
 
-      img.onerror = () => resolve(file) // Fallback to original on error
-      img.src = URL.createObjectURL(file)
+      img.onerror = () => terminar(file) // Fallback to original on error
+      img.src = url
     })
   }
 
@@ -499,6 +507,28 @@ export function Packing() {
       const photosToUpload = await Promise.all(
         selectedPhotos.map((photo) => compressImage(photo, 0.6, 1280)),
       )
+
+      /*
+       * UNA FOTO QUE EL NAVEGADOR NO PUDO LEER SE DICE POR SU NOMBRE.
+       *
+       * `compressImage` devuelve el archivo ORIGINAL cuando no logra decodificarlo (por
+       * ejemplo un .heic de iPhone elegido desde Archivos, que el canvas no siempre puede
+       * dibujar). Sin comprimir, ese archivo puede pasar del limite ~4,5 MB del body y el
+       * servidor lo rechaza con un mensaje generico, dejando al coordinador adivinando cual
+       * de las treinta fotos fue. Mejor decirlo antes, con nombre y peso.
+       */
+      const pesadas = photosToUpload.filter((f) => f.size > 4 * 1024 * 1024)
+      if (pesadas.length > 0) {
+        const detalle = pesadas
+          .slice(0, 3)
+          .map((f) => `${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)`)
+          .join(", ")
+        throw new Error(
+          `${pesadas.length} foto(s) pesan demasiado y el navegador no las pudo optimizar: ${detalle}${
+            pesadas.length > 3 ? " y otras" : ""
+          }. Quitalas y vuelve a tomarlas con la camara, o eligelas de nuevo desde la galeria de fotos (no desde Archivos).`,
+        )
+      }
 
       // Subimos foto a foto en peticiones independientes para evitar
       // el limite de tamano del body. Si alguna falla abortamos sin
