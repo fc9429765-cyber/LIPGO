@@ -4,9 +4,16 @@
  * Cerrar el acceso a la plataforma a todos los usuarios de ID4 (Cedi Medellín).
  *
  * Ordenado por gerencia el 2026-10-07: "te pido de inmediato deshabilitar todos los
- * usuarios del ID 4, ese proyecto lo entregamos el 26 de octubre, ya no pertenece a LIPgo
+ * usuarios del ID 4, ese proyecto lo entregamos el 26 de [septiembre], ya no pertenece a LIPgo
  * y por ende no debe permitir a los usuarios seguir trabajando en la plataforma, no deben
  * poder ingresar a ningún módulo ni de consulta".
+ *
+ * La fecha de entrega la precisó gerencia el 2026-10-08: fue el 26 de SEPTIEMBRE de 2026, no
+ * de octubre. Cuadra con los datos: el último ingreso de Bodega Medellín fue ese mismo día.
+ *
+ * VERIFICADO el 2026-10-08 con una prueba real de inicio de sesión en las seis: todas
+ * responden `user_banned` ANTES de revisar la clave. Sin sesión no hay nada que ver, así que
+ * ya no importa qué permisos les queden sueltos.
  *
  * POR QUÉ SE BLOQUEA EN AUTH Y NO SE TOCAN LOS PERMISOS
  *
