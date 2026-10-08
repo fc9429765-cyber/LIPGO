@@ -861,7 +861,7 @@ function DialogAsignar({
                           {esGrupoSoloLip(g) ? " · solo LIP" : ""}
                         </p>
                         {data.procesos
-                          .filter((p) => p.grupo === g)
+                          .filter((p) => p.grupo === g && !p.pendiente_sql)
                           .map((p) => (
                             <SelectItem key={p.codigo} value={p.codigo}>
                               {p.nombre}
@@ -1069,9 +1069,12 @@ function PerfilCard({
               {procesos
                 .filter((p) => p.grupo === g)
                 .map((p) => (
-                  <label key={p.codigo} className="flex items-start gap-2 rounded-md border p-1.5 text-xs hover:bg-muted/40" title={p.descripcion ?? ""}>
-                    <Checkbox checked={sel.has(p.codigo)} onCheckedChange={(c) => toggle(p.codigo, Boolean(c))} className="mt-0.5" />
-                    <span>{p.nombre}</span>
+                  <label key={p.codigo} className="flex items-start gap-2 rounded-md border p-1.5 text-xs hover:bg-muted/40" title={p.pendiente_sql ? "Todavía no existe en la base: corre scripts/262_permisos_acciones.sql" : p.descripcion ?? ""}>
+                    <Checkbox checked={sel.has(p.codigo)} disabled={p.pendiente_sql} onCheckedChange={(c) => toggle(p.codigo, Boolean(c))} className="mt-0.5" />
+                    <span>
+                      {p.nombre}
+                      {p.pendiente_sql && <span className="ml-1.5 rounded bg-amber-100 px-1 py-px text-[9px] font-semibold uppercase text-amber-800">falta SQL 262</span>}
+                    </span>
                   </label>
                 ))}
             </div>

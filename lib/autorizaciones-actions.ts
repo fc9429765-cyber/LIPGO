@@ -20,6 +20,7 @@ import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin
 import { getCurrentUser } from "@/lib/auth-actions"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
 import { checkModulePermission } from "@/lib/permissions-actions"
+import { PROCESOS_NUEVOS } from "@/lib/politicas-modulos"
 import {
   hashClave,
   verificarClaveHash,
@@ -573,7 +574,7 @@ export async function adminGetResumen(): Promise<Resp<{ data: ResumenAutorizacio
       emails,
       { data: correosRec },
     ] = await Promise.all([
-      sb.from("autorizacion_procesos").select("*").order("orden"),
+      sb.from("autorizacion_procesos").select("*").order("orden").then((r: any) => ({ ...r, data: conProcesosDelCatalogo(r.data) })),
       sb.from("autorizacion_perfiles").select("*").order("nombre"),
       sb.from("autorizacion_perfil_procesos").select("perfil_id, proceso"),
       sb.from("profiles").select("id, usuario, empresa_id").order("usuario"),
@@ -963,13 +964,35 @@ export async function adminGetLog(opts?: {
 // ---------------------------------------------------------------------------
 
 /** Catálogo de procesos autorizables, para la pestaña Autorizaciones del perfil. */
+/**
+ * Suma a las filas de `autorizacion_procesos` los procesos del catálogo
+ * (lib/politicas-modulos.ts) que todavía no existen en la base, marcados
+ * `pendiente_sql`. Así la pantalla muestra las políticas nuevas desde el
+ * despliegue y dice qué SQL falta, en vez de ocultarlas en silencio.
+ */
+function conProcesosDelCatalogo(rows: any[] | null | undefined): ProcesoAutorizable[] {
+  const base = (rows ?? []) as ProcesoAutorizable[]
+  const codigos = new Set(base.map((p) => p.codigo))
+  const pendientes: ProcesoAutorizable[] = PROCESOS_NUEVOS.filter((p) => !codigos.has(p.codigo)).map((p) => ({
+    codigo: p.codigo,
+    nombre: p.nombre,
+    descripcion: p.descripcion,
+    grupo: p.grupo,
+    orden: p.orden,
+    con_alcance: p.con_alcance,
+    activo: true,
+    pendiente_sql: true,
+  }))
+  return [...base, ...pendientes].sort((a, b) => a.grupo.localeCompare(b.grupo) || a.orden - b.orden)
+}
+
 export async function adminListarProcesos(): Promise<Resp<{ data: ProcesoAutorizable[] }>> {
   try {
     if (!(await assertAdmin())) return { success: false, message: "No autorizado" }
     const sb: any = await getSupabaseAdmin()
     const { data, error } = await sb.from("autorizacion_procesos").select("*").eq("activo", true).order("grupo").order("orden")
     if (error) return { success: false, message: error.message }
-    return { success: true, data: (data ?? []) as ProcesoAutorizable[] }
+    return { success: true, data: conProcesosDelCatalogo(data) }
   } catch (e: any) {
     return { success: false, message: e?.message || "No se pudieron cargar los procesos." }
   }

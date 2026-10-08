@@ -674,6 +674,12 @@ export function PerfilesAcceso() {
                       el perfil no define empresas, vale en todos. Los procesos del grupo Financiera solo se pueden dar a
                       usuarios con módulos de Gestión Financiera: el servidor lo rechaza si no.
                     </Nota>
+                    {procesosCat.some((p) => p.pendiente_sql) && (
+                      <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900">
+                        {procesosCat.filter((p) => p.pendiente_sql).length} procesos nuevos del catálogo todavía no existen en la base: corre{" "}
+                        <code className="rounded bg-amber-100 px-1">scripts/262_permisos_acciones.sql</code> para poder otorgarlos.
+                      </p>
+                    )}
                     {procesosCat.length === 0 ? (
                       <p className="py-6 text-center text-xs text-muted-foreground">No hay procesos autorizables cargados.</p>
                     ) : (
@@ -727,10 +733,16 @@ export function PerfilesAcceso() {
                                       <Checkbox
                                         className="mt-0.5"
                                         checked={checked}
+                                        disabled={p.pendiente_sql}
                                         onCheckedChange={(c) => togglear("procesos", p.codigo, !!c)}
                                       />
                                       <span className="min-w-0">
-                                        <span className={`block leading-tight ${checked ? "font-medium" : ""}`}>{p.nombre}</span>
+                                        <span className={`block leading-tight ${checked ? "font-medium" : ""}`}>
+                                          {p.nombre}
+                                          {p.pendiente_sql && (
+                                            <span className="ml-1.5 rounded bg-amber-100 px-1 py-px text-[9px] font-semibold uppercase text-amber-800">falta SQL 262</span>
+                                          )}
+                                        </span>
                                         <span className="block text-[10px] text-muted-foreground">
                                           <span className="font-mono">{p.codigo}</span>
                                           {p.descripcion ? ` · ${p.descripcion}` : ""}

@@ -15,6 +15,8 @@ export interface ProcesoAutorizable {
   orden: number
   con_alcance: boolean
   activo: boolean
+  /** true si el proceso está en el catálogo (lib/politicas-modulos.ts) pero todavía no en la base: falta correr el SQL 262. */
+  pendiente_sql?: boolean
 }
 
 /** Proceso que autoriza EJECUTAR un código de inventario (309/102/602/552/312/343). */
