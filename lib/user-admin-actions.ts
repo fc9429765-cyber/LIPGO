@@ -167,13 +167,68 @@ export async function eliminarUsuario(userId: string, clave?: string): Promise<{
 
     const supabase = await getSupabaseAdmin()
 
-    // Borrado explicito y ordenado de las tablas de la app antes de tocar Auth.
-    // Es robusto sin depender de la config de ON DELETE de cada FK. Los errores
-    // por fila inexistente no son fatales (best-effort por tabla).
-    await supabase.from("perfil_acceso_empresas").delete().eq("profile_id", userId)
-    await supabase.from("perfil_acceso_owners").delete().eq("profile_id", userId)
-    await supabase.from("permisos_usuarios").delete().eq("usuario_id", userId)
-    await supabase.from("profiles").delete().eq("id", userId)
+    /*
+     * SE LIMPIAN LAS DOCE TABLAS QUE APUNTAN A `profiles`, NO TRES.
+     *
+     * Hasta hoy esto borraba tres y pasaba de largo. El problema (ID4, 2026-10-08, al
+     * intentar retirar a los usuarios de Medellín por la entrega del proyecto): las tablas
+     * de autorizaciones por clave nacieron después y nadie las añadió aquí, así que el
+     * borrado de `profiles` chocaba contra su llave foránea. Y como el error de ese borrado
+     * NO se revisaba, seguía de largo hasta Auth y el administrador veía un mensaje de base
+     * de datos que no explicaba nada.
+     *
+     * `auditoria` NO se toca y no hace falta: su `actor_id` es un uuid suelto, sin llave
+     * foránea, y el nombre vive aparte en `actor_nombre`, que es texto. El rastro de lo que
+     * hizo la persona sobrevive intacto al borrado de su usuario, que es justo lo que se
+     * quiere.
+     */
+    for (const [tabla, col] of [
+      ["autorizacion_usuario_perfiles", "usuario_id"],
+      ["autorizacion_usuario_procesos", "usuario_id"],
+      ["autorizacion_recuperacion", "usuario_id"],
+      ["autorizacion_correos", "usuario_id"],
+      ["autorizacion_claves", "usuario_id"],
+      ["acceso_perfil_usuarios", "profile_id"],
+      ["acceso_perfil_materializado", "profile_id"],
+      ["permisos_mapa_procesos", "usuario_id"],
+      ["perfil_acceso_empresas", "profile_id"],
+      ["perfil_acceso_owners", "profile_id"],
+      ["permisos_usuarios", "usuario_id"],
+    ] as const) {
+      const { error } = await supabase.from(tabla).delete().eq(col, userId)
+      // Una tabla que todavía no existe (script sin correr) no puede frenar el borrado.
+      if (error && !/does not exist|schema cache|not find/i.test(error.message)) {
+        console.error(`[user-admin] no se pudo limpiar ${tabla}:`, error.message)
+      }
+    }
+
+    /*
+     * EL CHAT NO SE BORRA EN SILENCIO.
+     *
+     * `messages.receiver_id` también apunta a `profiles`, pero eso es CONTENIDO, no permisos:
+     * son conversaciones que también le pertenecen a quien las escribió. Borrarlas de paso,
+     * sin decirlo, destruiría el historial del otro lado. Se cuenta y se informa para que
+     * quien administra decida.
+     */
+    const { count: mensajes } = await supabase.from("messages").select("id", { count: "exact", head: true }).eq("receiver_id", userId)
+    if (Number(mensajes || 0) > 0) {
+      return {
+        success: false,
+        error:
+          `No se eliminó: este usuario tiene ${mensajes} mensaje(s) del chat interno dirigidos a él. ` +
+          `Son conversaciones que también le pertenecen a quien las escribió, así que no se borran solas. ` +
+          `Si el usuario ya no debe entrar, lo efectivo es quitarle los módulos y bloquear la cuenta: eso le cierra el acceso y conserva el rastro.`,
+      }
+    }
+
+    const { error: errProfile } = await supabase.from("profiles").delete().eq("id", userId)
+    if (errProfile) {
+      console.error("[user-admin] Error borrando profiles:", errProfile.message)
+      return {
+        success: false,
+        error: `No se pudo eliminar el perfil del usuario: ${errProfile.message}. Nada quedó a medias: la cuenta sigue existiendo.`,
+      }
+    }
 
     // Por ultimo, la cuenta de Auth.
     const { error } = await supabase.auth.admin.deleteUser(userId)
