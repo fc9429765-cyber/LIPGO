@@ -3094,31 +3094,32 @@ export async function deleteLoadOrder(orderId: number, clave?: string) {
   }
 }
 
-// Verifica la autorización de CARTERA y devuelve el nombre de quien autoriza.
-// SQL 203: clave PERSONAL con el proceso `ped_aprobar_cartera` en el proyecto
-// del pedido (perfil "Cartera"). Las contraseñas de `usuariocartera` siguen
-// valiendo solo durante la transición.
-export async function verifyCarteraPassword(password: string, idpedido?: number | null) {
-  try {
-    let idempresa: number | null = null
-    if (idpedido) {
-      const supabase = await createClient()
-      const { data } = await supabase.from("pedidoscabecera").select("id_empresa").eq("idpedido", idpedido).maybeSingle()
-      idempresa = data?.id_empresa ?? null
-    }
-    const auth = await autorizar({
-      proceso: "ped_aprobar_cartera",
-      idempresa,
-      clave: password,
-      referencia: idpedido ? `cartera pedido ${idpedido}` : "cartera",
-    })
-    if (!auth.ok) {
-      return { success: false, message: auth.error || "Contraseña de cartera inválida" }
-    }
-    return { success: true, nombre: auth.autorizadoPor, message: "Contraseña válida" }
-  } catch (error) {
-    console.error("[v0] Error verifying cartera password:", error)
-    return { success: false, message: "Error al verificar contraseña" }
+/*
+ * PANTALLA DESACTUALIZADA. Esta acción ya no la llama nadie del código actual.
+ *
+ * Antes de la Fase 0 (2026-10-07) la pantalla hacía dos pasos: verificaba la clave aquí y
+ * después llamaba a `approveCartera(idpedido, NOMBRE)`. Esa segunda acción ahora recibe la
+ * CLAVE, no el nombre, porque recibir el nombre era el hueco: cualquiera podía llamarla con
+ * un nombre inventado y saltarse la clave.
+ *
+ * El problema real (ID2, 2026-10-08): quien tenía la pantalla abierta desde antes del
+ * despliegue seguía ejecutando el código viejo. Verificaba bien y acto seguido mandaba el
+ * nombre donde ahora va la clave, así que la aprobación NO se guardaba y la pantalla decía
+ * "Clave incorrecta. Te quedan 4 intentos". María Camila cambió su clave personal TRES veces
+ * buscando un problema que no estaba en la clave, y cada intento le quemaba un intento real:
+ * a los cinco se habría bloqueado quince minutos.
+ *
+ * Por eso esta acción ya no verifica nada: corta en el PRIMER paso con la instrucción
+ * correcta. El cliente viejo muestra ese mensaje y nunca llega a quemar intentos; el
+ * cliente nuevo ni siquiera pasa por aquí.
+ */
+export async function verifyCarteraPassword(_password?: string, _idpedido?: number | null) {
+  return {
+    success: false,
+    message:
+      "Esta pantalla está desactualizada y por eso no se guarda la aprobación. " +
+      "Recarga la página con Ctrl+Shift+R (o cierra y vuelve a abrir el navegador) e intenta de nuevo. " +
+      "Tu clave está bien: no hace falta cambiarla.",
   }
 }
 
@@ -3131,6 +3132,38 @@ export async function approveCartera(idpedido: number, clave: string) {
     // esta acción con un nombre inventado y saltarse la clave. Ahora la clave
     // se valida aquí, atómica con la escritura (como closePendingOrder).
     const { data: order } = await supabase.from("pedidoscabecera").select("id_empresa").eq("idpedido", idpedido).maybeSingle()
+
+    /*
+     * ¿LLEGÓ UN NOMBRE EN VEZ DE UNA CLAVE? Es una pantalla vieja, no una clave mala.
+     *
+     * El cliente anterior a la Fase 0 mandaba aquí el NOMBRE que le devolvía
+     * `verifyCarteraPassword`. Si se deja pasar, `autorizar` lo cuenta como intento fallido
+     * y la persona ve "Clave incorrecta": cambia su clave una y otra vez sin motivo y a los
+     * cinco intentos se bloquea quince minutos. Pasó en ID2 el 2026-10-08.
+     *
+     * Un nombre propio no es una clave de nadie, así que reconocerlo no debilita el candado:
+     * se compara contra el nombre del usuario en sesión y contra los nombres de
+     * `usuariocartera`, que son los dos únicos valores que el cliente viejo podía mandar.
+     */
+    const posibleNombre = String(clave ?? "").trim()
+    if (posibleNombre) {
+      const { usuario } = await getCurrentUserContext().catch(() => ({ usuario: null as string | null }))
+      let esNombre = !!usuario && posibleNombre.toLowerCase() === String(usuario).trim().toLowerCase()
+      if (!esNombre) {
+        const { data: cart } = await supabase.from("usuariocartera").select("nombre")
+        esNombre = (cart ?? []).some((c: any) => String(c.nombre ?? "").trim().toLowerCase() === posibleNombre.toLowerCase())
+      }
+      if (esNombre) {
+        return {
+          success: false,
+          message:
+            "Esta pantalla está desactualizada y por eso no se guardó la aprobación. " +
+            "Recarga la página con Ctrl+Shift+R (o cierra y vuelve a abrir el navegador) e intenta de nuevo. " +
+            "Tu clave está bien: no hace falta cambiarla.",
+        }
+      }
+    }
+
     const auth = await autorizar({
       proceso: "ped_aprobar_cartera",
       idempresa: order?.id_empresa ?? null,
