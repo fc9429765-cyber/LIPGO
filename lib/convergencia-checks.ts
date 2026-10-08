@@ -405,21 +405,58 @@ const CHK_RASTRO_SIN_ORDEN = {
 }
 
 /**
+ * Órdenes historicas con rastro suelto, revisadas una por una el 2026-10-08 y dejadas
+ * QUIETAS por instrucción expresa de gerencia: "yo no quiero mover inventarios al día de
+ * hoy, todo está cuadrado y no podemos revivir lotes o cambiar nada del pasado".
+ *
+ * Medido completo: 49 órdenes, 149 movimientos de inventario TODOS aprobados por 17.986
+ * unidades, más 72 filas de asignación de lote. Por proyecto: ID3 26 órdenes / 15.539 und,
+ * ID1 20 / 1.083, ID2 2 / 1.364, ID4 1 / 0. Todas entre el 8 de enero y el 11 de agosto:
+ * NINGUNA de septiembre ni de octubre, que es lo que dice que el flujo de hoy está limpio.
+ *
+ * Son tres cosas distintas y ninguna se toca:
+ *
+ *   · 24 órdenes con asignación de lote Y con inventario que sí salió y sigue descontado.
+ *     Borrar su asignación dejaría un movimiento real sin su único soporte.
+ *   · 20 órdenes de ID3 de la primera semana de enero con SOLO movimientos de inventario,
+ *     sin asignación. Son las que destapó quitar la ventana de días.
+ *   ·  5 órdenes sin ningún movimiento (9 filas, 2.643 unidades asignadas que nunca
+ *     salieron). Son inertes; se dejan igual porque no hay razón para tocar el pasado.
+ *
+ * SE MIRA TODO EL HISTÓRICO, SIN VENTANA DE DÍAS. Antes solo miraba 30 días, y eso dejaba un
+ * hueco real: si mañana se borra una orden de hace tres meses, su asignación lleva la fecha
+ * vieja y la alerta no la habría visto nunca. Con la lista de revisadas, lo conocido calla y
+ * cualquier caso nuevo —de cualquier fecha— salta.
+ */
+const RASTROS_HISTORICOS_REVISADOS = new Set<string>([
+  // Con asignación de lote y con inventario que sí salió. No se tocan jamás.
+  "IND202601084", "IND2026011014", "IND2026011116", "IND20260126316", "IND20260131503",
+  "IND20260202559", "IND20260203609", "IND20260203623", "IND20260204641", "MOL20260209833",
+  "IND20260210890", "IND20260211956", "IND202602231399", "MOL202603172248", "MOL202603242464",
+  "MOL202603242466", "MOL202603312769", "MOL202604012832", "IND202604103114", "IND202604183488",
+  "IND202604233678", "AVI202605114366", "IND202606065517", "AVI202608107821",
+  // Con asignación de lote y sin ningún movimiento de inventario. Inertes.
+  "MED202602131090", "IND202602191290", "IND202602251524", "IND202603071876", "IND202606035359",
+  // Solo movimientos de inventario, sin asignación: las 20 de ID3 de la primera semana de
+  // enero, cuando el sistema arrancaba. Su `creado` viene nulo, que es por lo que la ventana
+  // de 30 días tampoco las habría visto nunca.
+  "MOL202601021", "MOL202601022", "MOL202601023", "MOL202601025", "MOL202601026",
+  "MOL202601031", "MOL202601032", "MOL202601051", "MOL202601052", "MOL202601053",
+  "MOL202601054", "MOL202601055", "MOL202601061", "MOL202601062", "MOL202601063",
+  "MOL202601064", "MOL202601071", "MOL202601072", "MOL202601073", "MOL202601074",
+])
+
+/**
  * Asignaciones de lote y movimientos de inventario cuya orden de cargue ya no existe.
  *
  * Regla de gerencia (2026-10-07): "toda orden que viva en el sistema debe tener su proceso
  * completo; si no es así es una alerta y debe quedar visible".
  *
- * SOLO MIRA HACIA ADELANTE, por instrucción expresa: "lo pasado que quede así". La deuda
- * histórica medida el 2026-10-07 (72 filas de asignación en 29 órdenes y 149 movimientos en
- * 44 órdenes, toda anterior a septiembre) se deja quieta y queda fuera de la ventana. Desde
- * el 2026-10-06 el borrado de una orden ya se lleva sus rastros, así que lo que aparezca aquí
- * es nuevo y hay que mirarlo.
+ * Desde el 2026-10-06 el borrado de una orden se lleva sus rastros, y desde el 2026-10-07
+ * ni se puede borrar una orden que ya despachó, así que lo que aparezca aquí es nuevo.
  */
-export async function checkRastroSinOrden(sb: SB, dias = 30): Promise<ResultadoCheck> {
+export async function checkRastroSinOrden(sb: SB): Promise<ResultadoCheck> {
   try {
-    const desde = diasAtrasISO(dias)
-    const desdeFecha = desde.slice(0, 10)
 
     // Las órdenes que existen hoy. Se traen todas: son ~9.500 y el cruce tiene que ser exacto.
     const ordenes = await fetchAllRows((from, to) =>
@@ -436,7 +473,6 @@ export async function checkRastroSinOrden(sb: SB, dias = 30): Promise<ResultadoC
         .select("id, ocargue, idempresa, nombreproducto, cantidad, status, creado")
         .not("ocargue", "is", null)
         .ilike("origen", "orden de cargue")
-        .gte("creado", desde)
         .order("id", { ascending: true })
         .range(from, to),
     )
@@ -444,7 +480,6 @@ export async function checkRastroSinOrden(sb: SB, dias = 30): Promise<ResultadoC
       sb
         .from("historicolotes")
         .select("id, ordendecargue, idempresa, producto, cantidad, fecha")
-        .gte("fecha", desdeFecha)
         .order("id", { ascending: true })
         .range(from, to),
     )
@@ -453,7 +488,7 @@ export async function checkRastroSinOrden(sb: SB, dias = 30): Promise<ResultadoC
     const porOrdenMov = new Map<string, { n: number; und: number; id: number }>()
     for (const m of movimientos) {
       const oc = String(m.ocargue ?? "").trim()
-      if (!oc || existen.has(oc)) continue
+      if (!oc || existen.has(oc) || RASTROS_HISTORICOS_REVISADOS.has(oc)) continue
       const v = porOrdenMov.get(oc) ?? { n: 0, und: 0, id: m.idempresa }
       v.n++
       v.und += n0(m.cantidad)
@@ -466,7 +501,7 @@ export async function checkRastroSinOrden(sb: SB, dias = 30): Promise<ResultadoC
     const porOrdenLote = new Map<string, { n: number; id: number }>()
     for (const l of lotes) {
       const oc = String(l.ordendecargue ?? "").trim()
-      if (!oc || existen.has(oc)) continue
+      if (!oc || existen.has(oc) || RASTROS_HISTORICOS_REVISADOS.has(oc)) continue
       const v = porOrdenLote.get(oc) ?? { n: 0, id: l.idempresa }
       v.n++
       porOrdenLote.set(oc, v)
