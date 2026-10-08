@@ -587,8 +587,74 @@ export async function checkVinculoPorId(sb: SB, dias = 15): Promise<ResultadoChe
   }
 }
 
+const CHK_CICLO_ESTANCADO = {
+  clave: "ciclo_facturacion_estancado",
+  titulo: "Prefacturas aprobadas que llevan días sin avanzar en el ciclo de cobro",
+  regla:
+    "Una prefactura aprobada tiene que avanzar: firmar el anexo, emitir la factura y cobrarla. Si se queda quieta, es plata entregada que nadie está cobrando y nadie se entera hasta que alguien abre la pantalla.",
+  gravedad: "alerta" as const,
+}
+
+/**
+ * El ciclo de facturación, mirado por el lado del dinero.
+ *
+ * Medido el 2026-10-08: las 59 prefacturas aprobadas estaban TODAS en el primer paso
+ * (`pendiente_firma_anexo`), 23 de ellas con más de dos semanas quietas, por $172.418.009.
+ * El cron las crea y las aprueba solo todas las madrugadas, pero el paso siguiente es humano
+ * —conseguir el anexo firmado— y desde que arrancó el ciclo el 1 de octubre nadie lo había
+ * dado. No fallaba nada: simplemente nadie estaba mirando.
+ *
+ * Se respeta el MISMO corte que la pantalla (`CORTE_CICLO_SIIGO`, hoy 2026-10-01). Lo
+ * anterior se facturó por fuera y mostrarlo aquí invitaría a volver a facturarlo, que es
+ * justo lo que ese corte evita: una factura electrónica de más no se borra.
+ */
+export async function checkCicloFacturacion(sb: SB, dias = 7): Promise<ResultadoCheck> {
+  try {
+    const { CORTE_CICLO_SIIGO } = await import("@/lib/ciclo-facturacion-shared")
+    const filas = await fetchAllRows((from, to) =>
+      sb
+        .from("prefacturas")
+        .select("id, idempresa, proyecto, periodo_desde, periodo_hasta, total, estado, estado_ciclo, ciclo_actualizado_en, created_at")
+        .gte("periodo_hasta", CORTE_CICLO_SIIGO)
+        .order("id", { ascending: true })
+        .range(from, to),
+    )
+    const limite = Date.now() - dias * 24 * 60 * 60 * 1000
+    const quietas = filas.filter((p: any) => {
+      // Lo cerrado ya no espera a nadie.
+      if (/anulad|cerrad|cobrad|pagad/i.test(String(p.estado_ciclo ?? "") + String(p.estado ?? ""))) return false
+      const desde = p.ciclo_actualizado_en ?? p.created_at
+      return desde ? new Date(desde).getTime() < limite : false
+    })
+    if (quietas.length === 0) return resultadoDe(CHK_CICLO_ESTANCADO, [])
+
+    const porPaso = new Map<string, { n: number; v: number; emp: Set<number>; masVieja: number }>()
+    for (const p of quietas) {
+      const k = String(p.estado_ciclo ?? "sin paso")
+      const v = porPaso.get(k) ?? { n: 0, v: 0, emp: new Set<number>(), masVieja: Date.now() }
+      v.n++
+      v.v += n0(p.total)
+      v.emp.add(Number(p.idempresa))
+      const t = new Date(p.ciclo_actualizado_en ?? p.created_at).getTime()
+      if (t < v.masVieja) v.masVieja = t
+      porPaso.set(k, v)
+    }
+    const casos = [...porPaso.entries()].map(([paso, v]) => {
+      const diasQuieta = Math.floor((Date.now() - v.masVieja) / (24 * 60 * 60 * 1000))
+      const plata = "$" + Math.round(v.v).toLocaleString("es-CO")
+      const proyectos = [...v.emp].sort().map((e) => `ID${e}`).join(", ")
+      return `${v.n} prefactura(s) en «${paso}» por ${plata} (${proyectos}); la más vieja lleva ${diasQuieta} días quieta`
+    })
+    return resultadoDe(CHK_CICLO_ESTANCADO, casos)
+  } catch (e: any) {
+    const msg = e?.message ?? String(e)
+    const falta = /does not exist|schema cache|not find/i.test(msg)
+    return sinDatos(CHK_CICLO_ESTANCADO, falta ? "la tabla prefacturas no existe todavía" : msg)
+  }
+}
+
 export async function correrChecks(sb: SB): Promise<ResultadoCheck[]> {
-  const [dup, mas, pend, stock, ped, err, rastro, vinculo] = await Promise.all([
+  const [dup, mas, pend, stock, ped, err, rastro, vinculo, ciclo] = await Promise.all([
     checkSalidasDuplicadas(sb),
     checkSalioMasQueOrden(sb),
     checkPendientesInventario(sb),
@@ -597,6 +663,7 @@ export async function correrChecks(sb: SB): Promise<ResultadoCheck[]> {
     checkErroresLegibles(sb),
     checkRastroSinOrden(sb),
     checkVinculoPorId(sb),
+    checkCicloFacturacion(sb),
   ])
-  return [dup, mas, ...pend, ...stock, ...ped, err, rastro, vinculo]
+  return [dup, mas, ...pend, ...stock, ...ped, err, rastro, vinculo, ciclo]
 }
