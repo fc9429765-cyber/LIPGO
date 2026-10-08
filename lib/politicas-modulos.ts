@@ -412,12 +412,17 @@ export function accionesPorClave(): Map<string, AccionDeClave[]> {
       let porLlave = out.get(llave)
       if (!porLlave) out.set(llave, (porLlave = new Map()))
       const key = `${llave}${SEPARADOR_ACCION}${verbo}` as ClaveAccion
+      const etiqueta = pol.etiquetas?.[verbo]
       const prev = porLlave.get(verbo)
       if (prev) {
         prev.modulos.push(modulo)
-        if (prev.label === ETIQUETA_VERBO[verbo] && pol.etiquetas?.[verbo]) prev.label = pol.etiquetas[verbo]!
+        // Varias pantallas comparten la llave: la etiqueta propia solo vale si TODAS
+        // la declaran igual. Si una no la declara o dice otra cosa, el chip vuelve al
+        // verbo genérico (p. ej. "Crear" para gestionsolicitudes, no "Sincronizar
+        // desde Head Count", que es solo lo que significa en Hojas de Vida).
+        if (prev.label !== ETIQUETA_VERBO[verbo] && prev.label !== etiqueta) prev.label = ETIQUETA_VERBO[verbo]
       } else {
-        porLlave.set(verbo, { key, verbo, label: pol.etiquetas?.[verbo] ?? ETIQUETA_VERBO[verbo], modulos: [modulo] })
+        porLlave.set(verbo, { key, verbo, label: etiqueta ?? ETIQUETA_VERBO[verbo], modulos: [modulo] })
       }
     }
   }
