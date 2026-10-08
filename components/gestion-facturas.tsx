@@ -17,6 +17,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useAuth } from "@/components/auth-provider"
+import { BandejaAnexosCoordinador } from "@/components/facturacion/bandeja-anexos-coordinador"
 import { getValoresNetosOrden } from "@/lib/facturacion-control-actions"
 import { GESTION_LIPGO_DESDE } from "@/lib/facturacion-constantes"
 
@@ -80,7 +81,7 @@ const CUENTAS_TRANSFERENCIA = [
 ]
 
 export default function GestionFacturas({ onBack, filtroInicial, onFiltroInicialConsumido }: GestionFacturasProps) {
-  const { selectedEmpresaId } = useAuth()
+  const { selectedEmpresaId, user } = useAuth() as any
   const [loading, setLoading] = useState(true)
   const [ordenes, setOrdenes] = useState<OrdenCargue[]>([])
   // Valor NETO por orden (operación × tarifa por owner/id_empresa, igual que el cuadro).
@@ -1307,6 +1308,11 @@ export default function GestionFacturas({ onBack, filtroInicial, onFiltroInicial
   const listView = (
     <div className="space-y-4">
       {facturaSiigoInput}
+      {/* La bandeja del coordinador LIP: lo que Cartera le envió a su proyecto y espera la
+          firma del cliente. Solo aparece cuando hay algo; para los demás no ocupa nada.
+          Vive aquí, y no en Ciclo de Facturación, porque aquí es donde el coordinador
+          trabaja y no necesita la clave financiera para firmar un anexo de su cliente. */}
+      <BandejaAnexosCoordinador usuario={user?.email || user?.nombre || "usuario"} empresaId={selectedEmpresaId ?? null} />
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">

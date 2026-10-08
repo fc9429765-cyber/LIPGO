@@ -47,3 +47,21 @@ export function fechaAyerColombiaISO(): string {
  * justamente la clase de decisión que no debe tomarse sin querer.
  */
 export const CORTE_CICLO_SIIGO = "2026-10-01"
+
+/**
+ * Proyectos que YA NO SON de LIPgo. Se entregaron y nada de facturación debe
+ * seguir generándose ni mostrándose para ellos: ni el cron, ni la bandeja,
+ * ni las alertas.
+ *
+ * ID4 · Cedi Medellín, entregado el 26 de septiembre de 2026 (gerencia,
+ * 2026-10-08: "saca de la ecuación el ID4 que ya no está con nosotros").
+ *
+ * Va aquí, en código, y NO se tocan sus condiciones en la base: la regla de la
+ * casa es no alterar parámetros por proyecto. Si un día vuelve, se quita de
+ * esta lista y todo sigue como lo dejó.
+ */
+export const PROYECTOS_ENTREGADOS: ReadonlySet<number> = new Set([4])
+
+export function proyectoEntregado(idempresa: number | null | undefined): boolean {
+  return idempresa != null && PROYECTOS_ENTREGADOS.has(Number(idempresa))
+}

@@ -1,12 +1,22 @@
 import { NextResponse } from "next/server"
 import { getUserPermissions } from "@/lib/permissions-actions"
 import { listarCicloFacturacion, type EstadoCiclo } from "@/lib/ciclo-facturacion-actions"
+import { listarBandejaCoordinador } from "@/lib/bandeja-facturacion-actions"
 
 /**
  * A diferencia de los demás `*-alerts` (que solo dependen de `empresaId`),
  * este depende de la SESIÓN: cuenta lo que le corresponde actuar al usuario
- * autenticado según sus permisos (`ciclo_facturacion_jefe`/`_coordinador`),
- * no lo que pasa en una empresa. Ver lib/ciclo-facturacion-actions.ts.
+ * autenticado, no lo que pasa en una empresa.
+ *
+ * DOS CAMINOS (2026-10-08):
+ *
+ *   · Quien tiene los permisos globales del ciclo (`ciclo_facturacion_jefe` /
+ *     `_coordinador`) ve lo de todos sus proyectos y va al módulo «Ciclo de
+ *     Facturación», como hasta hoy.
+ *   · El COORDINADOR LIP de un proyecto —sin permiso global— ve las firmas que
+ *     esperan por él en SU proyecto y va a «Solicitar Facturas», que es donde
+ *     está su bandeja. Hasta hoy la campana no le decía nada: el anexo se
+ *     enviaba y nadie se enteraba.
  */
 const PASOS_DE_JEFE: EstadoCiclo[] = ["pendiente_anexo", "pendiente_factura", "pendiente_cierre"]
 const PASOS_DE_COORDINADOR: EstadoCiclo[] = ["pendiente_firma_anexo", "pendiente_firma_factura"]
@@ -16,10 +26,26 @@ export async function GET() {
     const permisos = await getUserPermissions()
     const esJefe = !!permisos?.ciclo_facturacion_jefe
     const esCoordinador = !!permisos?.ciclo_facturacion_coordinador
-    if (!esJefe && !esCoordinador) return NextResponse.json({ alerts: [], count: 0 })
+
+    if (!esJefe && !esCoordinador) {
+      // Coordinador LIP de proyecto: su bandeja vive en Solicitar Facturas.
+      const bandeja = await listarBandejaCoordinador()
+      if (!bandeja.success || bandeja.data.length === 0) return NextResponse.json({ alerts: [], count: 0, destino: "Solicitar Facturas" })
+      return NextResponse.json({
+        count: bandeja.data.length,
+        destino: "Solicitar Facturas",
+        alerts: bandeja.data.slice(0, 5).map((b) => ({
+          id: b.prefacturaId,
+          proyecto: b.proyecto,
+          owner: b.owner,
+          estado_ciclo: b.estado_ciclo,
+          motivos: ["pendiente_accion"],
+        })),
+      })
+    }
 
     const r = await listarCicloFacturacion({})
-    if (!r.success) return NextResponse.json({ alerts: [], count: 0 })
+    if (!r.success) return NextResponse.json({ alerts: [], count: 0, destino: "Ciclo de Facturación" })
 
     const porId = new Map<number, { id: number; proyecto: string | null; owner: string; estado_ciclo: string; motivos: string[] }>()
 
@@ -50,10 +76,11 @@ export async function GET() {
 
     return NextResponse.json({
       count: pendientes.length,
+      destino: "Ciclo de Facturación",
       alerts: pendientes.slice(0, 5),
     })
   } catch (error) {
     console.error("[ciclo-facturacion-alerts] error:", error)
-    return NextResponse.json({ alerts: [], count: 0 }, { status: 500 })
+    return NextResponse.json({ alerts: [], count: 0, destino: "Ciclo de Facturación" }, { status: 500 })
   }
 }

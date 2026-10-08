@@ -41,7 +41,8 @@ import {
   type UnidadCobro,
 } from "@/lib/facturacion-control-actions"
 import { valorListoParaAnexo, tonListoParaAnexo } from "@/lib/facturacion-control-shared"
-import { ownerDePrefactura, fechaAyerColombiaISO } from "@/lib/ciclo-facturacion-shared"
+import { ownerDePrefactura, fechaAyerColombiaISO, proyectoEntregado } from "@/lib/ciclo-facturacion-shared"
+import { puedoActuarComoCoordinadorEn } from "@/lib/bandeja-facturacion-actions"
 import { getUserPermissions } from "@/lib/permissions-actions"
 import { autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
 
@@ -150,9 +151,23 @@ const ROL_POR_ESTADO: Record<EstadoCiclo, "jefe" | "coordinador" | null> = {
   cerrado: null,
 }
 
-async function verificarPermisoCiclo(rol: "jefe" | "coordinador"): Promise<string | null> {
+async function verificarPermisoCiclo(rol: "jefe" | "coordinador", idempresa?: number | null): Promise<string | null> {
   const permisos = await getUserPermissions()
-  const tienePermiso = rol === "jefe" ? permisos?.ciclo_facturacion_jefe : permisos?.ciclo_facturacion_coordinador
+  let tienePermiso = rol === "jefe" ? !!permisos?.ciclo_facturacion_jefe : !!permisos?.ciclo_facturacion_coordinador
+  /*
+   * EL COORDINADOR LIP DEL PROYECTO TAMBIÉN PUEDE (2026-10-08).
+   *
+   * El paso del coordinador —la firma del cliente— es de quien coordina ESE
+   * proyecto, no de quien tenga un permiso global del ciclo. Hasta hoy solo
+   * cuatro administradores tenían ese permiso y ningún coordinador de proyecto:
+   * el anexo se enviaba a nadie. Se reconoce al coordinador por su perfil de
+   * autorización «Coordinador LIP» con alcance al proyecto de la prefactura, la
+   * misma fuente con la que ya autoriza con clave. El permiso global sigue
+   * valiendo: nadie pierde nada. Ver lib/ciclo-facturacion-bandeja.ts.
+   */
+  if (!tienePermiso && rol === "coordinador" && idempresa != null) {
+    tienePermiso = await puedoActuarComoCoordinadorEn(idempresa)
+  }
   if (!tienePermiso) {
     return `No tienes el permiso de ${rol === "jefe" ? "Jefe de Facturación" : "Coordinador"} en Ciclo de Facturación -- este paso no te corresponde.`
   }
@@ -192,7 +207,8 @@ export async function listarCicloFacturacion(filtros?: {
   try {
     const sb: any = await getSupabaseAdmin()
     const accesibles = await getAccessibleEmpresesFromPermisos()
-    const idsAccesibles = accesibles.map((e) => e.id)
+    // Un proyecto entregado ya no se factura desde aquí (ID4, Cedi Medellín, 26-sep-2026).
+    const idsAccesibles = accesibles.map((e) => e.id).filter((id) => !proyectoEntregado(id))
     if (idsAccesibles.length === 0) return { success: true, data: [] }
 
     let query = sb
@@ -299,19 +315,21 @@ export async function registrarEventoCiclo(
 ): Promise<{ success: boolean; message?: string }> {
   if (!archivos.length) return { success: false, message: "Adjunta al menos un archivo." }
   try {
-    if (!origenSistema) {
-      const rolRequerido = evento === "anexo_enviado" || evento === "factura_enviada" ? "jefe" : "coordinador"
-      const errPermiso = await verificarPermisoCiclo(rolRequerido)
-      if (errPermiso) return { success: false, message: errPermiso }
-    }
     const sb: any = await getSupabaseAdmin()
+    // La prefactura se lee ANTES del permiso: el paso del coordinador se decide por
+    // el PROYECTO de la prefactura (su coordinador LIP), y para eso hay que saber cuál es.
     const { data: pref, error: errPref } = await sb
       .from("prefacturas")
-      .select("id, estado, estado_ciclo")
+      .select("id, idempresa, estado, estado_ciclo")
       .eq("id", prefacturaId)
       .maybeSingle()
     if (errPref) return { success: false, message: errPref.message }
     if (!pref) return { success: false, message: "Prefactura no encontrada." }
+    if (!origenSistema) {
+      const rolRequerido = evento === "anexo_enviado" || evento === "factura_enviada" ? "jefe" : "coordinador"
+      const errPermiso = await verificarPermisoCiclo(rolRequerido, pref.idempresa == null ? null : Number(pref.idempresa))
+      if (errPermiso) return { success: false, message: errPermiso }
+    }
     if (pref.estado !== "aprobada") return { success: false, message: "Esta prefactura todavía no está aprobada." }
 
     const transicion = TRANSICION[evento]
