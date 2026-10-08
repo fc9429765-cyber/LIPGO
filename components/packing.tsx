@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -93,6 +93,9 @@ export function Packing() {
   const [confirmingPacking, setConfirmingPacking] = useState(false)
 
   const [photoDialogOpen, setPhotoDialogOpen] = useState(false)
+  // Dos entradas de archivo: el carrete del dispositivo y la cámara (ver el diálogo de fotos).
+  const galeriaInputRef = useRef<HTMLInputElement>(null)
+  const camaraInputRef = useRef<HTMLInputElement>(null)
   const [selectedPhotosOrder, setSelectedPhotosOrder] = useState<PendingLoadOrder | null>(null)
   const [selectedPhotos, setSelectedPhotos] = useState<File[]>([])
   const [uploadingPhotos, setUploadingPhotos] = useState(false)
@@ -442,6 +445,10 @@ export function Packing() {
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
+    // Se limpia el input para que el mismo archivo (o la misma camara) pueda
+    // volver a usarse: sin esto, elegir dos veces seguidas no dispara el cambio
+    // y las fotos de la segunda tanda se perderian en silencio.
+    e.target.value = ""
 
     if (files.length + selectedPhotos.length > 30) {
       toast({
@@ -884,16 +891,54 @@ export function Packing() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Input
+              {/*
+                DOS CAMINOS: el carrete del dispositivo y la camara.
+
+                Reportado por el coordinador de ID2 el 2026-10-07: no se podian adjuntar
+                fotos ya tomadas y para cerrar la orden tocaba volver a tomarlas. La causa
+                era un solo input con `capture="environment"`: en el celular ese atributo
+                abre la camara directo y QUITA la opcion de galeria. Ademas anulaba el
+                `multiple`, porque la camara entrega una foto a la vez, asi que el limite de
+                30 era inalcanzable desde el telefono.
+
+                Mismo patron que `ciclo-facturacion/adjuntos-uploader.tsx`: dos inputs
+                ocultos, uno limpio para el dispositivo y otro con `capture` para la camara,
+                y un boton para cada uno. En computador el primero abre el explorador de
+                archivos, como siempre.
+              */}
+              <input
+                ref={galeriaInputRef}
                 type="file"
                 accept="image/*"
                 multiple
-                capture="environment"
+                className="sr-only"
+                aria-hidden="true"
+                tabIndex={-1}
                 onChange={handlePhotoChange}
-                className="cursor-pointer"
               />
+              <input
+                ref={camaraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="sr-only"
+                aria-hidden="true"
+                tabIndex={-1}
+                onChange={handlePhotoChange}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" onClick={() => galeriaInputRef.current?.click()}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Elegir del dispositivo
+                </Button>
+                <Button variant="outline" onClick={() => camaraInputRef.current?.click()}>
+                  <Camera className="mr-2 h-4 w-4" />
+                  Tomar foto
+                </Button>
+              </div>
               <p className="text-sm text-muted-foreground mt-1">
-                Máximo 30 fotos. {selectedPhotos.length} seleccionadas.
+                Máximo 30 fotos. {selectedPhotos.length} seleccionadas. Puedes combinar fotos del dispositivo con fotos
+                tomadas ahora.
               </p>
             </div>
 
