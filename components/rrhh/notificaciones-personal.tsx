@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/components/ui/use-toast"
+import { reportarErrorApp } from "@/lib/errores-app"
 import { Factory, ClipboardList, Send, Users, CalendarClock, MessageSquare, AlertCircle, CheckCircle2, History, Truck, Settings2 } from "lucide-react"
 // La configuracion y las pruebas de WhatsApp viven AQUI: es el mismo canal que
 // usa este modulo para enviar, y tenerlas en dos sitios distintos hacia que
@@ -106,6 +107,8 @@ export default function NotificacionesPersonal() {
   const [destinatarios, setDestinatarios] = useState<Destinatario[]>([])
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [cargando, setCargando] = useState(false)
+  // Motivo del fallo al cargar la lista. Null = la consulta respondio bien (aunque venga vacia).
+  const [falloCarga, setFalloCarga] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
   const [historial, setHistorial] = useState<RegistroHistorial[]>([])
   const [cargandoHist, setCargandoHist] = useState(false)
@@ -119,19 +122,54 @@ export default function NotificacionesPersonal() {
   // Turno y conductor usan la fecha para acotar el listado.
   const usaFecha = tipo === "turno" || tipo === "conductor"
 
+  /*
+   * UNA LISTA VACIA Y UNA CONSULTA CAIDA NO SON LO MISMO (2026-10-07).
+   *
+   * Hasta hoy esto no miraba `res.ok`: si la ruta respondia 403 o 500, el `?? []` dejaba la
+   * lista vacia y la pantalla decia "No hay personal programado para esa fecha". El
+   * coordinador leia que no habia nadie a quien avisar, el boton de enviar quedaba
+   * deshabilitado, y no quedaba rastro en ninguna parte: ni en `notificaciones_enviadas`
+   * (no se envio) ni en `app_errores` (nadie reportaba). Asi se perdio una tarde de
+   * diagnostico con el coordinador de ID1.
+   *
+   * Ahora un fallo se distingue, se dice en pantalla con su causa y queda registrado.
+   */
   const cargarDestinatarios = useCallback(async () => {
     if (!selectedEmpresaId) return
     setCargando(true)
+    setFalloCarga(null)
     try {
       const params = new URLSearchParams({ empresaId: String(selectedEmpresaId), tipo })
       if (tipo === "turno" || tipo === "conductor") params.set("fecha", fecha)
       const res = await fetch(`/api/notificaciones/destinatarios?${params.toString()}`)
-      const json = await res.json()
-      const lista: Destinatario[] = json.destinatarios ?? []
+      const json = await res.json().catch(() => ({}) as Record<string, unknown>)
+      if (!res.ok) {
+        const motivo = String((json as any)?.error ?? `El servidor respondio ${res.status}`)
+        setDestinatarios([])
+        setSeleccion(new Set())
+        setFalloCarga(motivo)
+        reportarErrorApp({
+          origen: "cliente",
+          mensaje: `Notificaciones al Personal: no se pudo cargar la lista (${res.status}): ${motivo}`,
+          extra: { empresaId: selectedEmpresaId, tipo, fecha: tipo === "alerta" ? null : fecha, estado: res.status },
+        })
+        toast({ title: "No se pudo cargar el personal", description: motivo, variant: "destructive" })
+        return
+      }
+      const lista: Destinatario[] = (json as any).destinatarios ?? []
       setDestinatarios(lista)
       // Preseleccionar solo los que tienen celular valido.
       setSeleccion(new Set(lista.filter((d) => d.celularValido).map((d) => d.documento)))
-    } catch {
+    } catch (e: any) {
+      const motivo = e?.message ? String(e.message) : "No se pudo conectar"
+      setDestinatarios([])
+      setSeleccion(new Set())
+      setFalloCarga(motivo)
+      reportarErrorApp({
+        origen: "cliente",
+        mensaje: `Notificaciones al Personal: no se pudo cargar la lista: ${motivo}`,
+        extra: { empresaId: selectedEmpresaId, tipo, fecha: tipo === "alerta" ? null : fecha },
+      })
       toast({ title: "Error", description: "No se pudo cargar el personal", variant: "destructive" })
     } finally {
       setCargando(false)
@@ -210,9 +248,15 @@ export default function NotificacionesPersonal() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
-      const json = await res.json()
+      const json = await res.json().catch(() => ({}) as Record<string, unknown>)
       if (!res.ok) {
-        toast({ title: "Error al enviar", description: json.error ?? "Intenta de nuevo", variant: "destructive" })
+        const motivo = String((json as any)?.error ?? `El servidor respondio ${res.status}`)
+        reportarErrorApp({
+          origen: "cliente",
+          mensaje: `Notificaciones al Personal: el envio fue rechazado (${res.status}): ${motivo}`,
+          extra: { empresaId: selectedEmpresaId, tipo, destinatarios: seleccionValida.length, estado: res.status },
+        })
+        toast({ title: "Error al enviar", description: motivo, variant: "destructive" })
         return
       }
       const modo = json.simulado ? "simulados (modo prueba)" : "enviados"
@@ -220,7 +264,14 @@ export default function NotificacionesPersonal() {
         title: json.simulado ? "Envio simulado" : "Envio realizado",
         description: `${json.total} mensajes procesados · ${json.simulado ? json.simulados : json.enviados} ${modo}${json.errores ? ` · ${json.errores} con error` : ""}${json.sinCelular ? ` · ${json.sinCelular} sin celular` : ""}`,
       })
-    } catch {
+    } catch (e: any) {
+      // Un envio que se cae sin rastro es un envio que nadie puede diagnosticar despues.
+      reportarErrorApp({
+        origen: "cliente",
+        mensaje: `Notificaciones al Personal: el envio no se completo: ${e?.message ? String(e.message) : "sin mensaje"}`,
+        stack: e?.stack ?? null,
+        extra: { empresaId: selectedEmpresaId, tipo, destinatarios: seleccionValida.length },
+      })
       toast({ title: "Error", description: "No se pudo completar el envio", variant: "destructive" })
     } finally {
       setEnviando(false)
@@ -380,6 +431,19 @@ export default function NotificacionesPersonal() {
                 <ScrollArea className="h-[340px] rounded-md border">
                   {cargando ? (
                     <div className="p-4 text-sm text-muted-foreground">Cargando personal...</div>
+                  ) : falloCarga ? (
+                    // No decir "no hay nadie" cuando lo que paso es que la consulta fallo.
+                    <div className="space-y-2 p-4 text-sm">
+                      <p className="font-medium text-destructive">No se pudo consultar el personal.</p>
+                      <p className="text-muted-foreground">{falloCarga}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Esto no significa que no haya personal programado: la consulta no respondio. Queda registrado
+                        para revisarlo.
+                      </p>
+                      <Button variant="outline" size="sm" onClick={cargarDestinatarios}>
+                        Volver a intentar
+                      </Button>
+                    </div>
                   ) : destinatarios.length === 0 ? (
                     <div className="p-4 text-sm text-muted-foreground">
                       {tipo === "turno"
