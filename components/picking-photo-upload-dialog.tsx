@@ -7,7 +7,7 @@
 // compresión.
 
 import type React from "react"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -17,9 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Upload } from "lucide-react"
+import { Camera, Upload } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 const compressImage = (file: File, maxWidth = 1200, quality = 0.7): Promise<File> => {
@@ -73,8 +71,23 @@ const compressImage = (file: File, maxWidth = 1200, quality = 0.7): Promise<File
   })
 }
 
+/*
+ * Se comprime POR TANDAS, no las treinta de una.
+ *
+ * `compressImage` lee cada foto con `readAsDataURL`, y una foto de 5 MB se vuelve una
+ * cadena de ~6,7 MB en memoria. Con `Promise.all` sobre treinta fotos del cargue, las
+ * treinta cadenas existen al mismo tiempo: cerca de 200 MB en un celular, suficiente para
+ * que el navegador mate la pestaña justo cuando se están subiendo las fotos de la orden.
+ * De cuatro en cuatro el pico es el 13 % de eso y el orden se conserva igual.
+ */
 const compressImages = async (files: File[], maxWidth = 1200, quality = 0.7): Promise<File[]> => {
-  return Promise.all(files.map((file) => compressImage(file, maxWidth, quality)))
+  const salida: File[] = []
+  const TANDA = 4
+  for (let i = 0; i < files.length; i += TANDA) {
+    const tanda = files.slice(i, i + TANDA)
+    salida.push(...(await Promise.all(tanda.map((file) => compressImage(file, maxWidth, quality)))))
+  }
+  return salida
 }
 
 interface PickingPhotoUploadDialogProps {
@@ -100,9 +113,15 @@ export function PickingPhotoUploadDialog({
   const [selectedPhotos, setSelectedPhotos] = useState<File[]>([])
   const [photoPreviewUrls, setPhotoPreviewUrls] = useState<string[]>([])
   const [uploadingPhotos, setUploadingPhotos] = useState(false)
+  // Dos entradas de archivo: el carrete del dispositivo y la cámara (ver el diálogo).
+  const galeriaInputRef = useRef<HTMLInputElement>(null)
+  const camaraInputRef = useRef<HTMLInputElement>(null)
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
+    // Se limpia el input para que el mismo boton pueda volver a usarse: sin esto, elegir
+    // dos veces seguidas no dispara el cambio y la segunda tanda se pierde en silencio.
+    e.target.value = ""
 
     if (files.length + selectedPhotos.length > 30) {
       toast({
@@ -156,6 +175,27 @@ export function PickingPhotoUploadDialog({
         description: `Procesando ${selectedPhotos.length} foto(s)...`,
       })
       const photosToUpload = await compressImages(selectedPhotos, 1280, 0.6)
+
+      /*
+       * UNA FOTO QUE EL NAVEGADOR NO PUDO LEER SE DICE POR SU NOMBRE.
+       *
+       * `compressImage` devuelve el archivo ORIGINAL cuando no logra decodificarlo (por
+       * ejemplo un .heic de iPhone elegido desde Archivos en vez de Fototeca). Sin comprimir
+       * puede pasar del límite ~4,5 MB del body y el servidor lo rechaza con un mensaje
+       * genérico, dejando a quien cierra la orden adivinando cuál de las treinta fue.
+       */
+      const pesadas = photosToUpload.filter((f) => f.size > 4 * 1024 * 1024)
+      if (pesadas.length > 0) {
+        const detalle = pesadas
+          .slice(0, 3)
+          .map((f) => `${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)`)
+          .join(", ")
+        throw new Error(
+          `${pesadas.length} foto(s) pesan demasiado y el navegador no las pudo optimizar: ${detalle}${
+            pesadas.length > 3 ? " y otras" : ""
+          }. Quítalas y vuelve a elegirlas desde la galería de fotos (no desde Archivos), o tómalas con la cámara.`,
+        )
+      }
 
       const orderIdStr = orderId.toString()
       const urls: string[] = []
@@ -226,21 +266,51 @@ export function PickingPhotoUploadDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="flex items-center gap-4">
-            <Label htmlFor="photo-upload" className="cursor-pointer">
-              <div className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
-                <Upload className="h-4 w-4" />
-                <span>Seleccionar Fotos</span>
-              </div>
-            </Label>
-            <Input
-              id="photo-upload"
+          {/*
+            LOS INPUTS VAN CON `sr-only`, NUNCA CON `hidden`.
+
+            Hasta hoy este input estaba oculto con la clase `hidden`, que es `display:none`.
+            En iOS Safari un input así A VECES no dispara el evento `change` después de
+            elegir la foto: el coordinador selecciona las fotos del cargue, no aparece
+            ninguna miniatura y no hay ningún error que mirar. La advertencia ya estaba
+            escrita en `gestion-facturas.tsx`; aquí faltaba aplicarla. Con `sr-only` el
+            input sigue en el DOM, invisible e inalcanzable con el teclado, y el evento
+            llega siempre.
+
+            Y son DOS, igual que en Packing: el flujo real es tomar las fotos durante el
+            cargue y subirlas aquí, así que el camino principal es la galería; la cámara
+            queda a un toque para quien la necesite. La descripción del diálogo ya prometía
+            las dos cosas.
+          */}
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              ref={galeriaInputRef}
               type="file"
               accept="image/*"
               multiple
-              className="hidden"
+              className="sr-only"
+              aria-hidden="true"
+              tabIndex={-1}
               onChange={handlePhotoChange}
             />
+            <input
+              ref={camaraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="sr-only"
+              aria-hidden="true"
+              tabIndex={-1}
+              onChange={handlePhotoChange}
+            />
+            <Button onClick={() => galeriaInputRef.current?.click()}>
+              <Upload className="mr-2 h-4 w-4" />
+              Elegir del dispositivo
+            </Button>
+            <Button variant="outline" onClick={() => camaraInputRef.current?.click()}>
+              <Camera className="mr-2 h-4 w-4" />
+              Tomar foto
+            </Button>
             <span className="text-sm text-muted-foreground">{selectedPhotos.length} / 30 fotos seleccionadas</span>
           </div>
 
