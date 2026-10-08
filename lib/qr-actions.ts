@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase-client"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { generateAndUploadProductionEntryPDF } from "@/lib/pdf-actions"
 import { getCurrentEmpresaIdForInsert, getCurrentUsuarioForInsert } from "@/lib/user-context"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 export async function getQRRegistrationData() {
   const supabase = await createClient()
@@ -136,6 +137,9 @@ export async function savePalletRegistration(data: {
   codproducto: string
   localizacion: string
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Registro de QR estibas"], "crear")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   const supabase = await createClient()
 
   try {
@@ -491,6 +495,9 @@ export async function registerPalletTransfer(params: {
   cantidad: number
   selectedEmpresaId?: number
 }): Promise<{ success: boolean; message: string; labels: PalletTransferLabel[] }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Traslados de producto", "Registro de QR estibas"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion, labels: [] }
   const supabase = await createClient()
 
   try {

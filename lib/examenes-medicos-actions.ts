@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase-client"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import { cargoCanonico } from "@/lib/headcount-cargos"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 export interface ExamenMedico {
   id: string
@@ -143,6 +144,9 @@ export async function getCostoExamenDefault(selectedEmpresaId?: number | null): 
 
 // Guarda el costo por defecto del examen para la empresa (upsert).
 export async function setCostoExamenDefault(valor: number, selectedEmpresaId?: number | null) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Examenes Médicos"], "configurar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const admin: any = await getSupabaseAdmin()
   const empresaId = selectedEmpresaId || (await getCurrentEmpresaIdForInsert())
   if (!empresaId) return { success: false, message: "Sin empresa seleccionada." }
@@ -171,6 +175,9 @@ export async function registrarConceptoExamen(payload: {
   fecha_examen?: string | null
   observaciones?: string | null
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Examenes Médicos"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const admin: any = await getSupabaseAdmin()
   const { id, apto } = payload
   if (!id) return { success: false, message: "Falta el examen." }
@@ -239,6 +246,9 @@ export async function registrarConceptoExamen(payload: {
 // si no, lo crea como personal activo. NO toca a los antiguos ya vinculados.
 // ---------------------------------------------------------------------
 export async function promoverAHeadCount(cedula: string, empresaId: number) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Examenes Médicos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const admin: any = await getSupabaseAdmin()
   const ced = (cedula || "").trim()
   if (!ced || !empresaId) return { success: false, message: "Falta cédula o empresa." }
@@ -331,6 +341,9 @@ export async function getAptitudPorCedula(cedula: string, selectedEmpresaId?: nu
 // de aptitud quede completo. Idempotente por cédula (no duplica).
 // ---------------------------------------------------------------------
 export async function importarExamenesDesdeHeadcount(selectedEmpresaId?: number | null) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Examenes Médicos"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const admin: any = await getSupabaseAdmin()
   const empresaId = selectedEmpresaId || (await getCurrentEmpresaIdForInsert())
   if (!empresaId) return { success: false, creados: 0, message: "Sin empresa seleccionada." }
@@ -407,6 +420,9 @@ export async function importarExamenesDesdeHeadcount(selectedEmpresaId?: number 
 // (es una revalidación de histórico); solo corrige la clasificación.
 // ---------------------------------------------------------------------
 export async function revalidarExamenesDesdeDocumento(selectedEmpresaId?: number | null) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Examenes Médicos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const { leerConceptoAptitudDesdeUrl } = await import("@/lib/examenes-ocr")
   const admin: any = await getSupabaseAdmin()
   const empresaId = selectedEmpresaId || (await getCurrentEmpresaIdForInsert())
@@ -469,6 +485,9 @@ export async function getCostoPeriodico(selectedEmpresaId?: number | null): Prom
 }
 
 export async function setCostoPeriodico(valor: number, selectedEmpresaId?: number | null) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Examenes Médicos"], "configurar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const sb: any = await getSupabaseAdmin()
   const empresaId = selectedEmpresaId || (await getCurrentEmpresaIdForInsert())
   if (!empresaId) return { success: false, message: "Sin empresa seleccionada." }
@@ -561,6 +580,9 @@ export async function getExamenesPeriodicos(selectedEmpresaId?: number | null) {
 
 // Elimina un examen medico (archivo en Storage + registro).
 export async function deleteExamenMedico(id: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Examenes Médicos"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   const { data: current } = await supabase

@@ -31,6 +31,7 @@ import { generatePackingPDF, getPackingItems } from "@/lib/packing-actions"
 // ORDEN (tabla `pausas`), no exclusivas de Cargue — mismo criterio que ya
 // usa components/packing.tsx.
 import { getOrdenesPausadas } from "@/lib/picking-actions"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const num = (v: any) => Number(v || 0)
 const round1 = (v: number) => Math.round(v * 10) / 10
@@ -962,6 +963,9 @@ export async function asignarOrdenAMuelle(
   orderId: number,
   muelle: number,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Centro de Coordinación"], "editar", "Asignar muelle")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   const { data: orderRow, error: fetchErr } = await supabase
@@ -1026,6 +1030,9 @@ export async function asignarOrdenAMuelle(
  * esa hora perdería un hecho que ya ocurrió y falsearía el tiempo de cargue.
  */
 export async function liberarMuelle(orderId: number): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Centro de Coordinación"], "editar", "Liberar muelle")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const { error } = await supabase.from("cabeceraoc").update({ muelle: null }).eq("id", orderId)
   if (error) return { success: false, message: error.message }
@@ -1037,6 +1044,9 @@ export async function iniciarOrdenEnMuelle(
   muelle: number,
   orderData: { ordendecargue: string; cliente: string; placa: string; conductor: string; tipooperacion: TipoOperacion },
 ): Promise<{ success: boolean; message?: string; url?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Centro de Coordinación"], "editar", "Iniciar en muelle")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const asigna = await asignarOrdenAMuelle(orderId, muelle)
   if (!asigna.success) return asigna
 

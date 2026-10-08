@@ -22,6 +22,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { checkModulePermission } from "@/lib/permissions-actions"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
 import { resolverEquipo } from "@/lib/montacargas-alias"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const MODULO = "Gestión de Montacargas"
 
@@ -238,6 +239,9 @@ export async function getMontacargaPorQR(codigo: string): Promise<ActionResult<M
 }
 
 export async function crearMontacarga(idempresa: number, input: Record<string, any>): Promise<ActionResult<{ id: number }>> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Montacargas"], "crear")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!idempresa) return { success: false, error: "Selecciona un proyecto." }
   if (!(await checkModulePermission(MODULO))) return { success: false, error: "No tienes permiso para este módulo." }
   const identificacion = txt(input.identificacion)
@@ -294,6 +298,9 @@ export async function actualizarMontacarga(
   id: number,
   input: Record<string, any>,
 ): Promise<ActionResult> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Montacargas"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!idempresa || !id) return { success: false, error: "Faltan datos." }
   if (!(await checkModulePermission(MODULO))) return { success: false, error: "No tienes permiso para este módulo." }
   try {
@@ -322,6 +329,9 @@ export async function actualizarMontacarga(
 /** Baja LÓGICA: el equipo desaparece de los listados pero conserva su hoja de
  *  vida. Borrarlo dejaría mantenimientos huérfanos. */
 export async function darDeBajaMontacarga(idempresa: number, id: number, motivo?: string): Promise<ActionResult> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Montacargas"], "eliminar", "Dar de baja")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!idempresa || !id) return { success: false, error: "Faltan datos." }
   if (!(await checkModulePermission(MODULO))) return { success: false, error: "No tienes permiso para este módulo." }
   try {
@@ -423,6 +433,9 @@ export async function registrarActividad(input: {
   costo?: string | number | null
   fotos?: Array<{ url: string; nombre?: string | null }>
 }): Promise<ActionResult<{ id: number }>> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Montacargas"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!input?.equipoId || !input?.idempresa) return { success: false, error: "Faltan datos del equipo." }
   if (!(await checkModulePermission(MODULO))) return { success: false, error: "No tienes permiso para este módulo." }
   if (!txt(input.descripcion)) return { success: false, error: "Describe qué se encontró o qué se hizo." }
@@ -487,6 +500,9 @@ export async function cerrarActividad(input: {
   proveedor?: string | null
   fotos?: Array<{ url: string; nombre?: string | null }>
 }): Promise<ActionResult> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Montacargas"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!input?.actividadId) return { success: false, error: "Actividad inválida." }
   if (!(await checkModulePermission(MODULO))) return { success: false, error: "No tienes permiso para este módulo." }
   if (!txt(input.solucion)) return { success: false, error: "Describe qué se hizo para resolverlo." }
@@ -699,6 +715,9 @@ export async function guardarDocumento(input: {
   archivo_nombre?: string | null
   observacion?: string | null
 }): Promise<ActionResult> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Montacargas"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!input?.equipoId || !input?.idempresa) return { success: false, error: "Faltan datos." }
   if (!(await checkModulePermission(MODULO))) return { success: false, error: "No tienes permiso para este módulo." }
   if (!txt(input.tipo)) return { success: false, error: "Indica de qué documento se trata." }
@@ -724,6 +743,9 @@ export async function guardarDocumento(input: {
 }
 
 export async function eliminarDocumento(idempresa: number, id: number): Promise<ActionResult> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Montacargas"], "eliminar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!idempresa || !id) return { success: false, error: "Faltan datos." }
   if (!(await checkModulePermission(MODULO))) return { success: false, error: "No tienes permiso para este módulo." }
   try {

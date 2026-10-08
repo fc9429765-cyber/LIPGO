@@ -17,6 +17,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { registrarErrorServidor } from "@/lib/errores-servidor"
 import { clasificarDiaCotizacion } from "@/lib/parafiscales"
+import { autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
 
 // Corte de la reversión "nómina pendiente vuelve a pagarse por el plano"
 // (2026-09-08, pedido explícito del usuario): antes, al retirarse alguien se
@@ -726,7 +727,12 @@ export async function getParametrosPrestaciones(): Promise<{ success: boolean; d
 
 export async function guardarParametrosPrestaciones(
   p: ParametrosPrestaciones,
+  clave?: string,
 ): Promise<{ success: boolean; message?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Liquidaciones", "configurar", { clave: clave ?? "", idempresa: null, referencia: "parámetros de prestaciones" })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   try {
     const admin: any = await getSupabaseAdmin()
     const { error } = await admin.from("parametros_prestaciones").upsert(
@@ -763,7 +769,13 @@ export async function guardarEstadoLiquidacion(payload: {
   fecha_retiro: string | null
   total: number
   estado: EstadoLiquidacion
-}): Promise<{ success: boolean; message?: string }> {
+},
+  clave?: string,
+): Promise<{ success: boolean; message?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Liquidaciones", "aprobar", { clave: clave ?? "", idempresa: null, referencia: `estado liquidación ${payload?.identificacion}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   if (!payload?.identificacion) return { success: false, message: "Datos incompletos." }
   try {
     const admin: any = await getSupabaseAdmin()
@@ -796,7 +808,12 @@ export async function guardarEstadoLiquidacionMasivo(
     total: number
   }>,
   estado: EstadoLiquidacion,
+  clave?: string,
 ): Promise<{ success: boolean; message?: string; actualizadas: number }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Liquidaciones", "aprobar", { clave: clave ?? "", idempresa: null, referencia: `estado liquidación masivo (${items?.length ?? 0})` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización.", actualizadas: 0 }
   if (!items?.length) return { success: false, message: "No hay liquidaciones seleccionadas.", actualizadas: 0 }
   try {
     const admin: any = await getSupabaseAdmin()
@@ -833,6 +850,9 @@ export async function guardarValoresRealesLiquidacion(payload: {
   vacaciones_real: number | null
   indemnizacion_real: number | null
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Liquidaciones"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!payload?.identificacion) return { success: false, message: "Datos incompletos." }
   try {
     const admin: any = await getSupabaseAdmin()
@@ -862,6 +882,9 @@ export async function guardarPagadoHasta(payload: {
   fecha_retiro: string | null
   pagado_hasta: string | null
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Liquidaciones"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!payload?.identificacion) return { success: false, message: "Datos incompletos." }
   try {
     const admin: any = await getSupabaseAdmin()
@@ -886,6 +909,9 @@ export async function guardarMotivoRetiro(payload: {
   identificacion: string
   motivo_retiro: string | null
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Liquidaciones"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!payload?.identificacion) return { success: false, message: "Datos incompletos." }
   try {
     const admin: any = await getSupabaseAdmin()
@@ -910,6 +936,9 @@ export async function agregarDeduccionLiquidacion(payload: {
   valor: number
   observacion: string | null
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Liquidaciones"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!payload?.identificacion || !payload?.concepto) return { success: false, message: "Datos incompletos." }
   try {
     const admin: any = await getSupabaseAdmin()
@@ -930,6 +959,9 @@ export async function agregarDeduccionLiquidacion(payload: {
 }
 
 export async function eliminarDeduccionLiquidacion(id: string): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Liquidaciones"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!id) return { success: false, message: "Falta el identificador." }
   try {
     const admin: any = await getSupabaseAdmin()
@@ -945,6 +977,9 @@ export async function eliminarDeduccionLiquidacion(id: string): Promise<{ succes
 export async function subirSoporteLiquidacion(
   formData: FormData,
 ): Promise<{ success: boolean; url?: string; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Liquidaciones"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const file = formData.get("file") as File | null
     const idempresaRaw = Number(formData.get("idempresa"))

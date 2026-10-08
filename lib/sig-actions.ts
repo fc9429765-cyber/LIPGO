@@ -14,7 +14,7 @@
 // con los permisos (sig_matriz / sig_iso*). Mismo patron que permissions-actions.
 import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
-import { tieneModulo } from "@/lib/puerta-modulo"
+import { tieneModulo, autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
 import { registrarErrorServidor } from "@/lib/errores-servidor"
 // `autorizar` vive en autorizaciones-core, que es `server-only`: se importa de
 // forma dinámica solo donde se valida una clave, para que los scripts de
@@ -591,6 +591,9 @@ export async function upsertCobertura(
   },
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; id?: number; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Matriz Integrada SIG"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const { requisitoId, normaId } = payload
     if (!requisitoId || !normaId) return { success: false, error: "requisito y norma son obligatorios" }
@@ -693,6 +696,9 @@ export async function setEstadoCobertura(
   estado: SigEstadoCobertura,
   actualizadoPor?: string | null,
 ): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Matriz Integrada SIG"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!id) return { success: false, error: "id requerido" }
     const supabase: any = await getSupabaseAdmin()
@@ -709,6 +715,9 @@ export async function setEstadoCobertura(
 
 /** Elimina una cobertura (no toca el soporte fisico ni el documento maestro). */
 export async function eliminarCobertura(id: number): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Matriz Integrada SIG"], "eliminar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!id) return { success: false, error: "id requerido" }
     const supabase: any = await getSupabaseAdmin()
@@ -982,6 +991,9 @@ export async function upsertAspectoAmbiental(
   },
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; id?: number; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Aspectos e Impactos ISO 14001"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!payload.actividad?.trim() || !payload.aspecto?.trim()) {
       return { success: false, error: "Actividad y aspecto son obligatorios" }
@@ -1086,6 +1098,9 @@ export async function upsertDofa(
   payload: { id?: number; cuadrante: string; origen?: string | null; descripcion: string; orden?: number },
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; id?: number; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Análisis de Contexto DOFA"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!payload.descripcion?.trim()) return { success: false, error: "La descripción es obligatoria" }
     const supabase: any = await getSupabaseAdmin()
@@ -1115,6 +1130,9 @@ export async function upsertDofa(
 }
 
 export async function eliminarDofa(id: number): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Análisis de Contexto DOFA"], "eliminar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!id) return { success: false, error: "id requerido" }
     const supabase: any = await getSupabaseAdmin()
@@ -1163,6 +1181,9 @@ export async function upsertRequisitoLegal(
   },
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; id?: number; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Matriz Legal Ambiental"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!payload.identificacion?.trim()) return { success: false, error: "La identificación de la norma es obligatoria" }
     const supabase: any = await getSupabaseAdmin()
@@ -1195,6 +1216,9 @@ export async function upsertRequisitoLegal(
 }
 
 export async function eliminarRequisitoLegal(id: number): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Matriz Legal Ambiental"], "eliminar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!id) return { success: false, error: "id requerido" }
     const supabase: any = await getSupabaseAdmin()
@@ -1244,6 +1268,9 @@ export async function upsertObjetivo(
   },
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; id?: number; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Objetivos y Metas SIG"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!payload.objetivo?.trim()) return { success: false, error: "El objetivo es obligatorio" }
     const supabase: any = await getSupabaseAdmin()
@@ -1277,6 +1304,9 @@ export async function upsertObjetivo(
 }
 
 export async function eliminarObjetivo(id: number): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Objetivos y Metas SIG"], "eliminar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!id) return { success: false, error: "id requerido" }
     const supabase: any = await getSupabaseAdmin()
@@ -1290,6 +1320,9 @@ export async function eliminarObjetivo(id: number): Promise<{ success: boolean; 
 
 /** Elimina (desactiva) un aspecto ambiental. */
 export async function eliminarAspectoAmbiental(id: number): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Aspectos e Impactos ISO 14001"], "eliminar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!id) return { success: false, error: "id requerido" }
     const supabase: any = await getSupabaseAdmin()
@@ -1338,6 +1371,9 @@ export async function registrarCambioDocumento(
   },
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; id?: number; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Matriz Integrada SIG", "Repositorio por Norma SIG"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!payload.documentoId) return { success: false, error: "documentoId requerido" }
     if (!payload.version?.trim()) return { success: false, error: "La versión es obligatoria" }
@@ -1501,6 +1537,9 @@ export async function guardarPesosArea(
   area: string,
   pesos: { codigo: string; peso: number }[],
 ): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Evaluación por Área"], "configurar", "Pesos por área")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const suma = pesos.reduce((s, p) => s + (Number(p.peso) || 0), 0)
     if (Math.abs(suma - 100) > 0.5) return { success: false, error: `Los pesos del área deben sumar 100% (actual: ${Math.round(suma * 10) / 10}%).` }
@@ -1646,6 +1685,9 @@ export async function upsertNcCatalogo(
   },
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; id?: number; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["No Conformidades SIG"], "configurar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!payload.proceso_codigo) return { success: false, error: "El proceso es obligatorio" }
     if (!payload.descripcion?.trim()) return { success: false, error: "La descripción es obligatoria" }
@@ -1680,6 +1722,9 @@ export async function upsertNcCatalogo(
 }
 
 export async function eliminarNcCatalogo(id: number): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["No Conformidades SIG"], "configurar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!id) return { success: false, error: "id requerido" }
     const supabase: any = await getSupabaseAdmin()
@@ -1738,6 +1783,9 @@ export async function upsertNoConformidad(
   },
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; id?: number; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["No Conformidades SIG"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!payload.descripcion?.trim()) return { success: false, error: "La descripción es obligatoria" }
     const supabase: any = await getSupabaseAdmin()
@@ -1781,6 +1829,9 @@ export async function upsertNoConformidad(
 }
 
 export async function eliminarNoConformidad(id: number): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["No Conformidades SIG"], "eliminar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!id) return { success: false, error: "id requerido" }
     const supabase: any = await getSupabaseAdmin()
@@ -1843,6 +1894,9 @@ export async function upsertIndicador(
   },
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; id?: number; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Indicadores SIG"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!payload.codigo?.trim()) return { success: false, error: "El código es obligatorio" }
     if (!payload.nombre?.trim()) return { success: false, error: "El nombre es obligatorio" }
@@ -1890,6 +1944,9 @@ export async function upsertIndicador(
 }
 
 export async function eliminarIndicador(id: number): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Indicadores SIG"], "eliminar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!id) return { success: false, error: "id requerido" }
     const supabase: any = await getSupabaseAdmin()
@@ -3782,6 +3839,9 @@ export async function crearCuadre(
     codproductoUnico?: string | null
   },
 ): Promise<{ success: boolean; id?: number; items?: number; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cuadre de Inventario"], "crear", "Crear cuadre")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!proyectoId) return { success: false, error: "Selecciona un cliente/sitio" }
     const supabase: any = await getSupabaseAdmin()
@@ -3948,6 +4008,9 @@ export async function guardarConteoCuadre(
   cuadreId: number,
   lineas: { codproducto?: string | null; producto?: string | null; lote?: string | null; location?: string | null; sistema: number; conteo: number; observacion?: string | null }[],
 ): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cuadre de Inventario"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase: any = await getSupabaseAdmin()
     const filas = lineas.map((l) => {
@@ -4006,6 +4069,9 @@ export async function guardarLineaConteoCuadre(
   linea: { codproducto?: string | null; producto?: string | null; lote?: string | null; location?: string | null; sistema: number; conteo: number; observacion?: string | null },
   contadoPor: string,
 ): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cuadre de Inventario"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase: any = await getSupabaseAdmin()
     const sistema = Number(linea.sistema) || 0
@@ -4152,6 +4218,9 @@ export async function getConteoFisicoDelMes(
 }
 
 export async function eliminarCuadre(cuadreId: number): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cuadre de Inventario"], "eliminar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase: any = await getSupabaseAdmin()
     const { error } = await supabase.from("sig_inventario_cuadre").update({ activo: false }).eq("id", cuadreId)
@@ -4164,6 +4233,9 @@ export async function eliminarCuadre(cuadreId: number): Promise<{ success: boole
 
 /** Genera ajustes contabilizados desde las diferencias de un cuadre. */
 export async function generarAjustesCuadre(cuadreId: number): Promise<{ success: boolean; creados?: number; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cuadre de Inventario"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase: any = await getSupabaseAdmin()
     const { data: cab } = await supabase.from("sig_inventario_cuadre").select("proyecto_id,fecha,responsable,estado").eq("id", cuadreId).single()
@@ -4249,6 +4321,9 @@ export async function aplicarCorreccionesConteo(
   // aplican sin clave. Umbral: parámetro 'umbral_clave_unidades' (defecto 50).
   opciones: { clave?: string | null } = {},
 ): Promise<{ success: boolean; aplicadas: number; saltadas: number; pendientes: number; errores: string[]; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cuadre de Inventario"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion, aplicadas: 0, saltadas: 0, pendientes: 0, errores: [] }
   const vacio = { aplicadas: 0, saltadas: 0, pendientes: 0, errores: [] as string[] }
   try {
     const supabase: any = await getSupabaseAdmin()
@@ -4386,6 +4461,9 @@ export async function getUmbralConteo(idempresa: number): Promise<{ success: boo
 }
 
 export async function guardarUmbralConteo(idempresa: number, umbral: number, actor: string): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cuadre de Inventario"], "configurar", "Umbral de conteo")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const n = Number(umbral)
     if (!Number.isFinite(n) || n < 0) return { success: false, error: "El umbral debe ser un número de unidades (0 o más)." }
@@ -4426,6 +4504,9 @@ export async function guardarReglaNovedad(
   regla: { id?: number | null; codigo: string; patron: string; etiqueta?: string | null; orden?: number | null },
   actor: string,
 ): Promise<{ success: boolean; id?: number; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cuadre de Inventario"], "configurar", "Reglas de novedad")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const patron = String(regla.patron ?? "").trim()
     if (!patron) return { success: false, error: "Escribe el texto o patrón de la novedad." }
@@ -4447,6 +4528,9 @@ export async function guardarReglaNovedad(
 }
 
 export async function eliminarReglaNovedad(id: number): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cuadre de Inventario"], "configurar", "Reglas de novedad")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase: any = await getSupabaseAdmin()
     const { error } = await supabase.from("sig_conteo_novedad_regla").update({ activo: false }).eq("id", id)
@@ -4609,6 +4693,9 @@ export async function registrarAjusteInventario(
     estado?: string
   },
 ): Promise<{ success: boolean; id?: number; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cuadre de Inventario"], "crear", "Registrar corrección")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!proyectoId) return { success: false, error: "Selecciona un cliente/sitio" }
     const supabase: any = await getSupabaseAdmin()
@@ -4649,6 +4736,9 @@ export async function registrarAjusteInventario(
 }
 
 export async function eliminarAjusteInventario(id: number): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cuadre de Inventario"], "eliminar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase: any = await getSupabaseAdmin()
     const { error } = await supabase.from("sig_inventario_ajuste").update({ activo: false }).eq("id", id)
@@ -4806,7 +4896,12 @@ async function aprobarAjusteInterno(
  */
 export async function cerrarMesCuadre(
   cuadreId: number,
+  clave?: string,
 ): Promise<{ success: boolean; posteados?: number; error?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Cuadre de Inventario", "cerrar", { clave: clave ?? "", idempresa: (await (await getSupabaseAdminAsSystem()).from("sig_inventario_cuadre").select("proyecto_id").eq("id", cuadreId).maybeSingle()).data?.proyecto_id ?? null, referencia: `cerrar mes cuadre ${cuadreId}` })
+  if (!autorizacionAccion.ok) return { success: false, error: autorizacionAccion.error || "Sin autorización." }
   // Fase 0 (2026-10-07): ver aprobarAjusteInventario.
   if (!(await tieneModulo(["Cuadre de Inventario"]))) return { success: false, error: "Sin permiso para Cuadre de Inventario." }
   try {
@@ -4960,6 +5055,9 @@ export async function upsertSatisfaccion(
 }
 
 export async function eliminarSatisfaccion(id: number): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Satisfacción y PQRSF"], "eliminar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase: any = await getSupabaseAdmin()
     const { error } = await supabase.from("sig_satisfaccion").update({ activo: false }).eq("id", id)
@@ -5032,6 +5130,9 @@ export async function upsertPQRSF(
 }
 
 export async function eliminarPQRSF(id: number): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Satisfacción y PQRSF"], "eliminar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase: any = await getSupabaseAdmin()
     const { error } = await supabase.from("sig_pqrsf").update({ activo: false }).eq("id", id)
@@ -5291,6 +5392,9 @@ export async function upsertProcesoInteraccion(
   },
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; id?: number; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Mapa de Interacción del Proceso"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!payload.fase?.trim() || !payload.paso?.trim())
       return { success: false, error: "Fase y paso son obligatorios" }
@@ -5326,6 +5430,9 @@ export async function upsertProcesoInteraccion(
 }
 
 export async function eliminarProcesoInteraccion(id: number): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Mapa de Interacción del Proceso"], "eliminar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!id) return { success: false, error: "id requerido" }
     const supabase: any = await getSupabaseAdmin()
@@ -6289,7 +6396,13 @@ export async function guardarCierreMesInventario(payload: {
   // sin esto, el mes se recalcula en vivo como siempre.
   fisico_congelado?: number | null
   fisico_snapshot?: Record<string, number> | null
-}): Promise<{ success: boolean; data?: SigInventarioCierreMes; error?: string }> {
+},
+  clave?: string,
+): Promise<{ success: boolean; data?: SigInventarioCierreMes; error?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Auditoría de Inventario", "cerrar", { clave: clave ?? "", idempresa: payload?.proyecto_id ?? null, referencia: `cierre de mes inventario ${payload?.mes}` })
+  if (!autorizacionAccion.ok) return { success: false, error: autorizacionAccion.error || "Sin autorización." }
   try {
     const supabase: any = await getSupabaseAdmin()
     const mesActual = fechaColombiaDe(new Date().toISOString()).slice(0, 7)
@@ -6466,6 +6579,9 @@ export async function getOrCrearActaCruce(
   proyectoId: number,
   mes: string, // '2026-08' — mes que ABRE con este cruce
 ): Promise<{ success: boolean; acta?: SigInventarioActaCruce; detalle?: SigInventarioActaCruceDetalle[]; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Auditoría de Inventario", "Panel LIP Inventario"], "crear", "Acta de cruce")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!proyectoId) return { success: false, error: "Selecciona un cliente/sitio" }
     const supabase: any = await getSupabaseAdmin()
@@ -6631,6 +6747,9 @@ export async function corregirLineaActaCruce(
   detalleId: number,
   payload: { nuevoValor: number; location?: string | null; lote?: string | null; motivo: string; actor: string },
 ): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Auditoría de Inventario", "Panel LIP Inventario"], "editar", "Corregir acta")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabase: any = await getSupabaseAdmin()
     const { data: det } = await supabase
@@ -6720,7 +6839,12 @@ export async function corregirLineaActaCruce(
 export async function firmarActaCruce(
   actaId: number,
   payload: { firmante: string; firmante_cargo?: string | null; firma_url?: string | null; observaciones?: string | null },
+  clave?: string,
 ): Promise<{ success: boolean; error?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Auditoría de Inventario", "aprobar", { clave: clave ?? "", idempresa: (await (await getSupabaseAdminAsSystem()).from("sig_inventario_acta_cruce").select("proyecto_id").eq("id", actaId).maybeSingle()).data?.proyecto_id ?? null, referencia: `firmar acta de cruce ${actaId}` })
+  if (!autorizacionAccion.ok) return { success: false, error: autorizacionAccion.error || "Sin autorización." }
   try {
     const supabase: any = await getSupabaseAdmin()
     const { error } = await supabase

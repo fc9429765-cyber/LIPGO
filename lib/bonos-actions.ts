@@ -28,6 +28,7 @@ import { autorizar } from "@/lib/autorizaciones-core"
 // `"use server"` y ahí solo se pueden exportar funciones async (exportar un
 // array rompe el arranque de la app). Ver lib/bonos-constants.ts.
 import { NOVEDADES_BONO, TIPOS_BONO, type TipoBono, type EstadoBono } from "@/lib/bonos-constants"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const num = (v: any) => Number(v || 0)
 
@@ -169,6 +170,9 @@ export interface RegistrarBonoInput {
 export async function registrarBono(
   input: RegistrarBonoInput,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Bonos"], "crear", "Registrar bono")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const nombre = String(input.nombre || "").trim()
     const concepto = String(input.concepto || "").trim()
@@ -268,6 +272,9 @@ export async function rechazarBono(
   id: number,
   motivo: string,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Bonos"], "anular", "Rechazar bono")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!id) return { success: false, message: "Bono inválido." }
     const admin: any = await getSupabaseAdmin()
@@ -291,6 +298,9 @@ export async function rechazarBono(
 
 /** Elimina un bono. Solo se permite si sigue PENDIENTE (un aprobado ya se pagó). */
 export async function eliminarBono(id: number): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Bonos"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!id) return { success: false, message: "Bono inválido." }
     const admin: any = await getSupabaseAdmin()

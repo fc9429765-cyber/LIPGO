@@ -1,6 +1,7 @@
 "use server"
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 /**
  * Server actions del modulo "Montacargas y personal día"
@@ -184,6 +185,9 @@ export async function createMontacargasDia(
   empresaId: number,
   input: MontacargasDiaInput,
 ): Promise<ActionResult<MontacargasDiaRow>> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Montacargas y personal día"], "crear")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!empresaId) {
     return { success: false, error: "Empresa no seleccionada" }
   }
@@ -230,6 +234,9 @@ export async function updateMontacargasDia(
   id: number,
   input: MontacargasDiaInput,
 ): Promise<ActionResult<MontacargasDiaRow>> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Montacargas y personal día"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!empresaId) {
     return { success: false, error: "Empresa no seleccionada" }
   }
@@ -277,6 +284,9 @@ export async function deleteMontacargasDia(
   empresaId: number,
   id: number,
 ): Promise<ActionResult> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Montacargas y personal día"], "eliminar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!empresaId) {
     return { success: false, error: "Empresa no seleccionada" }
   }

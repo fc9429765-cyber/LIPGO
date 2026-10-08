@@ -21,6 +21,7 @@ import {
   type DocumentoProceso,
   type GuardarDocumentoInput,
 } from "@/lib/mapa-procesos-tipos"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 interface Resultado<T = undefined> {
   success: boolean
@@ -147,6 +148,9 @@ export async function subirArchivoDocumento(
   procesoId: string,
   categoria: CategoriaDoc,
 ): Promise<Resultado<{ url: string; nombre: string }>> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Mapa de Procesos"], "crear", "Subir documento")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!file) return { success: false, message: "No se seleccionó ningún archivo." }
   // Escribir en un proceso exige el mismo permiso que leerlo: sin esto, quien
   // no puede abrir la ficha podría igual subirle o cambiarle documentos.
@@ -193,6 +197,9 @@ export async function subirArchivoDocumento(
 export async function guardarDocumentoProceso(
   input: GuardarDocumentoInput,
 ): Promise<Resultado<DocumentoProceso>> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Mapa de Procesos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const codigo = String(input?.codigo ?? "").trim()
   const nombre = String(input?.nombre ?? "").trim()
   const version = String(input?.version ?? "").trim()
@@ -378,6 +385,9 @@ export async function getNumeralesDisponibles(): Promise<Resultado<OpcionNumeral
 
 /** Quita la asociación entre un documento y un numeral. */
 export async function desvincularNumeral(coberturaId: number): Promise<Resultado> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Mapa de Procesos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!coberturaId) return { success: false, message: "No se indicó qué asociación quitar." }
   try {
     const admin: any = await getSupabaseAdmin()
@@ -470,6 +480,9 @@ export async function clasificarDocumentos(
   procesoId: string,
   categoria: CategoriaDoc,
 ): Promise<Resultado<number>> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Mapa de Procesos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!documentoIds?.length) return { success: false, message: "No se seleccionó ningún documento." }
   if (!procesoId) return { success: false, message: "No se indicó el proceso." }
   // Escribir en un proceso exige el mismo permiso que leerlo: sin esto, quien
@@ -512,6 +525,9 @@ export async function clasificarDocumentos(
  * estar colgado de ese proceso.
  */
 export async function desclasificarDocumento(documentoId: string): Promise<Resultado> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Mapa de Procesos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!documentoId) return { success: false, message: "No se indicó el documento." }
   try {
     const admin: any = await getSupabaseAdmin()
@@ -530,6 +546,9 @@ export async function eliminarDocumentoProceso(
   id: string,
   motivo: string,
 ): Promise<Resultado> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Mapa de Procesos"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!id) return { success: false, message: "No se indicó qué documento quitar." }
   if (!motivo?.trim()) return { success: false, message: "Indica por qué se quita el documento." }
 

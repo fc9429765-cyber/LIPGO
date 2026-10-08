@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase-client"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentEmpresaIdForInsert, getCurrentUsuarioForInsert } from "@/lib/user-context"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 export interface Antecedente {
   id: string
@@ -55,6 +56,9 @@ export async function getAntecedentes(selectedEmpresaId?: number | null) {
 // para carga separada si el cliente maneja certificados independientes.
 // Idempotente por cédula: crea los que faltan y actualiza el documento de los que ya están.
 export async function sincronizarAntecedentesDesdeHeadcount(selectedEmpresaId?: number | null) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Antecedentes", "Gestión de Solicitudes"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const admin: any = await getSupabaseAdmin()
   const empresaId = selectedEmpresaId || (await getCurrentEmpresaIdForInsert())
   if (!empresaId) return { success: false, creadas: 0, actualizadas: 0, message: "Sin empresa seleccionada." }
@@ -118,6 +122,9 @@ export async function decidirAntecedente(payload: {
   pdfNombre?: string | null
   estado: "aceptado" | "rechazado"
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Antecedentes", "Gestión de Solicitudes"], "aprobar", "Decidir antecedente")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const admin: any = await getSupabaseAdmin()
   const empresaId = payload.empresaId || (await getCurrentEmpresaIdForInsert())
   const cedula = String(payload.cedula || "").trim()
@@ -175,6 +182,9 @@ export async function decidirAntecedente(payload: {
 
 // Elimina un antecedente (archivos en Supabase Storage + registro).
 export async function deleteAntecedente(id: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Antecedentes", "Gestión de Solicitudes"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   const { data: current } = await supabase

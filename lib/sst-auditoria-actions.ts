@@ -13,6 +13,7 @@ import type {
   Respuesta,
 } from "@/lib/sst-types"
 import { computar0312, valoracionFromPct } from "@/lib/sst-types"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 // El SG-SST (Resolución 0312) es ÚNICO de LIP (empresa 100). LIP es la única
 // empresa que se certifica; los ID 1-4 son proyectos/clientes donde LIP presta
@@ -176,6 +177,9 @@ export async function guardarRespuesta(input: {
   observacion?: string | null
   soporte_url?: string | null
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Matriz de Estándares", "Auditoría 0312"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   // Art. 27: "cumple" y "no_aplica" suman el peso; "no_cumple" suma 0.
   const puntaje = input.cumple === "no_cumple" ? 0 : input.peso

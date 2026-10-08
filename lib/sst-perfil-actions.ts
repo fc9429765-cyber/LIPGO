@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import type { PerfilSociodemograficoRow } from "@/lib/sst-evidencia-types"
 import { edadDesdeFechaISO } from "@/lib/sst-datos-catalogos"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 // Cliente admin server-side (la tabla tiene RLS; el acceso lo controla PermissionGuard).
 async function resolveEmpresaId(fromClient?: number | null): Promise<number | null> {
@@ -216,6 +217,9 @@ export async function savePerfilSociodemografico(
  * sociodemográfica, y con ella vuelve a aparecer como pendiente en Cobertura.
  */
 export async function eliminarPerfil(id: number): Promise<{ success: boolean; message?: string; persona?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Perfil Sociodemográfico"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!id) return { success: false, message: "No se indicó qué perfil eliminar." }
   const supabase: any = await getSupabaseAdmin()
 
@@ -247,6 +251,9 @@ export async function eliminarPerfil(id: number): Promise<{ success: boolean; me
  * log y se responde que no hay nada que marcar, que es la verdad.
  */
 export async function resolverRevisionPerfil(id: number): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Perfil Sociodemográfico"], "aprobar", "Resolver revisión")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase: any = await getSupabaseAdmin()
   const { error } = await supabase
     .from("sst_perfil_sociodemografico")

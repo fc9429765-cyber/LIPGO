@@ -8,7 +8,7 @@
 // misma fuente que la facturación real). El cobro de cartera (que el cliente pague)
 // es el paso siguiente y NO se cruza aquí.
 
-import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 import { segundoFactorPendiente } from "@/lib/seguridad-servidor"
 import { esPlacaDistribucion, cargarPlacasDistribucion, ownerDeLinea, esVehiculoPropioAgrupable } from "@/lib/distribucion-placas"
 import { PLACAS_EXCLUIDAS_FACTURAS } from "@/lib/facturas-exclusiones"
@@ -31,6 +31,7 @@ import {
 } from "@/lib/facturacion-medio-pago"
 import { cargueSoloPlacaPropia } from "@/lib/facturacion-cargue-propio"
 import { facturadoAOwner, esProductoPorUnidad } from "@/lib/facturacion-billed-party"
+import { autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
 
 export type CategoriaFactura = "facturado" | "en_proceso" | "sin_gestionar"
 
@@ -548,6 +549,9 @@ export async function guardarPrefactura(payload: {
   observacion?: string | null
   advertencias?: Advertencia[]
 }): Promise<{ success: boolean; id?: number; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cuadro de Control Facturación"], "crear", "Crear prefactura")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   // Segundo factor (2026-10-05): solo detiene a quien lo tiene activado y no lo verificó.
   const segundoFactor = await segundoFactorPendiente("facturacion:guardarPrefactura")
   if (segundoFactor) return { success: false, message: segundoFactor }
@@ -653,7 +657,12 @@ export async function cambiarEstadoPrefactura(
   id: number,
   estado: "borrador" | "aprobada",
   opciones?: { usuario?: string; forzar?: boolean },
+  clave?: string,
 ): Promise<{ success: boolean; message?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Cuadro de Control Facturación", "aprobar", { clave: clave ?? "", idempresa: (await (await getSupabaseAdminAsSystem()).from("prefacturas").select("idempresa").eq("id", id).maybeSingle()).data?.idempresa ?? null, referencia: `prefactura ${id} → ${estado}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   try {
     const sb: any = await getSupabaseAdmin()
 
@@ -690,6 +699,9 @@ export async function cambiarEstadoPrefactura(
 }
 
 export async function eliminarPrefactura(id: number): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cuadro de Control Facturación"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   // Segundo factor (2026-10-05): solo detiene a quien lo tiene activado y no lo verificó.
   const segundoFactor = await segundoFactorPendiente("facturacion:eliminarPrefactura")
   if (segundoFactor) return { success: false, message: segundoFactor }

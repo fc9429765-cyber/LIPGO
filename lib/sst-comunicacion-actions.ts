@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase-client"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import type { AutorreporteRow, PqrsfRow, ComunicacionRow } from "@/lib/sst-evidencia-types"
+import { exigirAccion } from "@/lib/puerta-modulo"
 
 async function resolveEmpresaId(fromClient?: number | null): Promise<number | null> {
   if (fromClient && !Number.isNaN(fromClient)) return fromClient
@@ -48,6 +49,8 @@ export async function saveAutorreporte(r: Partial<AutorreporteRow>, e?: number |
   return save("sst_autorreportes", r as any, e)
 }
 export async function updateAutorreporte(id: number, p: Partial<AutorreporteRow>) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Comunicación SST"], "editar")
   return update("sst_autorreportes", id, p as any)
 }
 
@@ -58,6 +61,8 @@ export async function savePqrsf(r: Partial<PqrsfRow>, e?: number | null) {
   return save("sst_pqrsf", r as any, e)
 }
 export async function updatePqrsf(id: number, p: Partial<PqrsfRow>) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Comunicación SST"], "editar")
   return update("sst_pqrsf", id, p as any)
 }
 
@@ -65,5 +70,7 @@ export async function listComunicaciones(e?: number | null) {
   return listAll<ComunicacionRow>("sst_comunicaciones", "fecha", e)
 }
 export async function saveComunicacion(r: Partial<ComunicacionRow>, e?: number | null) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Comunicación SST"], "crear")
   return save("sst_comunicaciones", r as any, e)
 }

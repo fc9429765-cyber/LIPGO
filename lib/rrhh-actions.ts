@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase-server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import { cargoCanonico } from "@/lib/headcount-cargos"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 // COLABORADORES - Fetch from headcount table filtered by empresa
 export async function getColaboradoresFromHeadcount(selectedEmpresaId?: number | null) {
@@ -42,6 +43,9 @@ export async function getColaboradores() {
 }
 
 export async function createColaborador(colaborador: any) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Colaboradores", "Head Count"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   const { data, error } = await supabase
@@ -58,6 +62,9 @@ export async function createColaborador(colaborador: any) {
 }
 
 export async function updateColaborador(id: string, updates: any) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Colaboradores", "Head Count"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   const { data, error } = await supabase
@@ -75,6 +82,9 @@ export async function updateColaborador(id: string, updates: any) {
 }
 
 export async function deleteColaborador(id: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Colaboradores", "Head Count"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   const { error } = await supabase.from("colaboradores").delete().eq("id", id)
@@ -217,6 +227,9 @@ async function syncHeadcountForColaborador(
 // Crea un colaborador. Inyecta idempresa de forma segura en el servidor y
 // crea (o reutiliza) su registro espejo en headcount.
 export async function createColaboradorTH(colaborador: Record<string, any>, selectedEmpresaId?: number) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Colaboradores", "Head Count"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const empresaId = selectedEmpresaId ?? (await getCurrentEmpresaIdForInsert())
 
@@ -239,6 +252,9 @@ export async function createColaboradorTH(colaborador: Record<string, any>, sele
 // Actualiza un colaborador. No permite cambiar idempresa. Mantiene el
 // registro de headcount sincronizado.
 export async function updateColaboradorTH(id: string, updates: Record<string, any>) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Colaboradores", "Head Count"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const { idempresa, id: _ignore, ...rest } = updates
 
@@ -272,6 +288,9 @@ export async function updateColaboradorTH(id: string, updates: Record<string, an
 }
 
 export async function deleteColaboradorTH(id: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Colaboradores", "Head Count"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   // Elimina tambien el registro espejo de headcount, si existe.
@@ -335,6 +354,9 @@ export async function getContratos(selectedEmpresaId?: number | null) {
 }
 
 export async function createContrato(contrato: any) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Contratos"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   // GATE de aptitud médica: el examen es requisito de contratación. Solo se puede
@@ -459,6 +481,9 @@ export async function createContrato(contrato: any) {
 }
 
 export async function updateContrato(id: string, updates: any) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Contratos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   const sanitized: Record<string, any> = {}
@@ -489,6 +514,9 @@ export async function updateContrato(id: string, updates: any) {
 }
 
 export async function deleteContrato(id: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Contratos"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   const { error } = await supabase.from("contratos").delete().eq("id", id)
@@ -542,6 +570,9 @@ export async function getDotacionEPP(selectedEmpresaId?: number | null) {
 }
 
 export async function createDotacionEPP(dotacion: any, selectedEmpresaId?: number | null) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Dotación EPP"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const empresaId = selectedEmpresaId || await getCurrentEmpresaIdForInsert()
 
@@ -559,6 +590,9 @@ export async function createDotacionEPP(dotacion: any, selectedEmpresaId?: numbe
 }
 
 export async function updateDotacionEPP(id: string, updates: any) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Dotación EPP"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   const { data, error } = await supabase
@@ -576,6 +610,9 @@ export async function updateDotacionEPP(id: string, updates: any) {
 }
 
 export async function deleteDotacionEPP(id: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Dotación EPP"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   const { error } = await supabase.from("dotacion_epp").delete().eq("id", id)
@@ -616,6 +653,9 @@ export async function getCapacitaciones(selectedEmpresaId?: number | null) {
 }
 
 export async function createCapacitacion(capacitacion: any, selectedEmpresaId?: number | null) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Capacitaciones"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   // Si el caller envia explicitamente `idempresa` en el payload (ej.
   // selector de empresa en el formulario de Capacitaciones), lo
@@ -646,6 +686,9 @@ export async function createCapacitacion(capacitacion: any, selectedEmpresaId?: 
 }
 
 export async function updateCapacitacion(id: string, updates: any) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Capacitaciones"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   const { data, error } = await supabase
@@ -663,6 +706,9 @@ export async function updateCapacitacion(id: string, updates: any) {
 }
 
 export async function deleteCapacitacion(id: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Capacitaciones"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   const { error } = await supabase
@@ -783,6 +829,9 @@ export async function getCapacitacionesAsistencia(
 }
 
 export async function createCapacitacionAsistencia(asistencia: any, selectedEmpresaId?: number | null) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Asistencia a Capacitaciones", "Gestión de Capacitaciones"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   // Registramos siempre el `idempresa` de la empresa donde se hizo el
@@ -812,6 +861,9 @@ export async function createCapacitacionAsistencia(asistencia: any, selectedEmpr
 }
 
 export async function updateCapacitacionAsistencia(id: string, updates: any) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Asistencia a Capacitaciones", "Gestión de Capacitaciones"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   const { data, error } = await supabase
@@ -829,6 +881,9 @@ export async function updateCapacitacionAsistencia(id: string, updates: any) {
 }
 
 export async function deleteCapacitacionAsistencia(id: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Asistencia a Capacitaciones", "Gestión de Capacitaciones"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   const { error } = await supabase
@@ -876,6 +931,9 @@ export async function generarPlanillaAsistenciaCapacitacion(
   url?: string
   error?: string
 }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Asistencia a Capacitaciones", "Gestión de Capacitaciones"], "exportar", "Planilla de asistencia")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   console.log("[v0] generarPlanillaAsistenciaCapacitacion inputs:", JSON.stringify(inputs))
   try {
     const supabase = await createClient()
@@ -1587,6 +1645,9 @@ export async function getVacantes(filters?: {
 }
 
 export async function createVacante(vacante: any) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Solicitud de Personal", "Gestión de Solicitudes"], "crear", "Solicitar personal")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const empresaId = await getCurrentEmpresaIdForInsert()
 
@@ -1618,6 +1679,9 @@ export async function createVacante(vacante: any) {
 }
 
 export async function updateVacante(id: string, updates: any) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Solicitudes", "Solicitud de Personal"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   const { data, error } = await supabase
@@ -1635,6 +1699,9 @@ export async function updateVacante(id: string, updates: any) {
 }
 
 export async function deleteVacante(id: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Solicitudes"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   const { error } = await supabase.from("vacantes").delete().eq("id", id)
@@ -1666,6 +1733,9 @@ export async function gestionarAprobacionVacante(
   accion: "aprobar" | "rechazar",
   motivo?: string,
 ): Promise<{ success: boolean; nuevoEstado?: string; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Solicitudes", "Aprobación de Solicitudes de Personal"], "aprobar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!id) return { success: false, message: "Solicitud invalida" }
     if (tipoAprobador !== "RRHH" && tipoAprobador !== "Operaciones") {

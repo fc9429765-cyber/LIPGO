@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase-client"
 import { SIG_EMPRESA_LIP } from "@/lib/sig-types"
 import type { PlanMejoraRow, IndicadorRow } from "@/lib/sst-evidencia-types"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 // El Plan de Mejoramiento del SG-SST es de LIP (empresa 100), igual que la
 // autoevaluación 0312. LIP es la única empresa que se certifica.
@@ -31,6 +32,9 @@ export async function updatePlanMejora(
   id: number,
   patch: Partial<PlanMejoraRow>,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Plan de Mejoramiento"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const { error } = await supabase.from("sst_plan_mejora").update(patch).eq("id", id)
   return error ? { success: false, message: error.message } : { success: true }
@@ -40,6 +44,9 @@ export async function createPlanMejora(
   row: Partial<PlanMejoraRow>,
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Plan de Mejoramiento"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const empresaId = await resolveEmpresaId(empresaIdFromClient)
   const { error } = await supabase.from("sst_plan_mejora").insert([{ ...row, idempresa: empresaId }])
@@ -55,6 +62,9 @@ export async function sincronizarPlanConAuditoria(
   empresaIdFromClient?: number | null,
   anio?: number | null,
 ): Promise<{ success: boolean; message?: string; creadas: number; cerradas: number }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Plan de Mejoramiento"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion, creadas: 0, cerradas: 0 }
   const supabase = await createClient()
   const empresaId = await resolveEmpresaId(empresaIdFromClient)
   if (!empresaId) return { success: false, message: "Sin empresa seleccionada", creadas: 0, cerradas: 0 }
@@ -136,6 +146,9 @@ export async function sincronizarPlanConAuditoria(
 export async function cerrarAccionYActualizarEstandar(
   id: number,
 ): Promise<{ success: boolean; message?: string; estandarActualizado: boolean }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Plan de Mejoramiento"], "cerrar")
+  if (motivoAccion) return { success: false, message: motivoAccion, estandarActualizado: false }
   const supabase = await createClient()
 
   // 1. Datos de la accion.
@@ -201,6 +214,9 @@ export async function upsertIndicador(
   row: Partial<IndicadorRow>,
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Indicadores SST"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const empresaId = await resolveEmpresaId(empresaIdFromClient)
   const { error } = await supabase

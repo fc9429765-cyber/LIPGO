@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase-client"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
+import { exigirAccion } from "@/lib/puerta-modulo"
 
 export interface Product {
   id: number
@@ -87,6 +88,8 @@ export async function createMaterialExplosion(
   }>,
   selectedEmpresaId?: number,
 ) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Explosión de materiales"], "crear")
   const supabase = await createClient()
 
   const empresaId = selectedEmpresaId ?? (await getCurrentEmpresaIdForInsert())
@@ -109,6 +112,8 @@ export async function createMaterialExplosion(
 }
 
 export async function deleteMaterialExplosion(id: number) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Explosión de materiales"], "eliminar")
   const supabase = await createClient()
 
   const { error } = await supabase.from("mrpexplosion").delete().eq("id", id)
@@ -117,6 +122,8 @@ export async function deleteMaterialExplosion(id: number) {
 }
 
 export async function updateMaterialExplosion(id: number, consumo: number) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Explosión de materiales"], "editar")
   const supabase = await createClient()
 
   const { error } = await supabase.from("mrpexplosion").update({ consumo }).eq("id", id)

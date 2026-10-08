@@ -9,6 +9,7 @@ import { generarDistribucionAutomatica, autoGenerarDescarguesCedi } from "@/lib/
 import { reportarInterno } from "@/lib/reporte-interno-actions"
 import { registrarErrorServidor } from "@/lib/errores-servidor"
 import { validarAsignacionContraOrden } from "@/lib/asignacion-lote-regla"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 export interface LoadOrder {
   id: number
@@ -197,6 +198,9 @@ export async function getInventoryForProduct(
 }
 
 export async function approveBatchAllocation(data: BatchApprovalData, selectedEmpresaId?: number | null) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Asignación de Lotes"], "crear", "Asignar lote")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   try {
@@ -758,6 +762,9 @@ export async function updateBatchHistoryRecord(data: UpdateBatchHistoryData) {
 }
 
 export async function annulBatchAssignment(ordenCargue: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Historial de lotes"], "anular")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const supabase = await createClient()
 

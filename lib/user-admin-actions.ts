@@ -21,6 +21,7 @@ import { updateUserPermissions } from "@/lib/permissions-actions"
 import type { UserPermissions } from "@/lib/permissions-map"
 import { CLAVES_PERMISO } from "@/lib/permisos-claves"
 import type { CrearUsuarioInput, AuthMetaUsuario } from "@/lib/user-admin-types"
+import { autorizarAccion } from "@/lib/puerta-modulo"
 
 const MODULO_ADMIN = "Gestión de Usuarios"
 
@@ -148,7 +149,11 @@ export async function resetearPassword(userId: string, nuevaPassword: string): P
   }
 }
 
-export async function eliminarUsuario(userId: string): Promise<{ success: boolean; error?: string }> {
+export async function eliminarUsuario(userId: string, clave?: string): Promise<{ success: boolean; error?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Gestión de Usuarios", "eliminar", { clave: clave ?? "", idempresa: null, referencia: `eliminar usuario ${userId}` })
+  if (!autorizacionAccion.ok) return { success: false, error: autorizacionAccion.error || "Sin autorización." }
   try {
     if (!(await assertAdmin())) return { success: false, error: "No autorizado" }
     if (!userId) return { success: false, error: "Usuario no especificado" }

@@ -7,7 +7,7 @@ import { getColombiaDateTime, getColombiaDate, getColombiaTime, dateInputToColom
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import { getCurrentUser, getUserProfile } from "@/lib/auth-actions"
 import { getCurrentEmpresaId, getCurrentUserContext } from "@/lib/company-filter"
-import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 import { autorizar } from "@/lib/autorizaciones-core"
 import { revalidatePath } from "next/cache"
 import { generateAndUploadLoadOrderPDF } from "./pdf-actions" // Added for generateLoadOrder
@@ -24,6 +24,7 @@ import {
   lineaTrasReverso,
   type CargueDeLinea,
 } from "@/lib/pedido-ordenes"
+import { autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
 
 /**
  * Obtiene los IDs de empresa accesibles para el usuario actual desde perfil_acceso_empresas
@@ -285,6 +286,9 @@ export async function getOrderDetails(idpedido: number) {
 }
 
 export async function updateOrder(idpedido: number, data: any) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestionar pedidos", "Entrada de pedidos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     const { error } = await supabase.from("pedidoscabecera").update(data).eq("idpedido", idpedido)
@@ -302,6 +306,9 @@ export async function updateOrder(idpedido: number, data: any) {
 }
 
 export async function deleteOrder(idpedido: number) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestionar pedidos"], "eliminar", "Eliminar pedido")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     // Check if ocargue is null or empty
@@ -355,6 +362,9 @@ export async function deleteOrder(idpedido: number) {
 }
 
 export async function updateOrderDetails(idpedido: number, products: any[]) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestionar pedidos", "Entrada de pedidos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     console.log("[v0] Server: Fetching existing details for order:", idpedido)
@@ -1086,6 +1096,9 @@ export async function generateLoadOrder(orderData: {
   tipoOperacion?: string
   idempresaSeleccionada?: number // Optional: warehouse/bodega ID selected by user
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Generar Órdenes de Cargue"], "crear", "Generar orden de cargue")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   try {
@@ -1507,6 +1520,9 @@ export async function updateLoadOrderPDFUrl(orderId: number, pdfUrl: string) {
 }
 
 export async function updateLoadOrderFechaCargue(orderId: number, fechaCargue: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Ordenes"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     const fechaCargueFormatted = await dateInputToColombiaDate(fechaCargue)
@@ -1688,6 +1704,9 @@ export async function updateBasculaData(orderData: {
   pesovascula?: number
   tiquetebascula?: string
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Báscula"], "editar", "Registrar pesaje")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     const updateData: any = {}
@@ -1944,6 +1963,9 @@ export async function getVehiclesForSanitaryRegistry() {
 }
 
 export async function uploadSanitaryPhoto(file: File, ordenCargue: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Registro sanitario"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     console.log("[v0] uploadSanitaryPhoto - Starting upload for order:", ordenCargue)
     console.log("[v0] uploadSanitaryPhoto - File name:", file.name, "size:", file.size, "type:", file.type)
@@ -2003,6 +2025,9 @@ export async function registerSanitaryVerification(data: {
   isVehicleOnly?: boolean
   citasVehiculosId?: number | null
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Registro sanitario"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     console.log("[v0] Registering sanitary verification:", data)
@@ -2662,7 +2687,11 @@ async function eliminarClonesDeCargue(
   return { success: true }
 }
 
-export async function deleteLoadOrder(orderId: number) {
+export async function deleteLoadOrder(orderId: number, clave?: string) {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Gestión de Ordenes", "eliminar", { clave: clave ?? "", idempresa: (await (await getSupabaseAdminAsSystem()).from("cabeceraoc").select("idempresa").eq("id", orderId).maybeSingle()).data?.idempresa ?? null, referencia: `eliminar orden ${orderId}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   // (2026-10-02) Eliminar una orden es delicado: debe quedar QUIÉN lo hizo.
   // Con el cliente genérico la auditoría registraba actor "sistema" sin id
   // (nueve órdenes eliminadas el 30-sep sin responsable identificable). El
@@ -3099,6 +3128,9 @@ export async function approveCartera(idpedido: number, clave: string) {
 }
 
 export async function addProductsToOrder(idpedido: number, productsToInsert: any[]) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestionar pedidos", "Entrada de pedidos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     const empresaId = await getCurrentEmpresaIdForInsert()
@@ -3169,6 +3201,9 @@ export async function generateUnloadOrder(orderData: {
   // coordinador quiere crear el Descargue de todos modos (ver chequeo abajo).
   forzarDuplicado?: boolean
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Generar Órdenes de Descargue"], "crear", "Generar orden de descargue")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   try {
@@ -3430,6 +3465,9 @@ export async function generateDistributionOrder(orderData: {
   pesoTotalOrden: number
   pesoBrutoTotalOrden?: number
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Generar Orden de Distribución"], "crear", "Generar orden de distribución")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   try {
@@ -3795,6 +3833,9 @@ async function generateAndUploadUnloadOrderPDF(data: {
 
 
 export async function createSanitaryRegister(data: any) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Registro sanitario"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     const empresaId = await getCurrentEmpresaIdForInsert()
@@ -3863,6 +3904,9 @@ export async function saveTolva(tolvaData: {
   }>
   selectedEmpresaId?: number
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Tolva", "Ver ingresos de producción"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   try {
@@ -4042,6 +4086,9 @@ export async function saveProyecciones(proyeccionData: {
    */
   idempresaSeleccionada?: number
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Proyecciones"], "editar", "Guardar proyección")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   try {
@@ -4164,6 +4211,9 @@ export async function updateTolva(
     }>
   },
 ) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Tolva", "Ver Tolva", "Ver ingresos de producción"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   try {
@@ -4408,7 +4458,12 @@ export async function closeOrderWithInvoice(
   idpedido: number,
   factura: string,
   unitsReceived: { transid: number; unidadesRecibidas: number }[],
+  clave?: string,
 ) {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Gestionar pedidos", "cerrar", { clave: clave ?? "", idempresa: (await (await getSupabaseAdminAsSystem()).from("pedidoscabecera").select("id_empresa").eq("idpedido", idpedido).maybeSingle()).data?.id_empresa ?? null, referencia: `cerrar con factura pedido ${idpedido}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   const supabase = await createClient()
   try {
     // Get Colombia date
@@ -4466,6 +4521,9 @@ export async function closeOrderWithInvoice(
 }
 
 export async function updateLoadOrder(orderId: number, data: Record<string, any>) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Ordenes"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     // Format fechacargue if it exists in the data

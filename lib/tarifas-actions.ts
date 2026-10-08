@@ -1,6 +1,7 @@
 "use server"
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { autorizarAccion } from "@/lib/puerta-modulo"
 
 // Metadatos por tabla de tarifas: PK, columnas de vigencia (varían por tabla),
 // columna de empresa (para filtrar el listado) y una etiqueta legible.
@@ -79,7 +80,13 @@ export async function duplicarTarifas(params: {
   ids: (number | string)[]
   nuevaFechaIni: string
   nuevaFechaFin: string
-}): Promise<{ success: boolean; creadas?: number; message?: string }> {
+},
+  clave?: string,
+): Promise<{ success: boolean; creadas?: number; message?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Tarifas", "configurar", { clave: clave ?? "", idempresa: null, referencia: `duplicar tarifas ${params?.tableName}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   const m = TARIFA_META[params.tableName]
   if (!m) return { success: false, message: "Tabla de tarifas no soportada." }
   if (!params.ids?.length) return { success: false, message: "Selecciona al menos una tarifa." }

@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase-client"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 /** Estado de cumplimiento de una clausula ISO. */
 export type EstadoISO = "cumple" | "parcial" | "documental" | "pendiente"
@@ -218,6 +219,9 @@ export async function setEstadoManualISO(
   id: string,
   estado: EstadoISO | null,
 ): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Centro de Evidencia ISO 9001", "Repositorio ISO 9001"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!id) return { success: false, error: "ID requerido" }
   const estadosValidos: EstadoISO[] = ["cumple", "parcial", "documental", "pendiente"]
   if (estado !== null && !estadosValidos.includes(estado)) {
@@ -246,6 +250,9 @@ export async function updateClausulaISO(
   id: string,
   campos: { titulo?: string; fuente_lipgo?: string | null; codigo_sig?: string | null },
 ): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Centro de Evidencia ISO 9001", "Repositorio ISO 9001"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!id) return { success: false, error: "ID requerido" }
   if (campos.titulo !== undefined && !campos.titulo.trim()) {
     return { success: false, error: "El requisito no puede quedar vacío" }
@@ -272,6 +279,9 @@ export async function setNotaISO(
   id: string,
   nota: string,
 ): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Centro de Evidencia ISO 9001", "Repositorio ISO 9001"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!id) return { success: false, error: "ID requerido" }
   try {
     const supabase = await createClient()
@@ -296,6 +306,9 @@ export async function setEvidenciaISO(
   id: string,
   evidencia: { url: string; path: string; nombre: string },
 ): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Centro de Evidencia ISO 9001", "Repositorio ISO 9001"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!id) return { success: false, error: "ID requerido" }
   try {
     const supabase = await createClient()

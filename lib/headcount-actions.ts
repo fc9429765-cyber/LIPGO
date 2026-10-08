@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase-client"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
+import { exigirAccion } from "@/lib/puerta-modulo"
 
 export interface HeadcountPerson {
   id?: number
@@ -104,6 +105,8 @@ export async function getHeadcountList() {
 }
 
 export async function createHeadcountPerson(person: Omit<HeadcountPerson, "id" | "idempresa">) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Head Count", "Gestión de Colaboradores"], "crear")
   const supabase = await createClient()
   const empresaId = await getCurrentEmpresaIdForInsert()
 
@@ -125,6 +128,8 @@ export async function createHeadcountPerson(person: Omit<HeadcountPerson, "id" |
 }
 
 export async function updateHeadcountPerson(id: number, person: Partial<HeadcountPerson>) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Head Count", "Gestión de Colaboradores"], "editar")
   const supabase = await createClient()
 
   const { data, error } = await supabase.from("headcount").update(person).eq("id", id).select().single()
@@ -138,6 +143,8 @@ export async function updateHeadcountPerson(id: number, person: Partial<Headcoun
 }
 
 export async function deleteHeadcountPerson(id: number) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Head Count", "Gestión de Colaboradores"], "eliminar")
   const supabase = await createClient()
 
   const { error } = await supabase.from("headcount").delete().eq("id", id)

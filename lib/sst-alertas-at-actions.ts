@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase-client"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import type { IncidenteRow } from "@/lib/sst-evidencia-types"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 async function resolveEmpresaId(fromClient?: number | null): Promise<number | null> {
   if (fromClient && !Number.isNaN(fromClient)) return fromClient
@@ -117,6 +118,9 @@ export async function crearInvestigacionDesdeAusentismo(
   ausentismoId: string,
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; id?: number; yaExistia?: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Alertas de AT", "Investigación AT"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase: any = await createClient()
   const empresaId = await resolveEmpresaId(empresaIdFromClient)
   if (!empresaId) return { success: false, message: "Sin empresa seleccionada" }

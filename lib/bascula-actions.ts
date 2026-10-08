@@ -3,6 +3,8 @@
 import { createClient } from "@/lib/supabase-client"
 import { getCurrentEmpresaId } from "@/lib/company-filter"
 import { esProductoPorUnidad } from "@/lib/facturacion-billed-party"
+import { autorizarAccion } from "@/lib/puerta-modulo"
+import { getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 
 export async function getBasculaHistory(selectedEmpresaId?: number | null) {
   try {
@@ -142,7 +144,12 @@ export async function updateBasculaRecord(
   // envia, se persiste el nuevo transporte en cabeceraoc junto con el
   // peso y el tiquete.
   transporte?: string,
+  clave?: string,
 ) {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Historial Báscula", "editar", { clave: clave ?? "", idempresa: (await (await getSupabaseAdminAsSystem()).from("cabeceraoc").select("idempresa").eq("id", id).maybeSingle()).data?.idempresa ?? null, referencia: `corregir pesaje orden ${id}` })
+  if (!autorizacionAccion.ok) return { success: false, error: autorizacionAccion.error || "Sin autorización." }
   try {
     const supabase = await createClient()
 

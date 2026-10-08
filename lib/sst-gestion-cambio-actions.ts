@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase-client"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import type { GestionCambioRow } from "@/lib/sst-evidencia-types"
+import { exigirAccion } from "@/lib/puerta-modulo"
 
 async function resolveEmpresaId(fromClient?: number | null): Promise<number | null> {
   if (fromClient && !Number.isNaN(fromClient)) return fromClient
@@ -29,6 +30,8 @@ export async function saveGestionCambio(
   row: Partial<GestionCambioRow>,
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Gestión del Cambio"], "crear")
   const supabase = await createClient()
   const empresaId = await resolveEmpresaId(empresaIdFromClient)
   const { error } = await supabase.from("sst_gestion_cambio").insert([{ ...row, idempresa: empresaId }])
@@ -39,6 +42,8 @@ export async function updateGestionCambio(
   id: number,
   patch: Partial<GestionCambioRow>,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Gestión del Cambio"], "editar")
   const supabase = await createClient()
   const { error } = await supabase.from("sst_gestion_cambio").update(patch).eq("id", id)
   return error ? { success: false, message: error.message } : { success: true }

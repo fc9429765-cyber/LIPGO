@@ -39,6 +39,7 @@ import {
   quincenaSiguiente,
   type EstadoAjuste,
 } from "@/lib/ajuste-proyeccion-constants"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const num = (v: any) => Number(v || 0)
 
@@ -314,6 +315,9 @@ export async function generarAjustes(
   quincena: 1 | 2,
   empresa: number,
 ): Promise<{ success: boolean; creados?: number; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Proyecciones"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const cruce = await getCruceProyeccion(anio, mes, quincena, empresa)
     if (!cruce.success || !cruce.data) return { success: false, message: cruce.message }
@@ -433,6 +437,9 @@ export async function getAjustes(filtros: {
 
 /** Aprueba ajustes: desde aquí SÍ salen al archivo plano. */
 export async function aprobarAjustes(ids: number[]): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Proyecciones"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!ids?.length) return { success: false, message: "Selecciona al menos un ajuste." }
     const sb: any = await getSupabaseAdmin()
@@ -449,6 +456,9 @@ export async function aprobarAjustes(ids: number[]): Promise<{ success: boolean;
 }
 
 export async function rechazarAjustes(ids: number[], motivo: string): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Proyecciones"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!ids?.length) return { success: false, message: "Selecciona al menos un ajuste." }
     const sb: any = await getSupabaseAdmin()

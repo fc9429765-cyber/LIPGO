@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase-client"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import type { IncidenteRow, IncidenteAccionRow, IncidenteTestigoRow } from "@/lib/sst-evidencia-types"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 async function resolveEmpresaId(fromClient?: number | null): Promise<number | null> {
   if (fromClient && !Number.isNaN(fromClient)) return fromClient
@@ -33,6 +34,9 @@ export async function saveIncidente(
   empresaIdFromClient?: number | null,
   testigos: Partial<IncidenteTestigoRow>[] = [],
 ): Promise<{ success: boolean; id?: number; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Investigación AT"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase: any = await createClient()
   const empresaId = await resolveEmpresaId(empresaIdFromClient)
   const { data, error } = await supabase
@@ -85,6 +89,9 @@ export async function updateIncidente(
   id: number,
   patch: Partial<IncidenteRow>,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Investigación AT", "Investigaciones Realizadas"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase: any = await createClient()
   const { error } = await supabase.from("sst_incidentes").update(patch).eq("id", id)
   return error ? { success: false, message: error.message } : { success: true }
@@ -106,6 +113,9 @@ export async function actualizarIncidenteCompleto(
   testigos: Partial<IncidenteTestigoRow>[] = [],
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Investigación AT", "Investigaciones Realizadas"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!id) return { success: false, message: "No se indico que investigacion actualizar." }
   const supabase: any = await createClient()
   const empresaId = await resolveEmpresaId(empresaIdFromClient)

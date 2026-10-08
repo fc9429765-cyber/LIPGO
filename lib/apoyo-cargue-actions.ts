@@ -25,6 +25,7 @@ import { getCurrentEmpresaId } from "@/lib/company-filter"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
 import { getColombiaDateTime } from "@/lib/date-utils"
 import { estadoQuincena } from "@/lib/quincena-abierta"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const num = (v: any) => Number(v || 0)
 
@@ -326,6 +327,9 @@ export async function agregarApoyoAOrden(
   idorden: number,
   nombresNuevos: string[],
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Asignación de apoyo en cargue"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const admin = await getSupabaseAdmin()
     const usuarioActual = await getCurrentUsuarioForInsert()
@@ -388,6 +392,9 @@ export async function agregarApoyoAOrden(
  * trigger de auditoría ya guarda de `cabeceraoc.auxiliares`.
  */
 export async function quitarApoyoDeOrden(idorden: number, persona: string): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Asignación de apoyo en cargue"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const admin = await getSupabaseAdmin()
     const usuarioActual = await getCurrentUsuarioForInsert()

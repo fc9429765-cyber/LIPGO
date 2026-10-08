@@ -44,6 +44,7 @@ import { getCurrentUser } from "@/lib/auth-actions"
 import { checkModulePermission, getUserPermissions } from "@/lib/permissions-actions"
 import { exigirSegundoFactorSiActivo } from "@/lib/seguridad-servidor"
 import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
+import { getCurrentUsuarioForInsert } from "@/lib/user-context"
 import { autorizar } from "@/lib/autorizaciones-core"
 import type { ResultadoAutorizacion } from "@/lib/autorizaciones"
 import { SEPARADOR_ACCION, type Verbo } from "@/lib/permisos-verbos"
@@ -130,8 +131,9 @@ async function evaluarAccion(modulos: string[], verbo: Verbo | "ver", etiqueta?:
   const perms = (await getUserPermissions()) as Record<string, unknown> | null
   if (!perms) return { ok: false, motivo: `Sin permiso para ${modulos[0]}.` }
 
-  // Módulos que el usuario VE pero en los que le falta la acción (columna en false).
-  const sinAccion: { modulo: string; columna: string }[] = []
+  // Módulos que el usuario VE pero en los que le falta la acción (columna en
+  // false) o en los que el catálogo no la declara (error del catálogo).
+  const sinAccion: { modulo: string; columna: string; nota: string }[] = []
 
   for (const modulo of modulos) {
     const llave = llaveDeModulo(modulo)
@@ -141,7 +143,9 @@ async function evaluarAccion(modulos: string[], verbo: Verbo | "ver", etiqueta?:
     const nivel = nivelDe(modulo, verbo)
     if (nivel === "clave") throw new ErrorAccionConClave(modulo, verbo)
     if (nivel === null) {
-      console.warn(`[politicas] "${modulo}" no declara la acción "${verbo}"; se niega.`)
+      // No declarada: en modo aviso pasa y queda el rastro (así se descubre el
+      // hueco del catálogo en el log, no bloqueando a alguien en producción).
+      sinAccion.push({ modulo, columna: `${llave}${SEPARADOR_ACCION}${verbo}`, nota: "acción no declarada en el catálogo" })
       continue
     }
     const columna = `${llave}${SEPARADOR_ACCION}${verbo}`
@@ -156,31 +160,53 @@ async function evaluarAccion(modulos: string[], verbo: Verbo | "ver", etiqueta?:
       }
       return { ok: true }
     }
-    sinAccion.push({ modulo, columna })
+    sinAccion.push({ modulo, columna, nota: "módulo sí, acción no" })
   }
 
-  if (!sinAccion.length) return { ok: false, motivo: `Sin permiso para ${modulos[0]}.` }
+  if (!sinAccion.length) {
+    // Ni siquiera tiene el módulo. En modo aviso TAMBIÉN pasa y deja rastro: una
+    // acción que varias pantallas comparten puede llegar desde una pantalla que
+    // no está en la lista de la puerta (el log lo muestra y se corrige la lista
+    // antes de pasar a 'bloquear'). Sin sesión nunca pasa (eso no es un desajuste).
+    if ((await leerModoPoliticas()) === "aviso") {
+      const llave0 = llaveDeModulo(modulos[0]) ?? modulos[0]
+      const proceso0 = verbo === "ver" ? llave0 : `${llave0}${SEPARADOR_ACCION}${verbo}`
+      const texto0 = etiqueta ?? (verbo === "ver" ? "ver" : etiquetaAccion(modulos[0], verbo))
+      void registrarAviso(user.id, user.email ?? null, proceso0, texto0, modulos[0], (verbo === "ver" ? "editar" : verbo) as Verbo, "sin el módulo")
+      return { ok: true }
+    }
+    return { ok: false, motivo: `Sin permiso para ${modulos[0]}.` }
+  }
 
-  const { modulo, columna } = sinAccion[0]
+  const { modulo, columna, nota } = sinAccion[0]
   const texto = etiqueta ?? etiquetaAccion(modulo, verbo as Verbo)
   if ((await leerModoPoliticas()) === "aviso") {
-    void registrarAviso(user.id, user.email ?? null, columna, texto, modulo, verbo as Verbo)
+    void registrarAviso(user.id, user.email ?? null, columna, texto, modulo, verbo as Verbo, nota)
     return { ok: true }
   }
   return { ok: false, motivo: `Sin permiso para ${texto.toLowerCase()} en ${modulo}.` }
 }
 
-async function registrarAviso(usuarioId: string, usuario: string | null, columna: string, etiqueta: string, modulo: string, verbo: Verbo) {
+async function registrarAviso(
+  usuarioId: string,
+  usuario: string | null,
+  proceso: string,
+  etiqueta: string,
+  modulo: string,
+  verbo: Verbo,
+  nota: string,
+  idempresa: number | null = null,
+) {
   try {
     const sb: any = await getSupabaseAdmin()
     await sb.from("autorizacion_log").insert({
       usuario_id: usuarioId,
       usuario,
-      proceso: columna,
-      idempresa: null,
+      proceso,
+      idempresa,
       resultado: "aviso_accion",
       referencia: etiqueta,
-      detalle: { modulo, verbo, nota: "módulo sí, acción no; modo aviso" },
+      detalle: { modulo, verbo, nota: `${nota}; modo aviso` },
     })
   } catch (e) {
     console.error("[politicas] no se pudo registrar el aviso:", e)
@@ -258,10 +284,25 @@ export async function autorizarAccion(
   } else {
     proceso = declarado as string
   }
-  return autorizar({
-    proceso,
-    idempresa: input.idempresa ?? null,
-    clave: input.clave,
-    referencia: input.referencia ?? `${modulo} › ${etiquetaAccion(modulo, verbo)}`,
-  })
+  const referencia = input.referencia ?? `${modulo} › ${etiquetaAccion(modulo, verbo)}`
+  const idempresa = input.idempresa ?? null
+  const modo = await leerModoPoliticas()
+
+  // MODO AVISO: nada cambia para el usuario. Si la pantalla todavía no pide la
+  // clave (clave vacía) o el perfil aún no tiene el proceso, pasa con el nombre
+  // de la sesión y queda el rastro. En 'bloquear' se exige la clave de verdad.
+  const dejarPasarConAviso = async (nota: string): Promise<ResultadoAutorizacion> => {
+    const user = await getCurrentUser().catch(() => null)
+    const nombre = await getCurrentUsuarioForInsert().catch(() => "Usuario LIPgo")
+    if (user) void registrarAviso(user.id, user.email ?? null, proceso, referencia, modulo, verbo, nota, idempresa)
+    return { ok: true, autorizadoPor: nombre, usuarioId: user?.id ?? null, via: "personal" }
+  }
+
+  if (!String(input.clave ?? "").trim()) {
+    if (modo === "aviso") return dejarPasarConAviso("sin clave (la pantalla aún no la pide)")
+    return { ok: false, error: `«${etiquetaAccion(modulo, verbo)}» exige tu clave personal de autorización.` }
+  }
+  const r = await autorizar({ proceso, idempresa, clave: input.clave, referencia })
+  if (!r.ok && modo === "aviso") return dejarPasarConAviso(`clave rechazada: ${r.error ?? "?"}`)
+  return r
 }

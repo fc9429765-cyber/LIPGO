@@ -1,6 +1,7 @@
 "use server"
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 /**
  * Server actions del modulo "Bitácora" (Operación Lip).
@@ -91,6 +92,9 @@ export async function createBitacora(
   empresaId: number,
   input: BitacoraInput,
 ): Promise<ActionResult<BitacoraRow>> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Bitácora"], "crear")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!empresaId) {
     return { success: false, error: "Empresa no seleccionada" }
   }
@@ -131,6 +135,9 @@ export async function updateBitacora(
   id: number,
   input: BitacoraInput,
 ): Promise<ActionResult<BitacoraRow>> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Bitácora"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!empresaId) {
     return { success: false, error: "Empresa no seleccionada" }
   }
@@ -174,6 +181,9 @@ export async function deleteBitacora(
   empresaId: number,
   id: number,
 ): Promise<ActionResult> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Bitácora"], "eliminar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   if (!empresaId) {
     return { success: false, error: "Empresa no seleccionada" }
   }

@@ -2,6 +2,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentEmpresaId } from "@/lib/company-filter"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 /**
  * Payload de la Inspeccion Sanitaria de Vehiculos (Empresa 1).
@@ -68,6 +69,9 @@ async function uploadDataUrl(
 }
 
 export async function saveVehicleInspection(input: VehicleInspectionInput, selectedEmpresaId?: number) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Registro sanitario"], "crear")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const supabaseAdmin = await getSupabaseAdmin()
     const empresaId = selectedEmpresaId ?? (await getCurrentEmpresaId()) ?? 1

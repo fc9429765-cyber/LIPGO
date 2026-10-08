@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase-client"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import type { ActividadRow, ComiteMiembroRow } from "@/lib/sst-evidencia-types"
+import { exigirAccion } from "@/lib/puerta-modulo"
 
 async function resolveEmpresaId(fromClient?: number | null): Promise<number | null> {
   if (fromClient && !Number.isNaN(fromClient)) return fromClient
@@ -29,6 +30,8 @@ export async function saveActividad(
   row: Partial<ActividadRow>,
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Actividades y Comités"], "editar")
   const supabase = await createClient()
   const empresaId = await resolveEmpresaId(empresaIdFromClient)
   const { error } = await supabase.from("sst_actividades").insert([{ ...row, idempresa: empresaId }])
@@ -59,6 +62,8 @@ export async function saveComiteMiembro(
   row: Partial<ComiteMiembroRow>,
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Actividades y Comités"], "editar")
   const supabase = await createClient()
   const empresaId = await resolveEmpresaId(empresaIdFromClient)
   const { error } = await supabase.from("sst_comite_miembros").insert([{ ...row, idempresa: empresaId }])

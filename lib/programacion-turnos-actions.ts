@@ -54,6 +54,7 @@
  */
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { exigirAccion } from "@/lib/puerta-modulo"
 
 export interface ActiveHeadcountPerson {
   id: number
@@ -256,6 +257,8 @@ export async function programarTurnos(
   fecha: string,
   programaciones: ProgramacionTurnoInput[],
 ): Promise<ProgramacionResultado> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Programación de turnos"], "crear", "Programar turnos")
   if (!empresaId) throw new Error("Empresa no seleccionada")
   if (!fecha) throw new Error("La fecha es requerida")
   if (!programaciones || programaciones.length === 0) {
@@ -470,6 +473,8 @@ export async function deleteProgramacion(
   empresaId: number,
   id: number,
 ): Promise<{ success: boolean }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Programación de turnos"], "eliminar")
   if (!empresaId) throw new Error("Empresa no seleccionada")
   if (!id) throw new Error("ID de la programación es requerido")
 

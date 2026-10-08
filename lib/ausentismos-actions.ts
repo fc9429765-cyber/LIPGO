@@ -15,6 +15,7 @@ import {
   diasActivosEnPeriodo,
   type CategoriaAusentismo,
 } from "@/lib/ausentismo-categorias"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 // Archivo fuente SST-MAT-06 guardado en el proyecto.
 const EXCEL_RELATIVE_PATH =
@@ -198,6 +199,8 @@ export async function sincronizarBorradorAusentismo(
   cedula: string,
   fechaRef: string,
 ): Promise<{ created: number; updated: number; deleted: number; skipped: number; error?: string }> {
+  // Sin puerta propia: es un efecto derivado de registrar una novedad (Novedades de
+  // personal, personnel-notices); la puerta va en la acción que la dispara.
   const base = { created: 0, updated: 0, deleted: 0, skipped: 0 }
   try {
     if (!empresaId || !cedula || !fechaRef) return base
@@ -292,6 +295,9 @@ export async function sincronizarBorradorAusentismo(
 
 // Marca un ausentismo como COMPLETO (validado por el analista).
 export async function marcarAusentismoCompleto(id: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ausentismos"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   const sb = await createClient()
   const { error } = await sb.from("ausentismosst").update({ estado_registro: "COMPLETO" }).eq("id", id)
   return error ? { success: false, message: error.message } : { success: true }
@@ -299,6 +305,9 @@ export async function marcarAusentismoCompleto(id: string) {
 
 // Persiste la URL del soporte clínico de la incapacidad (1er eslabón del recobro).
 export async function setSoporteIncapacidad(id: string, url: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ausentismos", "Recobro de Incapacidades"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   const sb = await createClient()
   const { error } = await sb.from("ausentismosst").update({ soporte_incapacidad_url: url }).eq("id", id)
   return error ? { success: false, message: error.message } : { success: true }
@@ -545,6 +554,9 @@ export async function getParametrosLegalesAnio(): Promise<ParametroAnio[]> {
 export async function upsertParametroLegalAnio(
   anio: number, smlv: number, auxilio_transporte: number,
 ): Promise<{ success: boolean; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ausentismos"], "configurar", "Parámetros legales")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!anio || !smlv) return { success: false, error: "Año y SMLV son obligatorios" }
     const supabase: any = await getSupabaseAdmin()
@@ -575,6 +587,9 @@ export async function generarBorradoresAusentismoDesdeControl(
   anio: string,
   mes?: string | null,
 ): Promise<BorradorAusentismoResult> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ausentismos"], "crear")
+  if (motivoAccion) return { creados: 0, episodios: 0, mesesOmitidos: [], error: motivoAccion }
   try {
     if (!empresaId) return { creados: 0, episodios: 0, mesesOmitidos: [], error: "Selecciona un cliente/sitio en el selector global" }
     if (!anio) return { creados: 0, episodios: 0, mesesOmitidos: [], error: "Indica el año" }
@@ -794,6 +809,9 @@ export async function createAusentismo(
   data: Record<string, any>,
   empresaIdFromClient?: number | null,
 ) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ausentismos"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const empresaId =
     empresaIdFromClient && !Number.isNaN(empresaIdFromClient)
@@ -823,6 +841,9 @@ export async function createAusentismo(
 }
 
 export async function updateAusentismo(id: string, updates: Record<string, any>) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ausentismos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const { idempresa, id: _ignore, created_at, ...rest } = updates
 
@@ -843,6 +864,9 @@ export async function updateAusentismo(id: string, updates: Record<string, any>)
 }
 
 export async function deleteAusentismo(id: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ausentismos"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const { error } = await supabase.from("ausentismosst").delete().eq("id", id)
   if (error) {
@@ -882,6 +906,9 @@ function str(v: any): string | null {
 // Accidente de Transito, y Accidentes Laborales) para la empresa indicada.
 // Reemplaza importaciones previas (filas marcadas) para que sea idempotente.
 export async function importAusentismosFromExcel(empresaIdFromClient?: number | null) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ausentismos"], "crear", "Importar Excel")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const empresaId =
     empresaIdFromClient && !Number.isNaN(empresaIdFromClient)

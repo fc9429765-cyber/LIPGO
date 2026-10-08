@@ -27,7 +27,7 @@
  * `registrarPago` lleva el saldo. Ver scripts/165_add_ciclo_facturacion.sql.
  */
 
-import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 import { CORTE_CICLO_SIIGO } from "@/lib/ciclo-facturacion-shared"
 import { segundoFactorPendiente } from "@/lib/seguridad-servidor"
 import { getAccessibleEmpresesFromPermisos } from "@/lib/orders-actions"
@@ -43,6 +43,7 @@ import {
 import { valorListoParaAnexo, tonListoParaAnexo } from "@/lib/facturacion-control-shared"
 import { ownerDePrefactura, fechaAyerColombiaISO } from "@/lib/ciclo-facturacion-shared"
 import { getUserPermissions } from "@/lib/permissions-actions"
+import { autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
 
 export type EstadoCiclo =
   | "pendiente_anexo"
@@ -487,7 +488,12 @@ export async function getSoporteDePrefactura(prefacturaId: number): Promise<{ su
 export async function registrarPago(
   prefacturaId: number,
   pago: { fecha: string; valor: number; observacion?: string; usuario: string },
+  clave?: string,
 ): Promise<{ success: boolean; message?: string }> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Ciclo de Facturación", "crear", { clave: clave ?? "", idempresa: (await (await getSupabaseAdminAsSystem()).from("prefacturas").select("idempresa").eq("id", prefacturaId).maybeSingle()).data?.idempresa ?? null, referencia: `registrar pago prefactura ${prefacturaId}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   // Segundo factor (2026-10-05): solo detiene a quien lo tiene activado y no lo verificó.
   const segundoFactor = await segundoFactorPendiente("ciclo-facturacion:registrarPago")
   if (segundoFactor) return { success: false, message: segundoFactor }
@@ -602,6 +608,9 @@ export async function actualizarCondicionEnvioAnexo(
   frecuencia: "diario" | "semanal",
   dia_semana: number | null,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ciclo de Facturación"], "configurar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const segundoFactor = await segundoFactorPendiente("ciclo-facturacion:condicionEnvioAnexo")
   if (segundoFactor) return { success: false, message: segundoFactor }
   if (!idempresa) return { success: false, message: "Falta el proyecto." }
@@ -684,6 +693,9 @@ export async function actualizarCondicionGeneracionPrefactura(
   fecha_inicio: string | null,
   dias_corte: number[] | null = null,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ciclo de Facturación"], "configurar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const segundoFactor = await segundoFactorPendiente("ciclo-facturacion:condicionGeneracionPrefactura")
   if (segundoFactor) return { success: false, message: segundoFactor }
   if (!idempresa) return { success: false, message: "Falta el proyecto." }
@@ -1095,6 +1107,9 @@ export async function previsualizarPendienteGestion(idempresa: number): Promise<
 }
 
 export async function actualizarCondicionPagoOwner(owner: string, dias_plazo: number): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ciclo de Facturación"], "configurar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const segundoFactor = await segundoFactorPendiente("ciclo-facturacion:condicionPagoOwner")
   if (segundoFactor) return { success: false, message: segundoFactor }
   if (!owner?.trim()) return { success: false, message: "Falta el owner." }

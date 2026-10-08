@@ -31,6 +31,7 @@ import {
   horasTurnoParaEspecialidad,
   type NovedadDia,
 } from "@/lib/asistencia-catalogos"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 export interface PersonaAsistenciaAdmin {
   identificacion: string
@@ -230,6 +231,9 @@ function listaFechas(desde: string, hasta: string): string[] {
 export async function upsertAsistenciaDia(
   input: UpsertAsistenciaInput,
 ): Promise<{ success: boolean; diasAfectados?: number; diasOmitidos?: string[]; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Asistencia Administrativa"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const { empresaId, identificacion, nombre, tipo, esAdministrativo } = input
   if (!empresaId || !identificacion || !nombre || !input.fechaInicio) {
     return { success: false, message: "Datos incompletos." }
@@ -417,6 +421,9 @@ export interface ResultadoCompletarQuincena {
  * asistencia todos los días, los días que hagan falta".
  */
 export async function completarQuincenaAdministrativos(empresaId: number): Promise<ResultadoCompletarQuincena> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Asistencia Administrativa"], "cerrar", "Completar quincena")
+  if (motivoAccion) return { success: false, message: motivoAccion, personasCompletadas: 0, diasCompletados: 0, detalle: [] }
   if (!empresaId) return { success: false, message: "Falta el proyecto.", personasCompletadas: 0, diasCompletados: 0, detalle: [] }
   try {
     const personasR = await getPersonasAsistenciaAdministrativa(empresaId)

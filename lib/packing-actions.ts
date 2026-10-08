@@ -12,6 +12,7 @@ import {
   savePickingPhotos as _savePickingPhotos,
   esDescargueSinPersonalRequerido,
 } from "@/lib/picking-actions"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 export interface PendingLoadOrder {
   id: number
@@ -189,6 +190,9 @@ export async function setFacturarOrden(
     placa?: string | null
   },
 ) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Packing", "Picking"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const { error } = await supabase.from("cabeceraoc").update({ facturar }).eq("id", orderId)
   if (error) {
@@ -236,6 +240,9 @@ export async function getPackingItems(ordendecargue: string) {
 }
 
 export async function confirmPacking(orderId: number) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Packing"], "cerrar", "Confirmar packing")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   console.log("[v0] Confirming packing for order:", orderId)
 
   // No database operations - just return success to update local state
@@ -434,9 +441,15 @@ export async function assignPersonnelToOrder(
   password: string,
   observaciones: string,
 ) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Packing", "Picking"], "editar", "Asignar personal")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   return await (_assignPersonnelToOrder as any)(orderId, orderNumber, selectedPersonnel, password, observaciones)
 }
 
 export async function savePickingPhotos(orderId: number, photoUrls: string[]) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Packing", "Picking"], "editar", "Guardar fotos")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   return await _savePickingPhotos(orderId, photoUrls)
 }

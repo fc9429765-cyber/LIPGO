@@ -3,6 +3,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { getCurrentEmpresaId } from "@/lib/company-filter"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 // Re-export for backwards compatibility
 export { getCurrentEmpresaId }
@@ -460,6 +461,9 @@ export interface OrderDetail {
 }
 
 export async function registerOrder(header: OrderHeader, details: OrderDetail[], selectedEmpresaId?: number) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Entrada de pedidos"], "crear", "Registrar pedido")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   console.log("[v0] Registering order...")
 
   try {
@@ -615,6 +619,9 @@ export async function updateOrder(
   details: OrderDetail[],
   selectedEmpresaId?: number,
 ) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Entrada de pedidos", "Gestionar pedidos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   console.log("[v0] Updating order:", orderId)
 
   try {

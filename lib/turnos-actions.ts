@@ -1,6 +1,7 @@
 "use server"
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { autorizarAccion } from "@/lib/puerta-modulo"
 
 /**
  * Server actions del modulo "Turnos" (RRHH Lip).
@@ -98,7 +99,12 @@ export async function getTurnos(empresaId: number): Promise<ActionResult<TurnoTa
 export async function createTurno(
   empresaId: number,
   input: TurnoInput,
+  clave?: string,
 ): Promise<ActionResult<TurnoTarifa>> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Turnos", "configurar", { clave: clave ?? "", idempresa: empresaId ?? null, referencia: "crear turno/tarifa" })
+  if (!autorizacionAccion.ok) return { success: false, error: autorizacionAccion.error || "Sin autorización." }
   if (!empresaId) {
     return { success: false, error: "Empresa no seleccionada" }
   }
@@ -138,7 +144,12 @@ export async function updateTurno(
   empresaId: number,
   id: number,
   input: TurnoInput,
+  clave?: string,
 ): Promise<ActionResult<TurnoTarifa>> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Turnos", "configurar", { clave: clave ?? "", idempresa: empresaId ?? null, referencia: `editar turno/tarifa ${id}` })
+  if (!autorizacionAccion.ok) return { success: false, error: autorizacionAccion.error || "Sin autorización." }
   if (!empresaId) {
     return { success: false, error: "Empresa no seleccionada" }
   }
@@ -179,7 +190,12 @@ export async function updateTurno(
 export async function deleteTurno(
   empresaId: number,
   id: number,
+  clave?: string,
 ): Promise<ActionResult<{ id: number }>> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Turnos", "configurar", { clave: clave ?? "", idempresa: empresaId ?? null, referencia: `eliminar turno/tarifa ${id}` })
+  if (!autorizacionAccion.ok) return { success: false, error: autorizacionAccion.error || "Sin autorización." }
   if (!empresaId) {
     return { success: false, error: "Empresa no seleccionada" }
   }

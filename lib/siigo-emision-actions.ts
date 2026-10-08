@@ -23,11 +23,12 @@
 // pulsan el botón a la vez, la segunda debe encontrar la primera.
 // ---------------------------------------------------------------------------
 
-import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 import { checkModulePermission } from "@/lib/permissions-actions"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
 import { crearFactura, type ItemFactura } from "@/lib/siigo"
 import { getValoresNetosOrden } from "@/lib/facturacion-control-actions"
+import { autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
 
 const MODULO = "Ciclo de Facturación"
 
@@ -125,6 +126,9 @@ export async function guardarConfigEmision(payload: {
   enviarDian: boolean
   enviarCorreo: boolean
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Consulta Facturas SIIGO", "Ciclo de Facturación"], "configurar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!(await permitido())) return { success: false, message: "Sin permiso." }
 
   try {
@@ -305,6 +309,9 @@ export async function guardarOwnerCliente(payload: {
   owner: string
   identificacion: string
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Consulta Facturas SIIGO", "Ciclo de Facturación"], "configurar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!(await permitido())) return { success: false, message: "Sin permiso." }
 
   const owner = payload.owner?.trim()
@@ -358,6 +365,9 @@ export async function guardarOwnerCliente(payload: {
 export async function eliminarOwnerCliente(
   owner: string,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Consulta Facturas SIIGO", "Ciclo de Facturación"], "configurar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!(await permitido())) return { success: false, message: "Sin permiso." }
   try {
     const sb: any = await getSupabaseAdmin()
@@ -495,7 +505,12 @@ export async function puedeFacturarOrden(ordenId: number): Promise<Verificacion>
 export async function emitirFacturaOrden(
   ordenId: number,
   opciones?: { clienteIdentificacion?: string },
+  clave?: string,
 ): Promise<ResultadoEmision> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Ciclo de Facturación", "aprobar", { clave: clave ?? "", idempresa: (await (await getSupabaseAdminAsSystem()).from("cabeceraoc").select("idempresa").eq("id", ordenId).maybeSingle()).data?.idempresa ?? null, referencia: `emitir Siigo orden ${ordenId}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   if (!(await permitido())) return { success: false, message: "No tienes permiso para emitir." }
 
   const sb: any = await getSupabaseAdmin()
@@ -847,7 +862,12 @@ export async function puedeFacturarPrefactura(prefacturaId: number): Promise<Ver
 export async function emitirFacturaPrefactura(
   prefacturaId: number,
   opciones?: { clienteIdentificacion?: string },
+  clave?: string,
 ): Promise<ResultadoEmision> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Ciclo de Facturación", "aprobar", { clave: clave ?? "", idempresa: (await (await getSupabaseAdminAsSystem()).from("prefacturas").select("idempresa").eq("id", prefacturaId).maybeSingle()).data?.idempresa ?? null, referencia: `emitir Siigo prefactura ${prefacturaId}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   if (!(await permitido())) return { success: false, message: "No tienes permiso para emitir." }
 
   const sb: any = await getSupabaseAdmin()
@@ -1096,7 +1116,12 @@ export async function puedeFacturarAgrupacion(ordenIds: number[]): Promise<Verif
 export async function emitirFacturaAgrupacion(
   ordenIds: number[],
   opciones?: { clienteIdentificacion?: string; owner?: string; periodo?: string },
+  clave?: string,
 ): Promise<ResultadoEmision> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Ciclo de Facturación", "aprobar", { clave: clave ?? "", idempresa: (await (await getSupabaseAdminAsSystem()).from("cabeceraoc").select("idempresa").eq("id", Number(ordenIds?.[0] ?? 0)).maybeSingle()).data?.idempresa ?? null, referencia: `emitir Siigo ${ordenIds?.length ?? 0} órdenes` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   if (!(await permitido())) return { success: false, message: "No tienes permiso para emitir." }
 
   const sb: any = await getSupabaseAdmin()

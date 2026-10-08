@@ -20,6 +20,7 @@ import { enviarPlantilla, getPlantillasDeMeta, subirArchivoAMeta } from "@/lib/w
 import { normalizarTelefono } from "@/lib/whatsapp-actions"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
 import { utcDateStr } from "@/lib/paros-produccion"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const PLANTILLA = "resumen_produccion_dia"
 const EMPRESA = 1
@@ -110,6 +111,9 @@ export async function guardarConfigCierre(payload: {
   activo: boolean
   horaEnvio: string
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Dashboard de Producción"], "editar", "Configurar cierre")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const sb: any = await getSupabaseAdmin()
 
@@ -181,6 +185,9 @@ export async function guardarDestinatarioCierre(payload: {
   nombre: string
   telefono: string
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Dashboard de Producción"], "editar", "Destinatarios del cierre")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!payload.nombre?.trim()) return { success: false, message: "Ponle un nombre." }
 
@@ -218,6 +225,9 @@ export async function guardarDestinatarioCierre(payload: {
 export async function eliminarDestinatarioCierre(
   id: number,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Dashboard de Producción"], "eliminar", "Destinatarios del cierre")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const sb: any = await getSupabaseAdmin()
     const { error } = await sb.from("cierre_produccion_destinatarios").delete().eq("id", id)

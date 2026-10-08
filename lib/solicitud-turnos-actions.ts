@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 interface LineaSolicitud {
   puesto: string
@@ -22,6 +23,9 @@ interface CreateSolicitudParams {
 }
 
 export async function createSolicitudTurnos(params: CreateSolicitudParams) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Servicios Adicionales"], "crear", "Solicitar servicio")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   
   try {
@@ -159,6 +163,9 @@ function esHorasExtra(tipo: unknown): boolean {
 }
 
 export async function aprobarSolicitudes(params: AprobarSolicitudesParams) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Aprobar Turnos"], "aprobar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   
   try {
@@ -228,6 +235,9 @@ export async function aprobarSolicitudes(params: AprobarSolicitudesParams) {
 }
 
 export async function rechazarSolicitudes(ids: number[], nombreaprobo: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Aprobar Turnos"], "anular", "Rechazar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   
   try {

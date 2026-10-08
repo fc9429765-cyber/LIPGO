@@ -22,6 +22,7 @@ import {
   type LineaDespacho,
   type FilaSalida,
 } from "@/lib/picking-estado"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 export interface PendingLoadOrder {
   id: number
@@ -185,6 +186,9 @@ export async function registerQRPickingMovements(
     location: string
   }>,
 ) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Picking", "Packing"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   try {
@@ -570,6 +574,9 @@ export async function setTipoPagoOrden(
   orderId: number,
   tipoPago: "global" | "individual",
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Picking", "Packing"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const { data: orderRow } = await supabase.from("cabeceraoc").select("fincargue").eq("id", orderId).single()
   if (orderRow?.fincargue) return { success: false, message: "La orden ya está cerrada" }
@@ -588,6 +595,9 @@ export async function setModoCargaOrden(
   orderId: number,
   modoCarga: "Estibado" | "Arrume",
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Picking", "Packing"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const { data: orderRow } = await supabase.from("cabeceraoc").select("fincargue").eq("id", orderId).single()
   if (orderRow?.fincargue) return { success: false, message: "La orden ya está cerrada" }
@@ -603,6 +613,9 @@ export async function assignPersonnelToOrder(
   currentUserName: string,
   orderData: PendingLoadOrder,
 ) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Picking", "Packing"], "editar", "Asignar personal")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const supabaseAdmin = await getSupabaseAdmin()
 
@@ -1172,6 +1185,9 @@ export async function confirmPicking(
     justificacion?: string | null
   }[],
 ) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Picking"], "cerrar", "Confirmar picking")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   // ===================================================================================
@@ -1661,6 +1677,9 @@ export async function confirmPicking(
 }
 
 export async function savePickingPhotos(orderId: number, photoUrls: string[]) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Picking", "Packing"], "editar", "Guardar fotos")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   // Create JSON array of strings
@@ -1677,6 +1696,9 @@ export async function savePickingPhotos(orderId: number, photoUrls: string[]) {
 }
 
 export async function registerHoraPicking(orderId: number) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Picking", "Packing"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const currentTime = await getColombiaTime()
 
@@ -1704,6 +1726,9 @@ export async function registerHoraPicking(orderId: number) {
  * `reanudarOrden` la cierra escribiendo la hora. La base deriva `activo` de ahi.
  */
 export async function pausarOrden(ordenCargue: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Picking", "Packing"], "editar", "Pausar orden")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
 
   // Idempotente: si la orden YA tiene una pausa abierta (doble clic, red
@@ -1746,6 +1771,9 @@ export async function pausarOrden(ordenCargue: string) {
  * (sin `fin`) de la orden y le escribe la hora de fin del paro.
  */
 export async function reanudarOrden(ordenCargue: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Picking", "Packing"], "editar", "Reanudar orden")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const fin = await getColombiaTime()
 

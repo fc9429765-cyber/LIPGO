@@ -26,6 +26,7 @@ import {
   type RespuestaAuditoria,
   type ResumenAuditoria,
 } from "@/lib/auditoria-iso-tipos"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const MODULO = "Auditoría ISO 9001"
 
@@ -90,6 +91,9 @@ export async function listarAuditorias(
 export async function crearAuditoria(
   datos: Partial<Auditoria> & { idempresa: number },
 ): Promise<{ success: boolean; id?: number; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Auditoría ISO 9001"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!(await permitido())) return { success: false, message: "Sin permiso." }
   try {
     const sb: any = await getSupabaseAdmin()
@@ -147,6 +151,9 @@ export async function actualizarAuditoria(
   id: number,
   datos: Partial<Auditoria>,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Auditoría ISO 9001"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!(await permitido())) return { success: false, message: "Sin permiso." }
   try {
     const sb: any = await getSupabaseAdmin()
@@ -182,6 +189,9 @@ export async function cerrarAuditoria(
   id: number,
   conclusiones?: string,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Auditoría ISO 9001"], "cerrar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!(await permitido())) return { success: false, message: "Sin permiso." }
   try {
     const sb: any = await getSupabaseAdmin()
@@ -220,6 +230,9 @@ export async function cerrarAuditoria(
 export async function eliminarAuditoria(
   id: number,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Auditoría ISO 9001"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!(await permitido())) return { success: false, message: "Sin permiso." }
   try {
     const sb: any = await getSupabaseAdmin()
@@ -271,6 +284,9 @@ export async function guardarRespuesta(
   id: number,
   datos: Partial<RespuestaAuditoria>,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Auditoría ISO 9001"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!(await permitido())) return { success: false, message: "Sin permiso." }
   try {
     const sb: any = await getSupabaseAdmin()
@@ -333,6 +349,9 @@ export async function listarHallazgos(
 export async function guardarHallazgo(
   datos: Partial<Hallazgo> & { auditoria_id: number; descripcion: string },
 ): Promise<{ success: boolean; id?: number; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Auditoría ISO 9001"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!(await permitido())) return { success: false, message: "Sin permiso." }
   try {
     const sb: any = await getSupabaseAdmin()
@@ -378,6 +397,9 @@ export async function cerrarHallazgo(
   id: number,
   verificacion: string,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Auditoría ISO 9001"], "cerrar", "Cerrar hallazgo")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!(await permitido())) return { success: false, message: "Sin permiso." }
   if (!verificacion?.trim()) {
     return {
@@ -405,6 +427,9 @@ export async function cerrarHallazgo(
 }
 
 export async function eliminarHallazgo(id: number): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Auditoría ISO 9001"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!(await permitido())) return { success: false, message: "Sin permiso." }
   try {
     const sb: any = await getSupabaseAdmin()

@@ -2,6 +2,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentEmpresaIdForInsert, getCurrentUsuarioForInsert } from "@/lib/user-context"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 export interface ParoComentario {
   id: string
@@ -41,6 +42,9 @@ export async function guardarParo(payload: {
   motivo: string
   categoria?: string | null
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Reporte de Paros", "Dashboard de Producción"], "editar", "Registrar paro")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const admin: any = await getSupabaseAdmin()
   const empresaId = payload.empresaId || (await getCurrentEmpresaIdForInsert())
   if (!empresaId) return { success: false, message: "Sin empresa seleccionada." }
@@ -129,6 +133,9 @@ export async function getHistorialParos(
 
 // Elimina el comentario de una franja (vuelve a "sin comentar").
 export async function eliminarParo(payload: { empresaId?: number | null; fecha: string; inicio: string }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Reporte de Paros", "Dashboard de Producción"], "eliminar", "Eliminar paro")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const admin: any = await getSupabaseAdmin()
   const empresaId = payload.empresaId || (await getCurrentEmpresaIdForInsert())
   if (!empresaId) return { success: false, message: "Sin empresa seleccionada." }

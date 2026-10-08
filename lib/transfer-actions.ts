@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase-client"
 import { registrarErrorServidor } from "@/lib/errores-servidor"
 import { getColombiaDateTime, getColombiaDate } from "@/lib/date-utils"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
+import { exigirAccion } from "@/lib/puerta-modulo"
 
 interface TransferProduct {
   categoria: string
@@ -89,6 +90,8 @@ export async function getEmpresaById(empresaId: number) {
 }
 
 export async function createTransferRequest(data: TransferRequestData) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Recepción de Traslado", "Traslados de producto"], "crear")
   const supabase = await createClient()
 
   try {
@@ -262,6 +265,8 @@ export async function updateTransferRequest(
     estado: string
   }>,
 ) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Recepción de Traslado"], "crear", "Recibir traslado")
   const supabase = await createClient()
 
   try {
@@ -369,6 +374,8 @@ export async function getDispatchTransfers(selectedEmpresaId?: number) {
 }
 
 export async function generateUnloadOrder(ocargue: string, selectedEmpresaId?: number) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Generar Órdenes de Descargue", "Recepción de Traslado"], "crear")
   const supabase = await createClient()
 
   try {

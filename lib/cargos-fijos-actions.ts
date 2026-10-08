@@ -22,7 +22,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { segundoFactorPendiente } from "@/lib/seguridad-servidor"
-import { exigirModulo } from "@/lib/puerta-modulo"
+import { exigirModulo, motivoSinAccion } from "@/lib/puerta-modulo"
 
 /**
  * PUERTA DE PERMISO (2026-10-07). Una server action es una URL: cualquiera con sesión
@@ -138,6 +138,9 @@ export async function guardarMontacargasAlquiler(payload: {
   fechainicio: string
   fechafin: string
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cargos Fijos"], "configurar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const segundoFactor = await segundoFactorPendiente("cargos-fijos:guardarMontacargasAlquiler")
   if (segundoFactor) return { success: false, message: segundoFactor }
   try {
@@ -218,6 +221,9 @@ export async function guardarCargoFijoProyecto(payload: {
   fechainicio: string
   fechafin: string
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cargos Fijos"], "configurar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const segundoFactor = await segundoFactorPendiente("cargos-fijos:guardarCargoFijoProyecto")
   if (segundoFactor) return { success: false, message: segundoFactor }
   try {
@@ -255,6 +261,9 @@ export interface ResultadoGeneracion {
 export async function generarCargosDelMes(
   periodo: string,
 ): Promise<{ success: boolean; data?: ResultadoGeneracion; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cargos Fijos"], "crear", "Generar cargos del mes")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   // Segundo factor (2026-10-05): solo detiene a quien lo tiene activado y no lo verificó.
   const segundoFactor = await segundoFactorPendiente("cargos-fijos:generarCargosDelMes")
   if (segundoFactor) return { success: false, message: segundoFactor }
@@ -453,6 +462,9 @@ export async function getComparativoToneladasFijas(
 }
 
 export async function marcarCargoSolicitado(id: number): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cargos Fijos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const sb: any = await clienteConPermiso()
     const { error } = await sb
@@ -471,6 +483,9 @@ export async function adjuntarFacturaSiigoCargo(
   id: number,
   url: string,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cargos Fijos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const sb: any = await clienteConPermiso()
     const { error } = await sb
@@ -485,6 +500,9 @@ export async function adjuntarFacturaSiigoCargo(
 }
 
 export async function quitarFacturaSiigoCargo(id: number): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Cargos Fijos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const sb: any = await clienteConPermiso()
     const { error } = await sb
