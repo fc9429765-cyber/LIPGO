@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_SERVICE_KEY =
@@ -68,6 +69,8 @@ function hasTimeValue(v: unknown): boolean {
  *   nunca se cerro la operacion.
  */
 export async function GET(request: Request) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const { searchParams } = new URL(request.url)
     const empresaId = searchParams.get("empresaId")

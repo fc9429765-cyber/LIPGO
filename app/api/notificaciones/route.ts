@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -10,6 +11,8 @@ export const revalidate = 0
  * antiguo. Filtra por empresa si se pasa empresaId.
  */
 export async function GET(request: NextRequest) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const { searchParams } = new URL(request.url)
     const empresaId = searchParams.get("empresaId")

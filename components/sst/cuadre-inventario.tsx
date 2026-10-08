@@ -386,7 +386,7 @@ export function CuadreInventario() {
     if (!sel) return
     if (!confirm("CIERRE MENSUAL\n\nSe contabilizarán las correcciones del cuadre como movimientos reales de inventario (mueven el stock: faltantes salen, sobrantes entran) y el saldo del sistema quedará igual al conteo físico. Esta acción no se puede deshacer.\n\n¿Cerrar el mes?")) return
     setSaving(true)
-    const r = await cerrarMesCuadre(sel.id, actor)
+    const r = await cerrarMesCuadre(sel.id)
     setSaving(false)
     if (r.success) {
       toast({ title: "Mes cerrado", description: `${r.posteados ?? 0} correcciones contabilizadas · stock ajustado` })
@@ -431,7 +431,7 @@ export function CuadreInventario() {
   async function aprobar(a: SigInventarioAjuste) {
     const signo = (a.cantidad ?? 0) < 0 ? "salida (descuenta stock)" : "entrada (suma stock)"
     if (!confirm(`Aprobar y CONTABILIZAR la corrección de ${a.producto || a.codproducto}.\n\nSe generará un movimiento real de ${signo} en el inventario (mueve el saldo). Aprobado por ${actor}.\n\n¿Continuar?`)) return
-    const r = await aprobarAjusteInventario(a.id, actor)
+    const r = await aprobarAjusteInventario(a.id)
     if (r.success) { toast({ title: "Corrección contabilizada", description: "Stock ajustado" }); cargar() }
     else toast({ title: "No se pudo aprobar", description: r.error })
   }

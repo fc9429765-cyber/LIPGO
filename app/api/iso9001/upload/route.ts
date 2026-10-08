@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { setEvidenciaISO } from "@/lib/iso9001-actions"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 /**
  * Sube (o re-sube) la evidencia de una clausula ISO 9001 al bucket
@@ -9,6 +10,8 @@ import { setEvidenciaISO } from "@/lib/iso9001-actions"
  * `iso_clausulas` via `setEvidenciaISO`.
  */
 export async function POST(request: NextRequest) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const formData = await request.formData()
     const file = formData.get("file") as File | null

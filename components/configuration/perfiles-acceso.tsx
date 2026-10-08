@@ -55,7 +55,8 @@ import {
   UserPlus,
   Users,
 } from "lucide-react"
-import { getAllEmpresas, getAllOwners, type Empresa, type Owner } from "@/lib/user-access-actions"
+import { getAllEmpresas, getAllOwners } from "@/lib/user-access-actions"
+import type { Empresa, Owner } from "@/lib/user-access-tipos"
 import {
   asignarUsuariosAPerfil,
   eliminarPerfilAcceso,

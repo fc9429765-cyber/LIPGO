@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 // Render dinamico: la asistencia cambia varias veces durante el dia
 // (registros nuevos, novedades, asignaciones), un cache stale daria
@@ -31,6 +32,8 @@ function hasValue(v: string | null | undefined): boolean {
  *    salida.
  */
 export async function GET(request: Request) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const { searchParams } = new URL(request.url)
     const empresaId = searchParams.get("empresaId")

@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { exigirModuloApi } from "@/lib/puerta-api"
 
 // Amarra UNA factura de Siigo a TODAS las órdenes "CF - Factura solicitada" de una
 // empresa dentro de un rango de fechas (una factura de Siigo cubre varios días/solicitudes).
 // Les fija `facturasiigo` (la misma URL) y cierra su estado a "CF - Cerrado".
 export async function POST(request: NextRequest) {
+  const puerta = await exigirModuloApi(["Solicitar Facturas", "Cuadro de Control Facturación"])
+  if (puerta) return puerta
   try {
     const body = await request.json()
     const { idempresa, facturasiigo, desde, hasta, transporte, undo } = body as {

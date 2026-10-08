@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { GESTION_LIPGO_DESDE } from "@/lib/facturacion-constantes"
 import { excluirNoFacturable } from "@/lib/facturas-exclusiones"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 export async function GET(request: NextRequest) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const { searchParams } = new URL(request.url)
     const empresaId = searchParams.get("empresaId")

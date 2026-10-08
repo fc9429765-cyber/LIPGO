@@ -3064,10 +3064,22 @@ export async function verifyCarteraPassword(password: string, idpedido?: number 
 }
 
 // New function to update pedido with revisioncartera
-export async function approveCartera(idpedido: number, nombreCartera: string) {
+export async function approveCartera(idpedido: number, clave: string) {
   const supabase = await createClient()
   try {
-    console.log("[v0] Approving cartera for pedido:", idpedido, "with nombre:", nombreCartera)
+    // Fase 0 (2026-10-07): antes recibía el NOMBRE de quien aprobaba, que el
+    // navegador obtenía de `verifyCarteraPassword`; cualquiera podía llamar
+    // esta acción con un nombre inventado y saltarse la clave. Ahora la clave
+    // se valida aquí, atómica con la escritura (como closePendingOrder).
+    const { data: order } = await supabase.from("pedidoscabecera").select("id_empresa").eq("idpedido", idpedido).maybeSingle()
+    const auth = await autorizar({
+      proceso: "ped_aprobar_cartera",
+      idempresa: order?.id_empresa ?? null,
+      clave,
+      referencia: `cartera pedido ${idpedido}`,
+    })
+    if (!auth.ok) return { success: false, message: auth.error || "Contraseña de cartera inválida" }
+    const nombreCartera = auth.autorizadoPor || "Cartera"
 
     const { error } = await supabase
       .from("pedidoscabecera")

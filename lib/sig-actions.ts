@@ -13,6 +13,8 @@
 // y el rol anon no puede leerlas; la autorizacion del modulo ya se controla
 // con los permisos (sig_matriz / sig_iso*). Mismo patron que permissions-actions.
 import { getSupabaseAdmin, getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
+import { getCurrentUsuarioForInsert } from "@/lib/user-context"
+import { tieneModulo } from "@/lib/puerta-modulo"
 import { registrarErrorServidor } from "@/lib/errores-servidor"
 // `autorizar` vive en autorizaciones-core, que es `server-only`: se importa de
 // forma dinámica solo donde se valida una clave, para que los scripts de
@@ -4765,6 +4767,17 @@ async function marcarAjusteAprobado(
  */
 export async function aprobarAjusteInventario(
   id: number,
+): Promise<{ success: boolean; invtransId?: number | null; error?: string }> {
+  // Fase 0 (2026-10-07): el nombre de quien aprueba lo ponía el navegador.
+  // Ahora sale de la sesión, y mover stock exige el módulo de la pantalla.
+  if (!(await tieneModulo(["Cuadre de Inventario"]))) return { success: false, error: "Sin permiso para Cuadre de Inventario." }
+  const aprobadoPor = await getCurrentUsuarioForInsert()
+  return aprobarAjusteInterno(id, aprobadoPor)
+}
+
+/** Sin puerta: para la pantalla (ya gateada arriba) y para el acta de cruce, que corrige y aprueba en un paso. */
+async function aprobarAjusteInterno(
+  id: number,
   aprobadoPor: string,
 ): Promise<{ success: boolean; invtransId?: number | null; error?: string }> {
   try {
@@ -4793,9 +4806,11 @@ export async function aprobarAjusteInventario(
  */
 export async function cerrarMesCuadre(
   cuadreId: number,
-  actor: string,
 ): Promise<{ success: boolean; posteados?: number; error?: string }> {
+  // Fase 0 (2026-10-07): ver aprobarAjusteInventario.
+  if (!(await tieneModulo(["Cuadre de Inventario"]))) return { success: false, error: "Sin permiso para Cuadre de Inventario." }
   try {
+    const actor = await getCurrentUsuarioForInsert()
     const supabase: any = await getSupabaseAdmin()
     const { data: ajustes } = await supabase
       .from("sig_inventario_ajuste")
@@ -6651,7 +6666,7 @@ export async function corregirLineaActaCruce(
     if (!reg.success || !reg.id) return { success: false, error: reg.error || "No se pudo registrar la corrección" }
 
     // 2) Aprueba de inmediato (postea a invtrans, mueve el stock real).
-    const r = await aprobarAjusteInventario(reg.id, payload.actor)
+    const r = await aprobarAjusteInterno(reg.id, payload.actor)
     if (!r.success) return { success: false, error: r.error }
 
     // 3) Deja la línea del acta como evidencia.

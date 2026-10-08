@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
 import { getCurrentEmpresaData } from "@/lib/user-context"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 export async function GET() {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const empresaData = await getCurrentEmpresaData()
     return NextResponse.json(empresaData)

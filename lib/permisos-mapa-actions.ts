@@ -19,6 +19,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentUser } from "@/lib/auth-actions"
+import { exigirAdministradorUsuarios } from "@/lib/seguridad-servidor"
 
 function faltaTabla(msg: string | undefined): boolean {
   const m = String(msg ?? "").toLowerCase()
@@ -92,6 +93,12 @@ export async function puedeAbrirProceso(procesoId: string): Promise<boolean> {
 export async function getProcesosDeUsuario(
   usuarioId: string,
 ): Promise<{ success: boolean; procesos: string[]; faltaMigracion?: boolean; message?: string }> {
+  // Los procesos de OTRO usuario solo los ve quien administra usuarios.
+  const yo = await usuarioActual()
+  if (yo !== usuarioId) {
+    const motivo = await exigirAdministradorUsuarios("permisos-mapa.leer")
+    if (motivo) return { success: false, procesos: [], message: motivo }
+  }
   try {
     const sb: any = await getSupabaseAdmin()
     const { data, error } = await sb
@@ -120,6 +127,11 @@ export async function guardarProcesosDeUsuario(
   usuarioId: string,
   procesos: string[],
 ): Promise<{ success: boolean; message?: string }> {
+  // Fase 0 (2026-10-07): esta acción escribía permisos sin preguntar quién
+  // llamaba. Exige el módulo "Gestión de Usuarios", como el resto de la
+  // administración de permisos.
+  const motivo = await exigirAdministradorUsuarios("permisos-mapa.guardar")
+  if (motivo) return { success: false, message: motivo }
   try {
     const sb: any = await getSupabaseAdmin()
     const quien = (await usuarioActual()) ?? "sistema"

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { enviarWhatsApp } from "@/lib/whatsapp"
+import { exigirModuloApi } from "@/lib/puerta-api"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -49,6 +50,8 @@ function renderMensaje(plantilla: string, d: DestinatarioEntrada): string {
  * auditoria en `notificaciones_enviadas`. Devuelve el resumen del lote.
  */
 export async function POST(request: NextRequest) {
+  const puerta = await exigirModuloApi(["Notificaciones al Personal", "Programación de turnos"])
+  if (puerta) return puerta
   try {
     const body = (await request.json()) as CuerpoEnvio
     const { empresaId, tipo = "alerta", mensaje, plantilla, createdBy, destinatarios } = body

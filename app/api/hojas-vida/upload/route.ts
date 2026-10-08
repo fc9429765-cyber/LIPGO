@@ -2,10 +2,13 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase-client"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 // Sube una hoja de vida a Supabase Storage (bucket "archivos", mismo que usan
 // los documentos de headcount) y guarda sus metadatos en Supabase.
 export async function POST(request: NextRequest) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const formData = await request.formData()
     const file = formData.get("file") as File | null

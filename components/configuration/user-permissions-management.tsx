@@ -43,9 +43,8 @@ import {
   getUserOwnerAccess,
   grantUserOwnerAccess,
   revokeUserOwnerAccess,
-  type Empresa,
-  type Owner,
 } from "@/lib/user-access-actions"
+import type { Empresa, Owner } from "@/lib/user-access-tipos"
 // El tipo `UserPermissions` se importa desde el modulo compartido (sin
 // "use server"): Next.js no permite exportar valores no async desde archivos
 // con la directiva "use server".

@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { AyudaClaveAutorizacion } from "@/components/mi-clave-autorizacion"
 import { toast } from "@/hooks/use-toast"
-import { approveOrder, verifyCarteraPassword, approveCartera, annulOrder, closePendingOrder, closeOrderWithInvoice, getOrderDetails, deleteOrder } from "@/lib/orders-actions"
+import { approveOrder, approveCartera, annulOrder, closePendingOrder, closeOrderWithInvoice, getOrderDetails, deleteOrder } from "@/lib/orders-actions"
 import type { PedidoCola } from "@/lib/pedidos-cola-actions"
 import { fechaCortaAnio } from "./formato"
 
@@ -80,12 +80,8 @@ export function AccionesPedidoDialogos({ accion, onClose, onDone }: { accion: Ac
     setTrabajando(true)
     setError("")
     try {
-      const v = await verifyCarteraPassword(clave, p.idpedido)
-      if (!v.success) {
-        setError(v.message || "Clave incorrecta")
-        return
-      }
-      const r = await approveCartera(p.idpedido, v.nombre!)
+      // La clave se valida dentro de approveCartera (atómica con la escritura).
+      const r = await approveCartera(p.idpedido, clave)
       if (r.success) listo("Aprobación de cartera registrada.")
       else setError(r.message || "No se pudo registrar la aprobación de cartera")
     } finally {

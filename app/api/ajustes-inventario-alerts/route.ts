@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 /**
  * Ajustes manuales de inventario por código — alertas para Gerencia.
@@ -20,6 +21,8 @@ import { getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 const DIAS_VENTANA = 7
 
 export async function GET(request: NextRequest) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const { searchParams } = new URL(request.url)
     const empresaId = searchParams.get("empresaId")

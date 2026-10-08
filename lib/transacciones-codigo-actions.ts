@@ -235,6 +235,25 @@ export async function ejecutarTransaccionPorCodigo(payload: EjecutarPayload): Pr
   invtransIds?: number[]
   logId?: number
 }> {
+  // Fase 0 (2026-10-07): la bandera `__aprobado` la decidía quien llamaba. Una
+  // server action es una URL, así que desde el navegador se podía mandar
+  // `__aprobado: true` y aplicar un 601/702 sin la clave de Gerencia. Lo que
+  // llega de afuera entra SIEMPRE como no aprobado; solo las dos rutas internas
+  // (`ejecutarAjusteConMiClave`, `aprobarAjustePendiente`), que ya validaron la
+  // clave, llaman a `ejecutarTransaccion(…, true)`.
+  const { __aprobado: _ignorada, ...limpio } = payload
+  return ejecutarTransaccion(limpio, false)
+}
+
+async function ejecutarTransaccion(
+  payload: EjecutarPayload,
+  aprobadoPorGerencia: boolean,
+): Promise<{
+  success: boolean
+  message: string
+  invtransIds?: number[]
+  logId?: number
+}> {
   try {
     // Blindaje 2026-09-23 (incidente Descargue duplicado + 702 que lo tapó,
     // Cedi Funza): 601/702 son salida sin orden de cargue y sin ser una
@@ -242,7 +261,7 @@ export async function ejecutarTransaccionPorCodigo(payload: EjecutarPayload): Pr
     // directo. `__aprobado` solo lo pone `aprobarAjustePendiente`, después de
     // verificar la clave de Gerencia; la UI y cualquier otro llamador deben
     // usar `solicitarAjustePendiente` para estos dos códigos.
-    if (CODIGOS_REQUIEREN_APROBACION.has(payload.codigo) && !payload.__aprobado) {
+    if (CODIGOS_REQUIEREN_APROBACION.has(payload.codigo) && !aprobadoPorGerencia) {
       return {
         success: false,
         message: `El código ${payload.codigo} requiere aprobación de Gerencia antes de aplicarse. Usa "Solicitar aprobación" en vez de "Ejecutar" -- quedará pendiente hasta que se apruebe.`,
@@ -706,7 +725,7 @@ export async function ejecutarAjusteConMiClave(payload: EjecutarPayload, clave: 
     if (!solicitud.success || !solicitud.id) return { success: false, message: solicitud.message }
 
     const sb: any = await getSupabaseAdmin()
-    const resultado = await ejecutarTransaccionPorCodigo({ ...payload, __aprobado: true })
+    const resultado = await ejecutarTransaccion(payload, true)
     if (!resultado.success) {
       // No dejar una solicitud colgada por un intento fallido (stock cambió, etc.).
       await sb.from("inv_ajustes_pendientes").delete().eq("id", solicitud.id)
@@ -744,7 +763,7 @@ export async function aprobarAjustePendiente(id: number, claveAprobacion: string
     const auth = await resolverClaveAprobacion(claveAprobacion, Number(pendiente.idempresa), String(pendiente.codigo), `aprobar ajuste #${id}`)
     if (!auth.ok) return { success: false, message: auth.error || "Clave inválida." }
 
-    const resultado = await ejecutarTransaccionPorCodigo({ ...pendiente.payload, __aprobado: true })
+    const resultado = await ejecutarTransaccion(pendiente.payload, true)
     if (!resultado.success) {
       // No se marca aprobado si la ejecución real falló (ej. el stock cambió
       // entre la solicitud y la aprobación) -- queda pendiente para reintentar.

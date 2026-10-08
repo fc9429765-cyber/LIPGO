@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 // Mapa de extensión -> content-type, para no depender de `file.type` (que el
 // navegador a veces deja vacío o incorrecto, sobre todo con archivos .html).
@@ -24,6 +25,8 @@ const CONTENT_TYPE_BY_EXT: Record<string, string> = {
  * abrirla/verla desde el portal.
  */
 export async function POST(request: NextRequest) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const formData = await request.formData()
     const file = formData.get("file") as File | null

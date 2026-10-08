@@ -11,7 +11,6 @@ import {
   getDestinosFilter,
   annulOrder,
   closePendingOrder,
-  verifyCarteraPassword,
   approveCartera,
 } from "@/lib/orders-actions"
 import { PERIODOS_LISTADO, PERIODO_LISTADO_DEFECTO, desdeDePeriodo, type PeriodoListado } from "@/lib/periodo-listados"
@@ -347,21 +346,9 @@ export function ComprehensiveOrdersManagement() {
 
     setLoadingCartera(true)
     try {
-      // Verify the password
-      const verifyResult = await verifyCarteraPassword(carteraPassword, approvingCartera)
-
-      if (!verifyResult.success) {
-        toast({
-          title: "Error",
-          description: verifyResult.message,
-          variant: "destructive",
-        })
-        setLoadingCartera(false)
-        return
-      }
-
-      // If password is valid, approve the cartera
-      const approveResult = await approveCartera(approvingCartera!, verifyResult.nombre!)
+      // La clave se valida dentro de approveCartera, atómica con la escritura
+      // (Fase 0, 2026-10-07): antes se verificaba aquí y se mandaba el nombre.
+      const approveResult = await approveCartera(approvingCartera!, carteraPassword)
 
       if (approveResult.success) {
         toast({

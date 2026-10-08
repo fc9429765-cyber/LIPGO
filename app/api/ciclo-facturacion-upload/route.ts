@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 /**
  * Sube un archivo (anexo/factura, original o firmado por el cliente) de una
@@ -10,6 +11,8 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
  * este endpoint.
  */
 export async function POST(request: NextRequest) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const formData = await request.formData()
     const file = formData.get("file") as File | null

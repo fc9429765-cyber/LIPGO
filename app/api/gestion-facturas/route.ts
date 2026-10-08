@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { parseColombianNumber } from "@/lib/parse-colombian-number"
 import { excluirPlacasFacturas, excluirNoFacturable } from "@/lib/facturas-exclusiones"
+import { exigirSesionApi, exigirModuloApi } from "@/lib/puerta-api"
 
 export async function GET(request: NextRequest) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const { searchParams } = new URL(request.url)
     const empresaId = searchParams.get("empresaId")
@@ -195,6 +198,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  const puerta = await exigirModuloApi(["Solicitar Facturas", "Cuadro de Control Facturación"])
+  if (puerta) return puerta
   try {
     const body = await request.json()
     const { orderId, mediopago, valorpago, iva, comprobante, cuentatransferencia, retefuente, estadofactura, cliente, observacionesfactura } = body
@@ -250,6 +255,8 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const puerta = await exigirModuloApi(["Solicitar Facturas", "Cuadro de Control Facturación"])
+  if (puerta) return puerta
   try {
     const body = await request.json()
     const { orderId, estadofactura, cliente, iva, retefuente, valorpago, cuentatransferencia, facturasiigo } = body

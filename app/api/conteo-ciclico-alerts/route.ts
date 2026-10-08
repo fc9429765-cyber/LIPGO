@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { exigirSesionApi } from "@/lib/puerta-api"
 
 /**
  * Conteo Cíclico de Inventario - Alertas de vencido / diferencia sin resolver.
@@ -14,6 +15,8 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 const DIAS_LIMITE = 7
 
 export async function GET(request: NextRequest) {
+  const puerta = await exigirSesionApi()
+  if (puerta) return puerta
   try {
     const { searchParams } = new URL(request.url)
     const empresaId = searchParams.get("empresaId")
