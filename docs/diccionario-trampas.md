@@ -65,6 +65,29 @@ Consecuencias prácticas:
   buscando "las 12:00 de Bogotá" no encuentra nada. Caso real del 2026-10-07.
 - `getColombiaDate()` da `YYYY-MM-DD` y `getColombiaTime()` da `HH:MM:SS`.
 
+### 3.1 Pero NO todas las columnas de fecha son así: hay de los dos tipos
+
+Esta es la parte que de verdad cuesta tiempo, y hace perder más de una hora cada vez. En la
+misma base conviven **dos convenciones**, según quién escriba la fila:
+
+| Quién escribe | Qué guarda | Para leerla |
+|---|---|---|
+| La **base** (`default now()`) | **UTC real** | **restar 5 horas** para tener Bogotá |
+| La **app** con `getColombiaISO()` | Hora de pared de **Bogotá** con sufijo `Z` | leerla **tal cual** |
+
+Clasificadas midiéndolas contra el reloj el 2026-10-08:
+
+- **UTC REAL** (restar 5 h): `autorizacion_log.created_at`, `auditoria.ts`, `app_errores.created_at`,
+  `pedidodetalle_ocargue.creado_en`, `autorizacion_claves.actualizado_en`,
+  `notificaciones_enviadas.created_at`.
+- **HORA DE BOGOTÁ** (leer tal cual): `invtrans.creado`.
+
+**Al informarle una hora a alguien, siempre en hora de Colombia.** Decir "aprobó a las 12:56"
+cuando en Bogotá eran las 7:56 de la mañana no es un detalle: cambia por completo la lectura de
+lo que pasó. Pasó el 2026-10-08 al reconstruir el incidente de cartera de ID2, con la auditoría,
+que es UTC real. Si el relato no cuadra con la jornada (una aprobación "al mediodía" cuando la
+operación apenas arranca), la hora está sin convertir.
+
 ---
 
 ## 4. El mismo dato escrito de varias formas
