@@ -11,6 +11,7 @@ import { KPI_DEFS } from "@/lib/kpis-area"
 import type { UmbralAlerta } from "@/lib/alertas-bsc"
 import { evaluarYEnviarAlertas } from "@/lib/alertas-bsc-core"
 import { registrarErrorServidor } from "@/lib/errores-servidor"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 type Resp<T> = { success: true; data: T } | { success: false; message: string }
 
@@ -87,6 +88,9 @@ export async function getMisSuscripciones(empresaId: number | null | undefined):
 }
 
 export async function guardarSuscripcion(input: { indicador: string; empresaId: number | null; umbral: UmbralAlerta; correo: string }): Promise<Resp<{ id: number }>> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Indicadores SIG", "Dashboard SIG"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const s = await sesion()
     if (!s) return { success: false, message: "No hay sesión activa." }
@@ -126,6 +130,9 @@ export async function guardarSuscripcion(input: { indicador: string; empresaId: 
 }
 
 export async function cancelarSuscripcion(id: number): Promise<Resp<null>> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Indicadores SIG", "Dashboard SIG"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const s = await sesion()
     if (!s) return { success: false, message: "No hay sesión activa." }

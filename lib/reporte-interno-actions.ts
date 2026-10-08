@@ -26,6 +26,7 @@ import type {
   DestinatarioInterno,
   EventoInterno,
 } from "@/lib/reporte-interno-tipos"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const PLANTILLA = "reporte_interno_operacion"
 
@@ -87,6 +88,9 @@ export async function guardarConfigInterno(payload: {
   detalle: string
   empresas: number[]
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Notificaciones al Personal"], "configurar", "Reporte interno")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!payload.detalle?.trim()) {
       return { success: false, message: "El detalle no puede estar vacío." }
@@ -194,6 +198,9 @@ export async function guardarDestinatario(payload: {
   /** Vacío = todas las empresas del evento. */
   empresas?: number[]
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Notificaciones al Personal"], "configurar", "Reporte interno")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!payload.nombre?.trim()) return { success: false, message: "Ponle un nombre." }
 
@@ -267,6 +274,9 @@ export async function guardarDestinatario(payload: {
 }
 
 export async function eliminarDestinatario(id: number): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Notificaciones al Personal"], "configurar", "Reporte interno")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const sb: any = await getSupabaseAdmin()
     const { error } = await sb.from("reporte_interno_destinatarios").delete().eq("id", id)

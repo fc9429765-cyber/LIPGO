@@ -5,12 +5,12 @@ import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import { registrarConceptoExamen } from "@/lib/examenes-medicos-actions"
 import { normalizarAptitud } from "@/lib/examenes-utils"
 import { leerConceptoAptitud } from "@/lib/examenes-ocr"
-import { exigirSesionApi } from "@/lib/puerta-api"
+import { exigirAccionApi } from "@/lib/puerta-api"
 
 // Sube el documento del examen medico de un empleado APTO (de la entrevista)
 // a Supabase Storage (bucket "archivos") y guarda sus metadatos.
 export async function POST(request: NextRequest) {
-  const puerta = await exigirSesionApi()
+  const puerta = await exigirAccionApi(["Examenes Médicos"], "editar")
   if (puerta) return puerta
   try {
     const formData = await request.formData()

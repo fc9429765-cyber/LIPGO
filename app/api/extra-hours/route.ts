@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createServerClient } from "@/lib/supabase-server"
+import { exigirAccionApi } from "@/lib/puerta-api"
 
 /**
  * GET /api/extra-hours?empresaId=X&fecha=YYYY-MM-DD
@@ -164,6 +165,8 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const puerta = await exigirAccionApi(["Asignación horas extra"], "aprobar")
+  if (puerta) return puerta
   try {
     const body = await request.json()
     const { id, hed, hedf, hen, hef, hn, aprobado } = body

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createServerClient } from "@/lib/supabase-server"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
+import { exigirAccionApi } from "@/lib/puerta-api"
 
 export async function GET(request: NextRequest) {
   try {
@@ -59,6 +60,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const puerta = await exigirAccionApi(["Head Count", "Gestión de Colaboradores"], "crear")
+  if (puerta) return puerta
   try {
     const body = await request.json()
 

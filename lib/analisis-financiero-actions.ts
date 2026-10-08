@@ -581,6 +581,9 @@ export async function getAnalisisFinanciero(
   hasta: string,
   meses: number,
 ): Promise<{ success: boolean; data?: AnalisisFinanciero; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Estado de Resultados", "Resumen de Facturación por Proyecto", "Facturación Proyectos"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!ids?.length) return { success: false, message: "Sin proyectos en el alcance." }
     const sb: any = await getSupabaseAdmin()

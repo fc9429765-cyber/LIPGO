@@ -31,6 +31,7 @@ import {
   medioPagoInconsistente,
   type MedioPago,
 } from "@/lib/facturacion-medio-pago"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const num = (v: any) => {
   const n = Number(String(v ?? "").replace(/,/g, ""))
@@ -151,6 +152,9 @@ export async function getCierreDiario(
    *  gerencia). Sin proyecto: suma todos los accesibles, como siempre. */
   empresaId?: number | null,
 ): Promise<{ success: boolean; data?: CierreDiario; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ciclo de Facturación", "Cuadro de Control Facturación"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const dia = String(fecha || "").trim() || hoyBogota()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) return { success: false, message: "Fecha inválida." }
 

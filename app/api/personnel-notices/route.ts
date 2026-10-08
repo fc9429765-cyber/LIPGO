@@ -3,6 +3,7 @@ import { createServerClient } from "@/lib/supabase-server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { procesarNovedadRetiro } from "@/lib/retiro-actions"
 import { sincronizarBorradorAusentismo } from "@/lib/ausentismos-actions"
+import { exigirAccionApi } from "@/lib/puerta-api"
 
 export async function GET(request: NextRequest) {
   try {
@@ -61,6 +62,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const puerta = await exigirAccionApi(["Novedades de personal", "Tabla Asistencia"], "crear")
+  if (puerta) return puerta
   try {
     const body = await request.json()
     const { records, dateRange, empresaId } = body

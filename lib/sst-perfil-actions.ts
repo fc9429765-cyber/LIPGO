@@ -149,6 +149,9 @@ export async function savePerfilSociodemografico(
   empresaIdFromClient?: number | null,
   actualizadoPor?: string,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Perfil Sociodemográfico", "MEDEVAC"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase: any = await getSupabaseAdmin()
   const empresaId = await resolveEmpresaId(empresaIdFromClient)
   const limpio = saneado(row)

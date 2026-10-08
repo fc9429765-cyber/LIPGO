@@ -289,6 +289,9 @@ export async function getLiquidaciones(
   idempresa: number,
   opciones?: { retiroDesde: string; retiroHasta: string },
 ): Promise<{ success: boolean; data: LiquidacionPersona[]; params?: ParametrosPrestaciones; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Liquidaciones", "Parafiscales"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion, data: [] }
   if (!idempresa) return { success: false, data: [], message: "Selecciona una empresa." }
   try {
     const admin: any = await getSupabaseAdmin()

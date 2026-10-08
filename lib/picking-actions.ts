@@ -977,6 +977,9 @@ export async function generatePickingPDF(
   placa: string,
   conductor: string,
 ) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Picking"], "exportar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!ordenCargue || !cliente || !placa || !conductor) {
       console.error("[v0] Missing required parameters for PDF generation:", {

@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
-import { exigirSesionApi } from "@/lib/puerta-api"
+import { exigirAccionApi } from "@/lib/puerta-api"
 
 // Endpoint para subir evidencias de Capacitaciones al bucket
 // `archivos` dentro de la carpeta `capacitaciones/`. Devuelve la URL
@@ -8,7 +8,7 @@ import { exigirSesionApi } from "@/lib/puerta-api"
 // Sigue el mismo patron que /api/headcount/upload-document para mantener
 // consistencia entre modulos.
 export async function POST(request: NextRequest) {
-  const puerta = await exigirSesionApi()
+  const puerta = await exigirAccionApi(["Asistencia a Capacitaciones", "Gestión de Capacitaciones"], "editar")
   if (puerta) return puerta
   try {
     const formData = await request.formData()

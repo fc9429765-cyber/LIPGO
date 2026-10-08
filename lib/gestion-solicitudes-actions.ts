@@ -535,6 +535,9 @@ export async function generarCertificadoLaboralWord(
   publicUrl?: string
   error?: string
 }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Solicitudes"], "exportar", "Certificado laboral")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   console.log("[v0] generarCertificadoLaboralWord invocado, solicitudId:", solicitudId)
   try {
     if (!solicitudId) {
@@ -1021,6 +1024,9 @@ export async function subirEvidenciaAnticipo(
   solicitudId: string,
   cuotas: number,
 ): Promise<{ success: boolean; publicUrl?: string; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Solicitudes", "Aprobación de Solicitudes de Personal"], "editar")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     if (!solicitudId) return { success: false, error: "Solicitud invalida" }
     if (!Number.isFinite(cuotas) || cuotas < 1) {

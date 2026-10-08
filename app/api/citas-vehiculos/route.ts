@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase"
 import { NextResponse } from "next/server"
-import { exigirSesionApi, exigirModuloApi } from "@/lib/puerta-api"
+import { exigirSesionApi, exigirAccionApi } from "@/lib/puerta-api"
 
 export async function GET(request: Request) {
   const puerta = await exigirSesionApi()
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const puerta = await exigirModuloApi(["Generar Órdenes de Descargue", "Generar Órdenes de Cargue", "Ver Vehículos"])
+  const puerta = await exigirAccionApi(["Generar Órdenes de Descargue", "Generar Órdenes de Cargue", "Ver Vehículos"], "editar")
   if (puerta) return puerta
   try {
     const body = await request.json()

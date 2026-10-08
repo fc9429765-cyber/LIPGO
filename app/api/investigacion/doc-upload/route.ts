@@ -1,11 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
-import { exigirSesionApi } from "@/lib/puerta-api"
+import { exigirAccionApi } from "@/lib/puerta-api"
 
 // Sube el documento de una investigación de AT al bucket `archivos`:
 // investigaciones/at/{empresaId}/{incidenteId}-{archivo}
 export async function POST(request: NextRequest) {
-  const puerta = await exigirSesionApi()
+  const puerta = await exigirAccionApi(["Investigación AT", "Investigaciones Realizadas"], "editar")
   if (puerta) return puerta
   try {
     const formData = await request.formData()

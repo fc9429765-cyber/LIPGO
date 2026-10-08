@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { setEvidenciaISO } from "@/lib/iso9001-actions"
-import { exigirSesionApi } from "@/lib/puerta-api"
+import { exigirAccionApi } from "@/lib/puerta-api"
 
 /**
  * Sube (o re-sube) la evidencia de una clausula ISO 9001 al bucket
@@ -10,7 +10,7 @@ import { exigirSesionApi } from "@/lib/puerta-api"
  * `iso_clausulas` via `setEvidenciaISO`.
  */
 export async function POST(request: NextRequest) {
-  const puerta = await exigirSesionApi()
+  const puerta = await exigirAccionApi(["Repositorio ISO 9001", "Centro de Evidencia ISO 9001", "Auditoría ISO 9001"], "editar")
   if (puerta) return puerta
   try {
     const formData = await request.formData()

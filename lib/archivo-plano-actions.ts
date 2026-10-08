@@ -24,6 +24,7 @@
  */
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { exigirAccion } from "@/lib/puerta-modulo"
 
 export interface FilaArchivoPlano {
   identificacionempleado: string | null
@@ -67,6 +68,8 @@ export async function getArchivoPlano(
   mes?: string | null,
   quincena?: string | null,
 ): Promise<{ success: boolean; data: FilaArchivoPlano[]; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Nominapersonal", "Acumulados LIPgo"], "ver")
   if (!idempresa) return { success: false, data: [], message: "Selecciona una empresa." }
 
   try {

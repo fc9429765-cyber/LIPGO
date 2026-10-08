@@ -2,6 +2,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 // KPIs de gestión del cliente para el módulo de Pedidos, alineados a los objetivos
 // del área (cumplimiento de entregas). Misma definición del Dashboard Pedidos:
@@ -174,6 +175,9 @@ export async function getOrdenesRecientes(selectedEmpresaId?: number | null): Pr
 // registra el ocargue en el propio vehículo (no toca cabeceraoc). Mantiene el
 // indicador de "no procesados" al día.
 export async function cerrarVehiculoConOrden(vehicleId: number, ordendecargue: string, selectedEmpresaId?: number | null) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ver Vehículos", "Dashboard Pedidos"], "cerrar", "Marcar salida")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const sb: any = await getSupabaseAdmin()
   const empresaId = selectedEmpresaId || (await getCurrentEmpresaIdForInsert())
   if (!vehicleId || !empresaId) return { success: false, message: "Datos incompletos." }
@@ -189,6 +193,9 @@ export async function cerrarVehiculoConOrden(vehicleId: number, ordendecargue: s
 
 // Eliminar un registro de vehículo NO procesado (por error / no se va a usar).
 export async function eliminarVehiculoNoProcesado(vehicleId: number, selectedEmpresaId?: number | null) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ver Vehículos", "Dashboard Pedidos"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const sb: any = await getSupabaseAdmin()
   const empresaId = selectedEmpresaId || (await getCurrentEmpresaIdForInsert())
   if (!vehicleId || !empresaId) return { success: false, message: "Datos incompletos." }

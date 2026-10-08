@@ -16,6 +16,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import type { FactoresCosto } from "@/lib/requisicion-causales"
 import { CARGOS_HEADCOUNT, cargoCanonico } from "@/lib/headcount-cargos"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 // ---------------------------------------------------------------------------
 // CATÁLOGOS DE LA REQUISICIÓN — "todo amarrado" (gerencia, 2026-09-30).
@@ -368,6 +369,9 @@ export async function crearRequisicion(payload: {
   /** Puesto operativo del maestro de turnos (opcional). */
   puesto?: string | null
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Solicitud de Personal", "Gestión de Solicitudes"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!payload.empresaId) return { success: false, message: "Falta la empresa." }
     if (!payload.cargo?.trim()) return { success: false, message: "Indica el cargo requerido." }

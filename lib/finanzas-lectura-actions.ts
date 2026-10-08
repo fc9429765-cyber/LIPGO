@@ -14,6 +14,7 @@ import { exigirSegundoFactorSiActivo } from "@/lib/seguridad-servidor"
 import { checkModulePermission } from "@/lib/permissions-actions"
 import { aplicarOrdenEstable } from "@/lib/orden-paginacion"
 import { registrarErrorServidor } from "@/lib/errores-servidor"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const PAGE = 1000
 const MAX_ROWS = 300_000
@@ -155,6 +156,9 @@ export async function leerPagonominaRango(input: {
   columnas: string
   orden: "persona_fecha" | "fecha_desc_persona"
 }): Promise<Fila[]> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Nominapersonal", "Acumulados LIPgo", "Parafiscales", "Liquidaciones", "Revisión de nómina"], "ver")
+  if (motivoAccion) throw new Error(motivoAccion)
   await exigir([...ESTADO_RESULTADOS, ...NOMINA])
   const sb: any = await getSupabaseAdminAsSystem()
   const leerTramo = (pDesde: string, pHasta: string) =>
@@ -267,6 +271,9 @@ export async function leerGastos(input: { idEmpresa: number; desde: string; hast
 }
 
 export async function registrarGasto(input: { idEmpresa: number; fecha: string; categoria: string; monto: number; descripcion: string; urlSoporte: string | null }): Promise<{ success: true } | { success: false; message: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Registrar Gasto"], "crear")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     await exigir(["Registrar Gasto"])
     const user = await getCurrentUser()

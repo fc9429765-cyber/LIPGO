@@ -9,6 +9,7 @@ import { getCurrentUser, getUserProfile } from "@/lib/auth-actions"
 import { INDICADOR_INFORME } from "@/lib/informe-semanal"
 import { enviarInformeA } from "@/lib/informe-semanal-core"
 import { registrarErrorServidor } from "@/lib/errores-servidor"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 type Resp<T> = { success: true; data: T } | { success: false; message: string }
 const CORREO_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -54,6 +55,9 @@ export async function getInformeSuscripcion(empresaId: number | null | undefined
 }
 
 export async function suscribirInforme(input: { empresaId: number; correo: string }): Promise<Resp<{ id: number }>> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Indicadores SIG", "Dashboard SIG"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const s = await sesion()
     if (!s) return { success: false, message: "No hay sesión activa." }
@@ -87,6 +91,9 @@ export async function suscribirInforme(input: { empresaId: number; correo: strin
 }
 
 export async function cancelarInforme(id: number): Promise<Resp<null>> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Indicadores SIG", "Dashboard SIG"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const s = await sesion()
     if (!s) return { success: false, message: "No hay sesión activa." }

@@ -305,6 +305,9 @@ function derivarEstado(ejecutada: boolean, trabajadores: number[]): EstadoInducc
 export async function listInduccionesAdmin(
   idempresa?: number | null,
 ): Promise<{ success: boolean; data: InduccionAdmin[]; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Inducciones", "Evidencia de Inducciones"], "ver")
+  if (motivoAccion) return { success: false, error: motivoAccion, data: [] }
   try {
     const supabase = await createClient()
     let query = supabase

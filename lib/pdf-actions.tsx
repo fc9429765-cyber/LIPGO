@@ -3,6 +3,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentEmpresaData } from "@/lib/user-context"
 import { resolverOwnerPorNombre } from "@/lib/owner-utils"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 /**
  * Recorta `texto` para que quepa en `anchoMm` con el tamaño de fuente ACTUAL
@@ -312,6 +313,9 @@ export async function generateAndUploadOrderPDF(
   empresaNombre?: string,
   empresaLogo?: string,
 ) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Entrada de pedidos", "Gestionar pedidos"], "ver")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     console.log("[v0] Generating PDF with empresa data from order")
 
@@ -498,6 +502,9 @@ export async function generateAndUploadOrderPDF(
 }
 
 export async function generateAndUploadLoadOrderPDF(orderData: any, ordenCargueId: number, ordenCargueCode: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Generar Órdenes de Cargue", "Gestión de Ordenes", "Picking", "Packing"], "ver")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     console.log("[v0] Starting PDF generation for load order:", ordenCargueCode)
     console.log("[v0] OrderData received:", JSON.stringify(orderData, null, 2))
@@ -1366,6 +1373,9 @@ export async function generateAndUploadLoadOrderPDF_original(
 }
 
 export async function generateAndUploadTransferRequestPDF(transferData: any, idpedido: number, pedidoCode: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Recepción de Traslado", "Traslados de producto"], "ver")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     console.log("[v0] Starting PDF generation for transfer request:", pedidoCode)
 
@@ -1537,6 +1547,9 @@ export async function generateAndUploadTransferRequestPDF(transferData: any, idp
 }
 
 export async function generateAndUploadProductionEntryPDF(productionData: any) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Ingreso de Producción", "Ver ingresos de producción"], "ver")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     console.log("[v0] Starting PDF generation for production entry")
 
@@ -1709,6 +1722,9 @@ export async function generateAndUploadProductionEntryPDF(productionData: any) {
 }
 
 export async function generateAndUploadBatchAssignmentPDF(batchData: any, ordenCargue: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Asignación de Lotes", "Historial de lotes"], "ver")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     console.log("[v0] Starting PDF generation for batch assignment:", ordenCargue)
 
@@ -1915,6 +1931,9 @@ export async function generateAndUploadSanitaryRegistryPDF(sanitaryData: {
   aprobacion: string
   isVehicleOnly?: boolean
 }) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Registro sanitario", "Ver historial de Inspección"], "ver")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     console.log("[v0] Starting PDF generation for sanitary registry")
 

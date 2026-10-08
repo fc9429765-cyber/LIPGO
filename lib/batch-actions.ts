@@ -724,6 +724,9 @@ export async function getBatchHistoryFilters(selectedEmpresaId?: number | null) 
 }
 
 export async function updateBatchHistoryRecord(data: UpdateBatchHistoryData) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Historial de lotes"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const supabase = await createClient()
 

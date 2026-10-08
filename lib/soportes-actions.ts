@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase-client"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import type { SoporteRow, SoporteMeta } from "@/lib/soportes-types"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 async function resolveEmpresaId(fromClient?: number | null): Promise<number | null> {
   if (fromClient && !Number.isNaN(fromClient)) return fromClient
@@ -77,6 +78,9 @@ export async function subirYRegistrarSoporte(
   meta: SoporteMeta,
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; url?: string; id?: number; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Repositorio de Soportes", "Matriz de Estándares", "Auditoría 0312", "IPEVR", "Plan de Mejoramiento", "Investigación AT", "Investigaciones Realizadas", "Cargos Fijos", "Matriz Integrada SIG", "Repositorio por Norma SIG"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const empresaId = await resolveEmpresaId(empresaIdFromClient)
     if (!empresaId) return { success: false, message: "No se pudo resolver la empresa." }
@@ -164,6 +168,9 @@ export async function registrarSoporteSubido(
   meta: SoporteMeta,
   empresaIdFromClient?: number | null,
 ): Promise<{ success: boolean; url?: string; id?: number; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Repositorio de Soportes", "Matriz de Estándares", "Auditoría 0312", "IPEVR", "Plan de Mejoramiento", "Investigación AT", "Investigaciones Realizadas", "Cargos Fijos", "Matriz Integrada SIG", "Repositorio por Norma SIG"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const empresaId = await resolveEmpresaId(empresaIdFromClient)
     if (!empresaId) return { success: false, message: "No se pudo resolver la empresa." }
@@ -233,6 +240,9 @@ export async function registrarSoporteSubido(
 
 // Marca un soporte como histórico (no borra el archivo; conserva la trazabilidad).
 export async function anularSoporte(id: number): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Repositorio de Soportes"], "anular")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const { error } = await supabase.from("soportes_documentales").update({ vigente: false }).eq("id", id)
   return error ? { success: false, message: error.message } : { success: true }
@@ -261,6 +271,9 @@ export async function eliminarSoporte(
   id: number,
   motivo: string,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Repositorio de Soportes", "Matriz de Estándares", "Auditoría 0312", "IPEVR", "Plan de Mejoramiento", "Investigación AT", "Investigaciones Realizadas", "Matriz Integrada SIG", "Repositorio por Norma SIG"], "editar", "Quitar soporte")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!id) return { success: false, message: "No se indicó qué soporte quitar." }
   if (!motivo || !motivo.trim()) {
     return { success: false, message: "Indica por qué se quita el soporte." }

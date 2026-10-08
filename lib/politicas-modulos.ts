@@ -46,8 +46,8 @@ const CRUD_EXPORT = ["crear", "editar", "eliminar", "exportar"] as const
 
 export const POLITICAS: Record<string, PoliticaModulo> = {
   // ───────────────────────── Recepción y Despacho ─────────────────────────
-  "Generar Órdenes de Cargue": { silenciosas: ["crear"], etiquetas: { crear: "Generar orden" } },
-  "Generar Órdenes de Descargue": { silenciosas: ["crear"], etiquetas: { crear: "Generar orden" } },
+  "Generar Órdenes de Cargue": { silenciosas: ["crear", "editar"], etiquetas: { crear: "Generar orden", editar: "Marcar cita como procesada" } },
+  "Generar Órdenes de Descargue": { silenciosas: ["crear", "editar"], etiquetas: { crear: "Generar orden", editar: "Marcar cita como procesada" } },
   "Generar Orden de Distribución": { silenciosas: ["crear"], etiquetas: { crear: "Generar orden" } },
   "Gestión de Ordenes": {
     silenciosas: ["editar", "exportar"],
@@ -94,6 +94,8 @@ export const POLITICAS: Record<string, PoliticaModulo> = {
     etiquetas: { crear: "Registrar conteo", cerrar: "Cerrar mes de inventario", aprobar: "Firmar acta" },
   },
   "Cuadre de Inventario": {
+    // "editar" cubre también el avance del conteo (cerrar conteo, firma del cliente,
+    // recuentos); el cierre MENSUAL que mueve stock es `cerrar`, con clave.
     silenciosas: ["crear", "editar", "eliminar", "configurar"],
     conClave: {
       aprobar: ["inv_601_aprobar", "inv_702_aprobar", "inv_555_aprobar"],
@@ -103,7 +105,7 @@ export const POLITICAS: Record<string, PoliticaModulo> = {
   },
   "Montacargas y personal día": { silenciosas: CRUD_EXPORT },
   "Asignación de Lotes": { silenciosas: ["crear"], etiquetas: { crear: "Asignar lote" } },
-  "Historial de lotes": { silenciosas: ["anular", "exportar"], etiquetas: { anular: "Anular asignación" } },
+  "Historial de lotes": { silenciosas: ["editar", "anular", "exportar"], etiquetas: { editar: "Corregir registro", anular: "Anular asignación" } },
 
   // ───────────────────────── Producción ─────────────────────────
   "Ingreso de Producción": { silenciosas: ["crear"], etiquetas: { crear: "Registrar ingreso" } },
@@ -123,7 +125,7 @@ export const POLITICAS: Record<string, PoliticaModulo> = {
   // ───────────────────────── Torre de Control ─────────────────────────
   "Dashboard Operacion": {},
   "Asistente IA": {},
-  Proyecciones: { silenciosas: ["editar"], etiquetas: { editar: "Guardar proyección" } },
+  Proyecciones: { silenciosas: ["editar", "eliminar"], etiquetas: { editar: "Guardar proyección", eliminar: "Eliminar proyección" } },
 
   // ───────────────────────── Operación LIP ─────────────────────────
   "Operación del día": {},
@@ -185,7 +187,7 @@ export const POLITICAS: Record<string, PoliticaModulo> = {
   "Gestión de Colaboradores": { silenciosas: CRUD },
   "Head Count": { silenciosas: CRUD },
   "Carpetas de Trabajadores": {},
-  Visor: {},
+  Visor: { silenciosas: ["editar"], etiquetas: { editar: "Editar novedad del día" } },
   "Programa de Bienestar": {},
   "Participación y Evidencias": { silenciosas: ["crear", "editar"] },
   Inducciones: { silenciosas: ["crear", "editar", "eliminar", "cerrar"] },
@@ -296,6 +298,26 @@ export const POLITICAS: Record<string, PoliticaModulo> = {
     etiquetas: { crear: "Crear usuario", editar: "Permisos, perfiles, clave", eliminar: "Eliminar usuario", configurar: "Perfiles y procesos" },
   },
   "Bitácora de Auditoría": { silenciosas: ["exportar"] },
+
+  // ───────────────────────── Pantallas que comparten llave con otra ─────────────────────────
+  // La columna es por llave, así que lo declarado aquí se UNE con lo de la pantalla
+  // hermana; se declaran para que el catálogo cubra el 100% del menú y la puerta
+  // pueda nombrar la pantalla real desde la que se llama.
+  "Panel LIP Inventario": {
+    silenciosas: ["crear", "editar"],
+    conClave: { cerrar: "inv_cierre_mes", aprobar: "inv_acta_firmar" },
+    etiquetas: { crear: "Acta de cruce", editar: "Corregir acta", cerrar: "Cerrar mes de inventario", aprobar: "Firmar acta" },
+  },
+  "Reporte de Paros": { silenciosas: ["editar", "eliminar"], etiquetas: { editar: "Registrar paro", eliminar: "Eliminar paro" } },
+  "Panel LIP Operación": {},
+  "Panel LIP Gestión Humana": {},
+  "Dashboard Gastos": {},
+  "Aprobación de Solicitudes de Personal": { silenciosas: ["aprobar", "anular", "crear", "editar"], etiquetas: { anular: "Rechazar" } },
+  "Hojas de Vida": { silenciosas: ["crear", "editar", "eliminar"], etiquetas: { crear: "Sincronizar desde Head Count" } },
+  Antecedentes: { silenciosas: ["crear", "aprobar", "eliminar", "editar"], etiquetas: { crear: "Sincronizar / subir soporte", aprobar: "Decidir antecedente" } },
+  "Gestión integral de pedidos": { silenciosas: ["editar", "eliminar", "exportar"] },
+  "Ver Picking": {},
+  "Ver Solicitudes de traslado": { silenciosas: ["crear"], etiquetas: { crear: "Recibir traslado" } },
 }
 
 export type ProcesoNuevo = {

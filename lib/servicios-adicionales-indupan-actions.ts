@@ -31,6 +31,7 @@ import { normalizarPuesto, resolverPuesto } from "@/lib/puestos-turno-alias"
 import { tarifaHoraExtraVigente, filaTurnoVigente, tarifaTurnoVigente, cobraTurno } from "@/lib/tarifas-turno-shared"
 import { CONCEPTO_HORA_EXTRA, CONCEPTO_TURNO } from "@/lib/facturacion-produccion-conceptos"
 import type { SoporteLinea, ConceptoProduccion, UnidadCobro } from "@/lib/facturacion-control-actions"
+import { exigirAccion } from "@/lib/puerta-modulo"
 
 const INDUPAN_IDEMPRESA = 1
 const INDUPAN_OWNER = "Harinera Indupan"
@@ -41,6 +42,8 @@ export async function calcularServiciosAdicionalesIndupan(
   desde: string,
   hasta: string,
 ): Promise<{ soporte: SoporteLinea[]; conceptos: ConceptoProduccion[]; alertas: string[] }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Facturación Proyectos", "Servicios Adicionales"], "ver")
   const alertas: string[] = []
   const soporte: SoporteLinea[] = []
   try {

@@ -25,6 +25,8 @@ import "server-only"
 import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth-actions"
 import { checkModulePermission } from "@/lib/permissions-actions"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
+import type { Verbo } from "@/lib/permisos-verbos"
 
 /** 401 si no hay sesión; `null` si la hay. */
 export async function exigirSesionApi(): Promise<NextResponse | null> {
@@ -44,4 +46,20 @@ export async function exigirModuloApi(modulos: string[]): Promise<NextResponse |
     if (await checkModulePermission(m)) return null
   }
   return NextResponse.json({ success: false, error: `Sin permiso para ${modulos[0]}.` }, { status: 403 })
+}
+
+/**
+ * Puerta por ACCIÓN (catálogo lib/politicas-modulos.ts): 401 sin sesión, 403 si no
+ * puede hacer `verbo` en ninguno de los módulos; `null` si pasa. Respeta el modo
+ * aviso igual que las server actions (registra y deja pasar).
+ *
+ *   const puerta = await exigirAccionApi(["Solicitar Facturas"], "editar")
+ *   if (puerta) return puerta
+ */
+export async function exigirAccionApi(modulos: string[], verbo: Verbo | "ver", etiqueta?: string): Promise<NextResponse | null> {
+  const sinSesion = await exigirSesionApi()
+  if (sinSesion) return sinSesion
+  const motivo = await motivoSinAccion(modulos, verbo, etiqueta)
+  if (motivo) return NextResponse.json({ success: false, error: motivo }, { status: 403 })
+  return null
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
-import { exigirSesionApi } from "@/lib/puerta-api"
+import { exigirAccionApi } from "@/lib/puerta-api"
 
 /**
  * Subida de UNA foto de mantenimiento de montacargas.
@@ -22,7 +22,7 @@ export const maxDuration = 60
 const MAX_BYTES = 8 * 1024 * 1024
 
 export async function POST(req: Request) {
-  const puerta = await exigirSesionApi()
+  const puerta = await exigirAccionApi(["Gestión de Montacargas"], "editar")
   if (puerta) return puerta
   try {
     // `formData()` lanza si el cuerpo no es multipart, así que se atrapa aparte:

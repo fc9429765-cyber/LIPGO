@@ -19,7 +19,7 @@
 --      la acción sin clave (porque tiene el módulo) no debe quedar sin poder hacerla.
 --   E. notify pgrst: PostgREST recarga el esquema para ver las columnas nuevas.
 --
--- Columnas: 318 (sobre 130 llaves de módulo). Verificación: scripts/263_verificar_262_permisos_acciones.sql.
+-- Columnas: 326 (sobre 132 llaves de módulo). Verificación: scripts/263_verificar_262_permisos_acciones.sql.
 -- Reversa: no hace falta borrar columnas; con modo 'aviso' las puertas no bloquean. Si hubiera
 -- que quitarlas: alter table public.permisos_usuarios drop column "<llave>__<verbo>".
 
@@ -172,13 +172,18 @@ begin
     ('facturacion_proyectos', 'facturacion_proyectos__exportar'),
     ('gastos', 'gastos__crear'),
     ('generar_ordenes_cargue', 'generar_ordenes_cargue__crear'),
+    ('generar_ordenes_cargue', 'generar_ordenes_cargue__editar'),
     ('generar_ordenes_descargue', 'generar_ordenes_descargue__crear'),
+    ('generar_ordenes_descargue', 'generar_ordenes_descargue__editar'),
     ('gestion_colaboradores', 'gestion_colaboradores__crear'),
     ('gestion_colaboradores', 'gestion_colaboradores__editar'),
     ('gestion_colaboradores', 'gestion_colaboradores__eliminar'),
     ('gestion_contratos', 'gestion_contratos__crear'),
     ('gestion_contratos', 'gestion_contratos__editar'),
     ('gestion_contratos', 'gestion_contratos__eliminar'),
+    ('gestion_integral_pedidos', 'gestion_integral_pedidos__editar'),
+    ('gestion_integral_pedidos', 'gestion_integral_pedidos__eliminar'),
+    ('gestion_integral_pedidos', 'gestion_integral_pedidos__exportar'),
     ('gestion_ordenes', 'gestion_ordenes__editar'),
     ('gestion_ordenes', 'gestion_ordenes__exportar'),
     ('gestion_proveedores', 'gestion_proveedores__crear'),
@@ -212,6 +217,7 @@ begin
     ('historial_aprobaciones', 'historial_aprobaciones__exportar'),
     ('historial_bascula', 'historial_bascula__exportar'),
     ('historial_lotes', 'historial_lotes__anular'),
+    ('historial_lotes', 'historial_lotes__editar'),
     ('historial_lotes', 'historial_lotes__exportar'),
     ('inducciones', 'inducciones__cerrar'),
     ('inducciones', 'inducciones__crear'),
@@ -263,6 +269,7 @@ begin
     ('programacionturnos', 'programacionturnos__crear'),
     ('programacionturnos', 'programacionturnos__eliminar'),
     ('proyecciones', 'proyecciones__editar'),
+    ('proyecciones', 'proyecciones__eliminar'),
     ('recobro_incapacidades', 'recobro_incapacidades__editar'),
     ('registrar_vehiculos', 'registrar_vehiculos__crear'),
     ('registro_asistencia', 'registro_asistencia__crear'),
@@ -351,7 +358,8 @@ begin
     ('ver_vehiculos', 'ver_vehiculos__cerrar'),
     ('ver_vehiculos', 'ver_vehiculos__editar'),
     ('ver_vehiculos', 'ver_vehiculos__eliminar'),
-    ('ver_vehiculos', 'ver_vehiculos__exportar')
+    ('ver_vehiculos', 'ver_vehiculos__exportar'),
+    ('visor', 'visor__editar')
     ) as v(llave, accion)
   loop
     if exists (
@@ -553,13 +561,18 @@ begin
     ('facturacion_proyectos', 'facturacion_proyectos__exportar'),
     ('gastos', 'gastos__crear'),
     ('generar_ordenes_cargue', 'generar_ordenes_cargue__crear'),
+    ('generar_ordenes_cargue', 'generar_ordenes_cargue__editar'),
     ('generar_ordenes_descargue', 'generar_ordenes_descargue__crear'),
+    ('generar_ordenes_descargue', 'generar_ordenes_descargue__editar'),
     ('gestion_colaboradores', 'gestion_colaboradores__crear'),
     ('gestion_colaboradores', 'gestion_colaboradores__editar'),
     ('gestion_colaboradores', 'gestion_colaboradores__eliminar'),
     ('gestion_contratos', 'gestion_contratos__crear'),
     ('gestion_contratos', 'gestion_contratos__editar'),
     ('gestion_contratos', 'gestion_contratos__eliminar'),
+    ('gestion_integral_pedidos', 'gestion_integral_pedidos__editar'),
+    ('gestion_integral_pedidos', 'gestion_integral_pedidos__eliminar'),
+    ('gestion_integral_pedidos', 'gestion_integral_pedidos__exportar'),
     ('gestion_ordenes', 'gestion_ordenes__editar'),
     ('gestion_ordenes', 'gestion_ordenes__exportar'),
     ('gestion_proveedores', 'gestion_proveedores__crear'),
@@ -593,6 +606,7 @@ begin
     ('historial_aprobaciones', 'historial_aprobaciones__exportar'),
     ('historial_bascula', 'historial_bascula__exportar'),
     ('historial_lotes', 'historial_lotes__anular'),
+    ('historial_lotes', 'historial_lotes__editar'),
     ('historial_lotes', 'historial_lotes__exportar'),
     ('inducciones', 'inducciones__cerrar'),
     ('inducciones', 'inducciones__crear'),
@@ -644,6 +658,7 @@ begin
     ('programacionturnos', 'programacionturnos__crear'),
     ('programacionturnos', 'programacionturnos__eliminar'),
     ('proyecciones', 'proyecciones__editar'),
+    ('proyecciones', 'proyecciones__eliminar'),
     ('recobro_incapacidades', 'recobro_incapacidades__editar'),
     ('registrar_vehiculos', 'registrar_vehiculos__crear'),
     ('registro_asistencia', 'registro_asistencia__crear'),
@@ -732,7 +747,8 @@ begin
     ('ver_vehiculos', 'ver_vehiculos__cerrar'),
     ('ver_vehiculos', 'ver_vehiculos__editar'),
     ('ver_vehiculos', 'ver_vehiculos__eliminar'),
-    ('ver_vehiculos', 'ver_vehiculos__exportar')
+    ('ver_vehiculos', 'ver_vehiculos__exportar'),
+    ('visor', 'visor__editar')
     ) as v(llave, accion)
   loop
     insert into public.acceso_perfil_permisos (perfil_id, permiso)

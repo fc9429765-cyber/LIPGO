@@ -770,6 +770,9 @@ export async function marcarProduccionHarinera(params: {
   lote: number
   bultos: number
 }): Promise<{ success: boolean; produccionId?: number; error?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Registro de QR estibas"], "crear")
+  if (motivoAccion) return { success: false, error: motivoAccion }
   try {
     const admin: any = await getSupabaseAdmin()
 

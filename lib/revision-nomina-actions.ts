@@ -13,6 +13,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { pesoBaseCalculo, excluirAvimolDistribucion, liquidable, normalizeName } from "@/lib/nomina-calculo-utils"
 import { getHcYHorasRealPorDia } from "@/lib/meta-productividad-actions"
 import { TON_MES_CARGUE_DESCARGUE, DIAS_OPERACION_MES, duracionHorasNetas, esPuestoCargueDescargue } from "@/lib/meta-productividad-utils"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 export interface ColaboradorRef {
   persona: string
@@ -212,6 +213,9 @@ function enLotes<T>(arr: T[], n: number): T[][] {
 export async function getColaboradores(
   idempresa?: number | null,
 ): Promise<{ success: boolean; data: ColaboradorRef[]; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Revisión de nómina", "Gestión de Contratos", "Nominapersonal"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion, data: [] }
   try {
     const admin: any = await getSupabaseAdmin()
     let q = admin
@@ -879,6 +883,9 @@ export async function getRevisionNomina(
   mes: number,
   quincena: 1 | 2,
 ): Promise<{ success: boolean; data?: RevisionNominaData; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Revisión de nómina"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!persona) return { success: false, message: "Selecciona un colaborador." }
     const admin: any = await getSupabaseAdmin()
@@ -1007,6 +1014,9 @@ export async function getRevisionNominaProyecto(
   mes: number,
   quincena: 1 | 2,
 ): Promise<{ success: boolean; data?: RevisionProyectoData; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Revisión de nómina"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const admin: any = await getSupabaseAdmin()
     const { desde, hasta } = rangoQ(anio, mes, quincena)
@@ -1371,6 +1381,9 @@ export async function getConciliacionQuincena(
   quincena: 1 | 2,
   empresa: number, // 0 = todo LIP (1-4); o un id específico
 ): Promise<{ success: boolean; data?: ConciliacionData; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Revisión de nómina"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const admin: any = await getSupabaseAdmin()
     const emps = [1, 2, 3, 4].includes(empresa) ? [empresa] : [1, 2, 3, 4]
@@ -1686,6 +1699,9 @@ export async function getHcPorDia(
   anio: number,
   mes: number,
 ): Promise<{ success: boolean; data: HcDiaProyecto[]; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Revisión de nómina"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion, data: [] }
   try {
     const admin: any = await getSupabaseAdmin()
     const desde = `${anio}-${String(mes).padStart(2, "0")}-01`

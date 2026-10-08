@@ -158,6 +158,8 @@ export async function deleteHeadcountPerson(id: number) {
 }
 
 export async function uploadHeadcountDocument(file: File, personId: number, documentType: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  await exigirAccion(["Head Count", "Gestión de Colaboradores"], "editar", "Subir documento")
   try {
     const supabaseAdmin = await getSupabaseAdmin()
     const timestamp = Date.now()

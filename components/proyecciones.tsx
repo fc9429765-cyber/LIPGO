@@ -16,7 +16,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { useAuth } from "@/components/auth-provider"
 import { format, parseISO } from "date-fns"
 import { es } from "date-fns/locale"
-import { saveTolva, updateTolva, saveProyecciones } from "@/lib/orders-actions"
+import { saveTolva, updateTolva, saveProyecciones, eliminarProyeccion as eliminarProyeccionAccion, actualizarProyeccionTolva } from "@/lib/orders-actions"
 
 interface Product {
   id: number
@@ -269,13 +269,11 @@ console.log("[v0] Proyecciones: Loading employees for empresa:", selectedEmpresa
     if (!confirm("¿Está seguro de que desea eliminar esta proyección?")) return
 
     try {
-      const supabase = await createClient()
-      const { error } = await supabase.from("cabeceraoc").delete().eq("id", proyeccionId)
-
-      if (error) {
+      const r = await eliminarProyeccionAccion(proyeccionId)
+      if (!r.success) {
         toast({
           title: "Error",
-          description: "Error al eliminar proyección",
+          description: r.message || "Error al eliminar proyección",
           variant: "destructive",
         })
         return
@@ -421,25 +419,15 @@ console.log("[v0] Proyecciones: Loading employees for empresa:", selectedEmpresa
 
       if (editingProyeccionId) {
         // Update existing proyeccion
-        const supabase = await createClient()
-        const colombiaDateTime = new Date()
-        const timeString = colombiaDateTime.toISOString().split("T")[1]?.split(".")[0] || "00:00:00"
         const auxiliares = tolvaData.empleados
           .map((emp: any) => emp.nombreempleado || emp.nombre)
           .filter((name: string) => name)
           .join(",")
 
-        const { error } = await supabase
-          .from("cabeceraoc")
-          .update({
-            fechacargue: tolvaData.fechaFabricacion,
-            fincargue: timeString,
-            pesajefinal: timeString,
-            auxiliares: auxiliares,
-          })
-          .eq("id", editingProyeccionId)
+        // Server action con puerta (Proyecciones › editar).
+        const rUpd = await actualizarProyeccionTolva(editingProyeccionId, { fechaFabricacion: tolvaData.fechaFabricacion, auxiliares })
 
-        if (error) {
+        if (!rUpd.success) {
           toast({
             title: "Error",
             description: "Error al actualizar proyección",

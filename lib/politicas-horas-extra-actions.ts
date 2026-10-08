@@ -16,7 +16,7 @@ import {
   type PoliticaHorasExtra,
   type RedondeoModo,
 } from "@/lib/politicas-horas-extra"
-import { autorizarAccion } from "@/lib/puerta-modulo"
+import { autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
 
 /** Contrato uniforme, como el resto de acciones del proyecto. Nunca lanza. */
 interface Resultado<T = undefined> {
@@ -338,6 +338,9 @@ function calcularToken(filas: FilaRecalculo[]): string {
 export async function previsualizarRecalculoExtras(
   filtro: FiltroRecalculo,
 ): Promise<Resultado<PreviewRecalculo>> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Tabla Asistencia"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(filtro?.desde ?? "") || !/^\d{4}-\d{2}-\d{2}$/.test(filtro?.hasta ?? "")) {
     return { success: false, message: "Indica un rango de fechas válido (AAAA-MM-DD)." }
   }
@@ -487,7 +490,13 @@ export async function ejecutarRecalculoExtras(input: {
   ids: number[]
   token: string
   motivo: string
-}): Promise<Resultado<{ actualizadas: number; loteId: string }>> {
+},
+  clave?: string,
+): Promise<Resultado<{ actualizadas: number; loteId: string }>> {
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Tabla Asistencia", "configurar", { clave: clave ?? "", idempresa: null, referencia: "recalcular horas extra" })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   const ids = (input?.ids ?? []).map(Number).filter(Number.isFinite)
   if (ids.length === 0) return { success: false, message: "No hay filas seleccionadas para recalcular." }
   if (!input?.motivo?.trim()) return { success: false, message: "Indica por qué se recalcula." }

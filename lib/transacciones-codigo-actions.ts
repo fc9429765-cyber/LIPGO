@@ -35,6 +35,7 @@ import {
   type CorreccionLogRow,
   type AjustePendiente,
 } from "@/lib/transacciones-codigo"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 // ---------------------------------------------------------------------------
 // Catálogo (nomenclatura) — columna real: codigo_sap (verificado 2026-08-08)
@@ -529,6 +530,9 @@ export async function solicitarAjustePendiente(payload: EjecutarPayload): Promis
   message: string
   id?: number
 }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Transacciones de Inventario"], "crear", "Solicitar ajuste")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!CODIGOS_REQUIEREN_APROBACION.has(payload.codigo)) {
       return { success: false, message: `El código ${payload.codigo} no requiere aprobación -- usa "Ejecutar" directamente.` }

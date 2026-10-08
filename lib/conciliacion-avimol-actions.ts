@@ -43,6 +43,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { normalizarPuesto, resolverPuesto } from "@/lib/puestos-turno-alias"
 import { tarifaHoraExtraVigente, filaTurnoVigente, tarifaTurnoVigente, cobraTurno } from "@/lib/tarifas-turno-shared"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 /** Avimol. El módulo es específico de este proyecto (no usa el selector global). */
 const AVIMOL_IDEMPRESA = 2
@@ -284,6 +285,9 @@ export async function getConciliacionAvimol(
   desde: string,
   hasta: string,
 ): Promise<{ success: boolean; data?: ConciliacionAvimolData; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Conciliación Avimol", "Facturación Proyectos"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!desde || !hasta) return { success: false, message: "El rango de fechas es requerido." }
   if (desde > hasta) return { success: false, message: "La fecha 'desde' no puede ser mayor que 'hasta'." }
   try {

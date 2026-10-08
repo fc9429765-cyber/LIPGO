@@ -11,6 +11,7 @@
     "check:diccionario": "node scripts/check-diccionario.mjs",
     "check:scripts": "node scripts/check-scripts.mjs",
     "check:rutas-api": "node scripts/check-rutas-api.mjs",
+    "check:puertas": "node scripts/check-puertas-acciones.mjs",
     "diccionario": "npx tsx --env-file=.env.local scripts/generar-diccionario.mts",
     "test": "vitest run"
   },

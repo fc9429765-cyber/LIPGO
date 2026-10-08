@@ -31,6 +31,7 @@ import type {
   HorarioActividad,
 } from "@/lib/programacion-quincena-tipos"
 import { aMinutos, fmtMinutos, minutosTurno, minutosNocturnos, agruparHorariosPorPuesto } from "@/lib/horarios-actividad-utils"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 const DIAS_SEMANA = ["do", "lu", "ma", "mi", "ju", "vi", "sá"]
 
@@ -388,6 +389,9 @@ export async function guardarTurnoDef(payload: {
   esAdministrativo?: boolean
   orden?: number
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Programación de turnos"], "configurar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const sb: any = await getSupabaseAdmin()
     const fila = {
@@ -428,6 +432,9 @@ export async function guardarDemanda(payload: {
   /** null = demanda base de todos los días. */
   fecha?: string | null
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Programación de turnos"], "configurar", "Demanda")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!payload.puesto?.trim() || !payload.horaInicio?.trim()) {
       return { success: false, message: "Falta el puesto o la hora de entrada." }
@@ -480,6 +487,9 @@ export async function guardarEquipo(payload: {
   patronId?: number | null
   integrantes?: string[]
 }): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Montacargas", "Programación de turnos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!payload.nombre?.trim()) return { success: false, message: "El equipo necesita un nombre." }
     const sb: any = await getSupabaseAdmin()
@@ -528,6 +538,9 @@ export async function borrarAsignacion(
   empresaId: number,
   id: number,
 ): Promise<{ success: boolean; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Programación de turnos"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   if (!empresaId || !id) return { success: false, message: "Falta la asignación." }
   try {
     const sb: any = await getSupabaseAdmin()

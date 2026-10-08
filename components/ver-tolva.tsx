@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase-client"
 import { fetchAllRows } from "@/lib/fetch-all-rows"
 import { Tolva } from "@/components/tolva"
 import { Edit2, Eye, Trash2 } from "lucide-react"
+import { eliminarTolva } from "@/lib/orders-actions"
 import { useAuth } from "@/components/auth-provider"
 
 interface TolvaRecord {
@@ -124,35 +125,12 @@ export default function VerTolva() {
     }
 
     try {
-      const supabase = await createClient()
-
-      // Delete detalleoc records first
-      const { error: detalleError } = await supabase
-        .from("detalleoc")
-        .delete()
-        .eq("idorden", tolvaId)
-
-      if (detalleError) {
-        console.error("[v0] Error deleting detalleoc:", detalleError)
+      // Server action con puerta (Ver Tolva › eliminar): borra detalleoc y cabeceraoc.
+      const r = await eliminarTolva(tolvaId)
+      if (!r.success) {
         toast({
           title: "Error",
-          description: "Error al eliminar los detalles de la tolva",
-          variant: "destructive",
-        })
-        return
-      }
-
-      // Delete cabeceraoc record
-      const { error: cabeceraError } = await supabase
-        .from("cabeceraoc")
-        .delete()
-        .eq("id", tolvaId)
-
-      if (cabeceraError) {
-        console.error("[v0] Error deleting cabeceraoc:", cabeceraError)
-        toast({
-          title: "Error",
-          description: "Error al eliminar la tolva",
+          description: r.message || "Error al eliminar la tolva",
           variant: "destructive",
         })
         return

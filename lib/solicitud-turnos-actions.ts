@@ -296,6 +296,9 @@ export async function getSolicitudesAprobadas(selectedEmpresaId?: number | null)
 }
 
 export async function updatePdfUrl(ids: number[], pdfUrl: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Aprobar Turnos", "Servicios Adicionales"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   
   try {

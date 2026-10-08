@@ -106,6 +106,9 @@ export async function deleteColaborador(id: string) {
 
 // Lista los colaboradores de la empresa actual (o la seleccionada).
 export async function getColaboradoresTH(selectedEmpresaId?: number | null) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestión de Colaboradores", "Head Count"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   const empresaId = selectedEmpresaId || (await getCurrentEmpresaIdForInsert())
 

@@ -47,6 +47,7 @@ import { calcularAportes, PARAFISCALES_DEFAULT, clasificarDiaCotizacion, type Ti
 import { getLiquidaciones } from "@/lib/liquidaciones-actions"
 import { armarRegistroTipo01, armarRegistroTipo02, type DatosDetallePila02 } from "@/lib/pila-planoformat"
 import { codigoAfp, codigoEps, codigoDivipola } from "@/lib/pila-codigos-oficiales"
+import { motivoSinAccion } from "@/lib/puerta-modulo"
 
 function finDeMes(anio: number, mes: number): string {
   const d = new Date(Date.UTC(anio, mes, 0))
@@ -101,6 +102,9 @@ export async function generarArchivoCargaPila(
   anio: number,
   mes: number,
 ): Promise<{ success: boolean; base64?: string; filename?: string; excepciones?: ExcepcionExportador[]; message?: string }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Parafiscales"], "exportar", "Archivo PILA")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const admin: any = await getSupabaseAdmin()
 

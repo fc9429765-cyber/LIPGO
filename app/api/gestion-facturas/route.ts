@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { parseColombianNumber } from "@/lib/parse-colombian-number"
 import { excluirPlacasFacturas, excluirNoFacturable } from "@/lib/facturas-exclusiones"
-import { exigirSesionApi, exigirModuloApi } from "@/lib/puerta-api"
+import { exigirSesionApi, exigirAccionApi } from "@/lib/puerta-api"
 
 export async function GET(request: NextRequest) {
   const puerta = await exigirSesionApi()
@@ -198,7 +198,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const puerta = await exigirModuloApi(["Solicitar Facturas", "Cuadro de Control Facturación"])
+  const puerta = await exigirAccionApi(["Solicitar Facturas", "Cuadro de Control Facturación"], "editar")
   if (puerta) return puerta
   try {
     const body = await request.json()
@@ -255,7 +255,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const puerta = await exigirModuloApi(["Solicitar Facturas", "Cuadro de Control Facturación"])
+  const puerta = await exigirAccionApi(["Solicitar Facturas", "Cuadro de Control Facturación"], "editar")
   if (puerta) return puerta
   try {
     const body = await request.json()

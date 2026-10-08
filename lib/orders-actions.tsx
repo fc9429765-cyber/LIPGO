@@ -542,6 +542,9 @@ export async function approveOrder(idpedido: number, approvalCode: string) {
 }
 
 export async function updateOrderPDFUrl(idpedido: number, pdfUrl: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Gestionar pedidos", "Entrada de pedidos"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     const { error } = await supabase.from("pedidoscabecera").update({ pdfpedido: pdfUrl }).eq("idpedido", idpedido)
@@ -1503,6 +1506,9 @@ export async function getOrderCodeForSelectedOrders(selectedOrderIds: number[]) 
 }
 
 export async function updateLoadOrderPDFUrl(orderId: number, pdfUrl: string) {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Generar Órdenes de Cargue", "Gestión de Ordenes"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion }
   const supabase = await createClient()
   try {
     const { error } = await supabase.from("cabeceraoc").update({ pdfoc: pdfUrl }).eq("id", orderId)
@@ -4542,5 +4548,109 @@ export async function updateLoadOrder(orderId: number, data: Record<string, any>
   } catch (error) {
     console.error("Unexpected error:", error)
     return { success: false, message: "Error inesperado al actualizar orden de cargue" }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Escrituras que antes hacía el NAVEGADOR directo contra la base (Fase 3,
+// 2026-10-07). Una server action es la única forma de que la política por
+// acción se cumpla: lo que escribe el navegador no pasa por ninguna puerta.
+// ---------------------------------------------------------------------------
+
+/**
+ * Reemplaza TODAS las líneas de un pedido (Gestionar pedidos › editar). Antes
+ * el diálogo borraba e insertaba `pedidosdetalle` desde el navegador.
+ */
+export async function reemplazarDetallesPedido(
+  idpedido: number,
+  detalles: Array<{
+    producto: string
+    unidades: number
+    precio_und: number
+    total_linea: number
+    iva: number
+    descuentopp: number
+    subtotal: number
+    peso: number
+    categoria: string | null
+  }>,
+): Promise<{ success: boolean; message?: string }> {
+  const motivoAccion = await motivoSinAccion(["Gestionar pedidos", "Entrada de pedidos"], "editar", "Editar líneas del pedido")
+  if (motivoAccion) return { success: false, message: motivoAccion }
+  const supabase = await getSupabaseAdmin()
+  try {
+    const { data: cab } = await supabase.from("pedidoscabecera").select("id_empresa").eq("idpedido", idpedido).maybeSingle()
+    if (!cab) return { success: false, message: "El pedido no existe." }
+    const idEmpresa = cab.id_empresa ?? (await getCurrentEmpresaIdForInsert())
+
+    const { error: delErr } = await supabase.from("pedidosdetalle").delete().eq("idpedido", idpedido)
+    if (delErr) return { success: false, message: "Error al eliminar detalles anteriores" }
+
+    const { data: lastDetail } = await supabase
+      .from("pedidosdetalle")
+      .select("transid")
+      .order("transid", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    let nextTransId = (Number(lastDetail?.transid) || 0) + 1
+    const filas = detalles.map((d) => ({ transid: nextTransId++, idpedido, id_empresa: idEmpresa, ...d }))
+    if (filas.length) {
+      const { error } = await supabase.from("pedidosdetalle").insert(filas)
+      if (error) return { success: false, message: "Error al insertar nuevos detalles" }
+    }
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, message: e?.message || "No se pudieron guardar las líneas." }
+  }
+}
+
+/** Proyecciones › eliminar una proyección (fila de cabeceraoc). */
+export async function eliminarProyeccion(id: number): Promise<{ success: boolean; message?: string }> {
+  const motivoAccion = await motivoSinAccion(["Proyecciones"], "eliminar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
+  try {
+    const supabase = await getSupabaseAdmin()
+    const { error } = await supabase.from("cabeceraoc").delete().eq("id", id)
+    if (error) return { success: false, message: error.message }
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, message: e?.message || "No se pudo eliminar la proyección." }
+  }
+}
+
+/** Proyecciones › actualizar fecha y auxiliares de una proyección ya guardada. */
+export async function actualizarProyeccionTolva(
+  id: number,
+  datos: { fechaFabricacion: string; auxiliares: string },
+): Promise<{ success: boolean; message?: string }> {
+  const motivoAccion = await motivoSinAccion(["Proyecciones"], "editar")
+  if (motivoAccion) return { success: false, message: motivoAccion }
+  try {
+    const supabase = await getSupabaseAdmin()
+    const timeString = new Date().toISOString().split("T")[1]?.split(".")[0] || "00:00:00"
+    const { error } = await supabase
+      .from("cabeceraoc")
+      .update({ fechacargue: datos.fechaFabricacion, fincargue: timeString, pesajefinal: timeString, auxiliares: datos.auxiliares })
+      .eq("id", id)
+    if (error) return { success: false, message: error.message }
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, message: e?.message || "No se pudo actualizar la proyección." }
+  }
+}
+
+/** Ver Tolva › eliminar una tolva: sus líneas (detalleoc) y luego la cabecera. */
+export async function eliminarTolva(id: number): Promise<{ success: boolean; message?: string }> {
+  const motivoAccion = await motivoSinAccion(["Ver Tolva", "Ver ingresos de producción"], "eliminar", "Eliminar tolva")
+  if (motivoAccion) return { success: false, message: motivoAccion }
+  try {
+    const supabase = await getSupabaseAdmin()
+    const { error: detErr } = await supabase.from("detalleoc").delete().eq("idorden", id)
+    if (detErr) return { success: false, message: "Error al eliminar los detalles de la tolva" }
+    const { error: cabErr } = await supabase.from("cabeceraoc").delete().eq("id", id)
+    if (cabErr) return { success: false, message: "Error al eliminar la tolva" }
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, message: e?.message || "Error inesperado al eliminar la tolva" }
   }
 }

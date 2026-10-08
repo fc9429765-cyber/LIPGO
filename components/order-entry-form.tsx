@@ -53,7 +53,7 @@ import { Switch } from "@/components/ui/switch"
 import { Eyebrow, Chip, Esqueleto } from "@/components/ui/lipgo"
 import { Loader2, Plus, Trash2, ArrowLeft, Check, ChevronsUpDown, Search, AlertTriangle, CheckCircle2, FileText } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { supabase } from "@/lib/supabase"
+import { updateOrderPDFUrl } from "@/lib/orders-actions"
 
 interface ProductLine {
   id: string
@@ -465,8 +465,8 @@ function OrderEntryForm({ onManageOrders, editOrderId, onNavigateToManageOrders 
       }
       const pdfResult = await generateAndUploadOrderPDF(orderDataForPDF, bodegaOrigenData.nombre)
       if (pdfResult.success && pdfResult.url && result.idpedido) {
-        const { error: updateError } = await supabase.from("pedidoscabecera").update({ pdfpedido: pdfResult.url }).eq("idpedido", result.idpedido)
-        if (updateError) console.error("[v0] Error updating PDF URL:", updateError)
+        const upd = await updateOrderPDFUrl(Number(result.idpedido), pdfResult.url)
+        if (!upd?.success) console.error("[v0] Error updating PDF URL:", (upd as any)?.error ?? (upd as any)?.message)
       }
 
       const accion = isEditMode ? "actualizado" : "guardado"

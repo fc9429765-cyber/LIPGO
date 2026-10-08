@@ -190,6 +190,9 @@ export async function getParafiscales(
   auxilio?: number
   message?: string
 }> {
+  // Política por acción (catálogo lib/politicas-modulos.ts).
+  const motivoAccion = await motivoSinAccion(["Parafiscales"], "ver")
+  if (motivoAccion) return { success: false, message: motivoAccion, data: [] }
   try {
     const admin: any = await getSupabaseAdmin()
     const params = await leerParametros(admin, anio)
