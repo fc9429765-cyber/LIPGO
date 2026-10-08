@@ -70,7 +70,8 @@ import type { PerfilAcceso, UsuarioDePerfil } from "@/lib/acceso-perfiles-tipos"
 import { adminListarProcesos } from "@/lib/autorizaciones-actions"
 import type { ProcesoAutorizable } from "@/lib/autorizaciones"
 import { PERMISSION_TREE, clavesDeItem, clavesDelArbol, filtrarArbol, type PermGroup, type PermItem } from "@/lib/permisos-arbol"
-import { ChipsAcciones, accionesDeLlave } from "@/components/configuration/chips-acciones"
+import { accionesDeLlave } from "@/components/configuration/chips-acciones"
+import { AccionesPorModulo } from "@/components/configuration/acciones-por-modulo"
 import { esClaveAccion } from "@/lib/permisos-verbos"
 
 type Form = {
@@ -668,6 +669,23 @@ export function PerfilesAcceso() {
 
                   {/* ===== Autorizaciones por clave ===== */}
                   <TabsContent value="autorizaciones" className="mt-4 space-y-3">
+                    <Nota icon={ShieldCheck}>
+                      <strong>Qué puede HACER este perfil dentro de cada pantalla.</strong> Por módulo, un chip por acción (crear,
+                      editar, eliminar, aprobar, anular, cerrar, exportar, configurar): marcado, el perfil la tiene; sin marcar,
+                      ve la pantalla pero el servidor no le deja hacer esa acción. Marcar un módulo enciende todas sus acciones.
+                      Las acciones con candado piden clave personal y se otorgan abajo.
+                    </Nota>
+                    <AccionesPorModulo
+                      seleccion={form.permisos}
+                      procesos={form.procesos}
+                      onToggle={(k, on) => togglear("permisos", k, on)}
+                      onToggleVarios={togglearVarios}
+                    />
+
+                    <Separator className="my-2" />
+                    <p className="flex items-center gap-1.5 text-sm font-semibold">
+                      <KeyRound className="h-4 w-4 text-primary" /> Con clave personal
+                    </p>
                     <Nota icon={KeyRound}>
                       <strong>Qué puede autorizar con su clave personal</strong> quien tenga este perfil: aprobar un ajuste,
                       liberar una cuarentena, anular un pedido… El alcance por proyecto sigue a las empresas del perfil; si
@@ -1028,13 +1046,15 @@ function ArbolPermisos({
                           {s.permissions.map((p) => {
                             const k = p.key as string
                             return (
-                              <div key={k} className="rounded p-1 hover:bg-accent/50">
-                                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                                  <Checkbox checked={marcados.has(k)} onCheckedChange={(c) => toggleModulo(k, !!c)} />
-                                  <span className="truncate">{p.label}</span>
-                                </label>
-                                <ChipsAcciones llave={k} marcados={marcados} verActivo={marcados.has(k)} onToggle={onToggle} compacto />
-                              </div>
+                              <label key={k} className="flex items-center gap-2 text-sm cursor-pointer p-1 rounded hover:bg-accent/50">
+                                <Checkbox checked={marcados.has(k)} onCheckedChange={(c) => toggleModulo(k, !!c)} />
+                                <span className="truncate">{p.label}</span>
+                                {p.acciones.length + p.conClave.length > 0 && (
+                                  <span className="ml-auto text-[10px] tabular-nums text-muted-foreground" title="Acciones de esta pantalla: se ajustan en Autoriza">
+                                    {p.acciones.filter((a) => marcados.has(a.key)).length}/{p.acciones.length}
+                                  </span>
+                                )}
+                              </label>
                             )
                           })}
                         </div>
@@ -1050,8 +1070,8 @@ function ArbolPermisos({
 
       <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
         <ArrowRight className="h-3 w-3" />
-        Son los mismos módulos del menú: uno nuevo aparece aquí solo. Debajo de cada módulo, lo que se puede hacer dentro; los chips con
-        candado se otorgan en la pestaña Autoriza.
+        Son los mismos módulos del menú: uno nuevo aparece aquí solo. Aquí se decide qué pantallas VE el perfil (marcar una
+        enciende todas sus acciones); qué puede hacer dentro de cada una se ajusta en la pestaña Autoriza.
       </p>
     </div>
   )
