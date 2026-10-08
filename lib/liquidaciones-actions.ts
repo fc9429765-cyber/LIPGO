@@ -963,7 +963,7 @@ export async function agregarDeduccionLiquidacion(payload: {
 
 export async function eliminarDeduccionLiquidacion(id: string): Promise<{ success: boolean; message?: string }> {
   // Política por acción (catálogo lib/politicas-modulos.ts).
-  const motivoAccion = await motivoSinAccion(["Liquidaciones"], "editar")
+  const motivoAccion = await motivoSinAccion(["Liquidaciones"], "eliminar", "Quitar deducción")
   if (motivoAccion) return { success: false, message: motivoAccion }
   if (!id) return { success: false, message: "Falta el identificador." }
   try {

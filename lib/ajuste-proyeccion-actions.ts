@@ -39,7 +39,7 @@ import {
   quincenaSiguiente,
   type EstadoAjuste,
 } from "@/lib/ajuste-proyeccion-constants"
-import { motivoSinAccion } from "@/lib/puerta-modulo"
+import { autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
 
 const num = (v: any) => Number(v || 0)
 
@@ -316,7 +316,7 @@ export async function generarAjustes(
   empresa: number,
 ): Promise<{ success: boolean; creados?: number; message?: string }> {
   // Política por acción (catálogo lib/politicas-modulos.ts).
-  const motivoAccion = await motivoSinAccion(["Proyecciones"], "editar")
+  const motivoAccion = await motivoSinAccion(["Revisión de nómina"], "crear", "Generar ajustes")
   if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const cruce = await getCruceProyeccion(anio, mes, quincena, empresa)
@@ -436,10 +436,12 @@ export async function getAjustes(filtros: {
 }
 
 /** Aprueba ajustes: desde aquí SÍ salen al archivo plano. */
-export async function aprobarAjustes(ids: number[]): Promise<{ success: boolean; message?: string }> {
+export async function aprobarAjustes(ids: number[], clave?: string): Promise<{ success: boolean; message?: string }> {
   // Política por acción (catálogo lib/politicas-modulos.ts).
-  const motivoAccion = await motivoSinAccion(["Proyecciones"], "editar")
-  if (motivoAccion) return { success: false, message: motivoAccion }
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Revisión de nómina", "aprobar", { clave: clave ?? "", idempresa: null, referencia: "aprobar ajustes de nómina" })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   try {
     if (!ids?.length) return { success: false, message: "Selecciona al menos un ajuste." }
     const sb: any = await getSupabaseAdmin()
@@ -455,10 +457,12 @@ export async function aprobarAjustes(ids: number[]): Promise<{ success: boolean;
   }
 }
 
-export async function rechazarAjustes(ids: number[], motivo: string): Promise<{ success: boolean; message?: string }> {
+export async function rechazarAjustes(ids: number[], motivo: string, clave?: string): Promise<{ success: boolean; message?: string }> {
   // Política por acción (catálogo lib/politicas-modulos.ts).
-  const motivoAccion = await motivoSinAccion(["Proyecciones"], "editar")
-  if (motivoAccion) return { success: false, message: motivoAccion }
+  // Acción CON CLAVE (catálogo lib/politicas-modulos.ts). En modo aviso pasa sin
+  // clave y deja rastro; en modo bloquear la pantalla debe pedir la clave personal.
+  const autorizacionAccion = await autorizarAccion("Revisión de nómina", "anular", { clave: clave ?? "", idempresa: null, referencia: "rechazar ajustes de nómina" })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   try {
     if (!ids?.length) return { success: false, message: "Selecciona al menos un ajuste." }
     const sb: any = await getSupabaseAdmin()

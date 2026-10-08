@@ -670,16 +670,18 @@ export function PerfilesAcceso() {
                   {/* ===== Autorizaciones por clave ===== */}
                   <TabsContent value="autorizaciones" className="mt-4 space-y-3">
                     <Nota icon={ShieldCheck}>
-                      <strong>Qué puede HACER este perfil dentro de cada pantalla.</strong> Por módulo, un chip por acción (crear,
-                      editar, eliminar, aprobar, anular, cerrar, exportar, configurar): marcado, el perfil la tiene; sin marcar,
-                      ve la pantalla pero el servidor no le deja hacer esa acción. Marcar un módulo enciende todas sus acciones.
-                      Las acciones con candado piden clave personal y se otorgan abajo.
+                      <strong>Todo lo que este perfil puede hacer, pantalla por pantalla.</strong> Por cada módulo: «Ver» (abre la
+                      pantalla) y una fila por acción (crear, editar, eliminar, aprobar, anular, cerrar, exportar, configurar).
+                      Marcada, el perfil la tiene; sin marcar, ve la pantalla pero el servidor no le deja hacer eso. Las filas con
+                      llave piden clave personal: son los mismos procesos de la lista de abajo.
                     </Nota>
                     <AccionesPorModulo
                       seleccion={form.permisos}
                       procesos={form.procesos}
+                      procesosDisponibles={new Set(procesosCat.filter((p) => !p.pendiente_sql).map((p) => p.codigo))}
                       onToggle={(k, on) => togglear("permisos", k, on)}
                       onToggleVarios={togglearVarios}
+                      onToggleProceso={(codigo, on) => togglear("procesos", codigo, on)}
                     />
 
                     <Separator className="my-2" />

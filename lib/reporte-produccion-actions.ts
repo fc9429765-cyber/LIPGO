@@ -112,7 +112,7 @@ export async function guardarConfigCierre(payload: {
   horaEnvio: string
 }): Promise<{ success: boolean; message?: string }> {
   // Política por acción (catálogo lib/politicas-modulos.ts).
-  const motivoAccion = await motivoSinAccion(["Dashboard de Producción"], "editar", "Configurar cierre")
+  const motivoAccion = await motivoSinAccion(["Dashboard de Producción", "Reporte de Paros", "Notificaciones al Personal"], "configurar", "Configurar cierre de producción")
   if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const sb: any = await getSupabaseAdmin()
@@ -186,7 +186,7 @@ export async function guardarDestinatarioCierre(payload: {
   telefono: string
 }): Promise<{ success: boolean; message?: string }> {
   // Política por acción (catálogo lib/politicas-modulos.ts).
-  const motivoAccion = await motivoSinAccion(["Dashboard de Producción"], "editar", "Destinatarios del cierre")
+  const motivoAccion = await motivoSinAccion(["Dashboard de Producción", "Reporte de Paros", "Notificaciones al Personal"], "configurar", "Destinatarios del cierre")
   if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     if (!payload.nombre?.trim()) return { success: false, message: "Ponle un nombre." }
@@ -226,7 +226,7 @@ export async function eliminarDestinatarioCierre(
   id: number,
 ): Promise<{ success: boolean; message?: string }> {
   // Política por acción (catálogo lib/politicas-modulos.ts).
-  const motivoAccion = await motivoSinAccion(["Dashboard de Producción"], "eliminar", "Destinatarios del cierre")
+  const motivoAccion = await motivoSinAccion(["Dashboard de Producción", "Reporte de Paros", "Notificaciones al Personal"], "configurar", "Destinatarios del cierre")
   if (motivoAccion) return { success: false, message: motivoAccion }
   try {
     const sb: any = await getSupabaseAdmin()

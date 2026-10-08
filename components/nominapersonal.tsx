@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/use-toast"
 import { Download, RefreshCw } from "lucide-react"
 import { Search } from "lucide-react" // Declare the Search variable
 import { ChevronDown, ChevronRight } from "lucide-react"
+import { useClaveAccion } from "@/components/clave-accion-provider"
 
 // Helper function to safely parse dates from database without timezone conversion issues
 const parseDateFromDB = (dateString: string | null | undefined): Date | null => {
@@ -73,6 +74,7 @@ interface DetalleAuxiliar {
 export default function Nominapersonal() {
   const { selectedEmpresaId } = useAuth()
   const { toast } = useToast()
+  const { conClave } = useClaveAccion()
   const [viewMode, setViewMode] = useState<"total" | "detalle" | "liquidacion" | "archivoplano" | "adelantos">("total")
   const [loading, setLoading] = useState(false)
   const [currentPageArchivoplanano, setCurrentPageArchivoplanano] = useState(1) // Declare the variable here
@@ -326,7 +328,7 @@ export default function Nominapersonal() {
     if (!selectedEmpresaId) return
     setLoading(true)
     try {
-      const r = await getArchivoPlano(selectedEmpresaId, mes, quincena)
+      const r = await conClave("Nominapersonal", "exportar", (clave) => getArchivoPlano(selectedEmpresaId, mes, quincena, clave))
       if (!r.success) {
         console.error("[v0] Error loading archivoplano —", r.message)
         setArchivoplanos([])
@@ -358,7 +360,7 @@ export default function Nominapersonal() {
     if (!selectedEmpresaId) return
     setLoading(true)
     try {
-      const r = await getArchivoPlano(selectedEmpresaId, mes, quincena)
+      const r = await conClave("Nominapersonal", "exportar", (clave) => getArchivoPlano(selectedEmpresaId, mes, quincena, clave))
       if (!r.success) {
         setAdelantosRaw([])
         toast({

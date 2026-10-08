@@ -210,7 +210,7 @@ export async function generarCalculoPrestacionesActivos(
   idempresaFiltro?: number | null,
 ): Promise<{ success: boolean; personas?: number; message?: string }> {
   // Política por acción (catálogo lib/politicas-modulos.ts).
-  const motivoAccion = await motivoSinAccion(["Parafiscales"], "editar", "Generar cálculo")
+  const motivoAccion = await motivoSinAccion(["Parafiscales"], "crear", "Generar cálculo de prestaciones")
   if (motivoAccion) return { success: false, message: motivoAccion }
   const r = await calcularPrestacionesActivos(concepto, periodoDesde, periodoHasta, idempresaFiltro)
   if (!r.success) return { success: false, message: r.message }

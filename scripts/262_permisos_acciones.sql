@@ -9,7 +9,7 @@
 --      "<llave>__<verbo>" en public.permisos_usuarios (default false) y, SOLO AL CREARLA,
 --      la siembra: acción = true para quien tiene el módulo. Así nadie pierde nada el día uno.
 --      Volver a correr el script no re-otorga lo que un administrador ya quitó.
---   B. Los 16 procesos con clave nuevos en public.autorizacion_procesos (grupos Órdenes,
+--   B. Los 18 procesos con clave nuevos en public.autorizacion_procesos (grupos Órdenes,
 --      Inventario, Facturación, Nómina, Seguridad).
 --   C. El modo de las puertas: public.autorizacion_config('politicas_acciones_modo') = 'aviso'.
 --      En 'aviso', módulo sí / acción no deja rastro en autorizacion_log y pasa. Cuando el
@@ -19,7 +19,7 @@
 --      la acción sin clave (porque tiene el módulo) no debe quedar sin poder hacerla.
 --   E. notify pgrst: PostgREST recarga el esquema para ver las columnas nuevas.
 --
--- Columnas: 326 (sobre 132 llaves de módulo). Verificación: scripts/263_verificar_262_permisos_acciones.sql.
+-- Columnas: 329 (sobre 132 llaves de módulo). Verificación: scripts/263_verificar_262_permisos_acciones.sql.
 -- Reversa: no hace falta borrar columnas; con modo 'aviso' las puertas no bloquean. Si hubiera
 -- que quitarlas: alter table public.permisos_usuarios drop column "<llave>__<verbo>".
 
@@ -135,6 +135,8 @@ begin
     ('config_vendedores', 'config_vendedores__editar'),
     ('config_vendedores', 'config_vendedores__eliminar'),
     ('config_vendedores', 'config_vendedores__exportar'),
+    ('controlpiso', 'controlpiso__configurar'),
+    ('controlpiso', 'controlpiso__crear'),
     ('controlpiso', 'controlpiso__editar'),
     ('controlpiso', 'controlpiso__eliminar'),
     ('creacion_materiales', 'creacion_materiales__crear'),
@@ -230,6 +232,7 @@ begin
     ('iso_repositorio', 'iso_repositorio__eliminar'),
     ('liquidacion_tolva', 'liquidacion_tolva__cerrar'),
     ('liquidaciones', 'liquidaciones__editar'),
+    ('liquidaciones', 'liquidaciones__eliminar'),
     ('montacargas', 'montacargas__crear'),
     ('montacargas', 'montacargas__editar'),
     ('montacargas', 'montacargas__eliminar'),
@@ -240,14 +243,15 @@ begin
     ('muelles_empresa', 'muelles_empresa__crear'),
     ('muelles_empresa', 'muelles_empresa__editar'),
     ('muelles_empresa', 'muelles_empresa__eliminar'),
-    ('nominapersonal', 'nominapersonal__exportar'),
     ('notificaciones', 'notificaciones__configurar'),
     ('notificaciones', 'notificaciones__crear'),
     ('novedades_personal', 'novedades_personal__crear'),
     ('novedades_personal', 'novedades_personal__editar'),
+    ('operacion_dia', 'operacion_dia__crear'),
     ('packing', 'packing__cerrar'),
     ('packing', 'packing__editar'),
     ('packing', 'packing__exportar'),
+    ('parafiscales', 'parafiscales__crear'),
     ('parafiscales', 'parafiscales__editar'),
     ('parafiscales', 'parafiscales__exportar'),
     ('picking', 'picking__cerrar'),
@@ -346,7 +350,6 @@ begin
     ('traslados_producto', 'traslados_producto__crear'),
     ('vacaciones', 'vacaciones__anular'),
     ('vacaciones', 'vacaciones__aprobar'),
-    ('vacaciones', 'vacaciones__cerrar'),
     ('vacaciones', 'vacaciones__crear'),
     ('ver_ingresos_produccion', 'ver_ingresos_produccion__crear'),
     ('ver_ingresos_produccion', 'ver_ingresos_produccion__editar'),
@@ -400,6 +403,8 @@ insert into public.autorizacion_procesos (codigo, nombre, descripcion, grupo, or
   ('nom_liquidacion_aprobar', 'Aprobar una liquidación', 'Liquidaciones › Aprobar.', 'Nómina', 20, false),
   ('nom_parametros', 'Cambiar parámetros de liquidación y pago', 'Liquidaciones, Parafiscales, Turnos y tarifas por puesto, políticas de horas extra.', 'Nómina', 30, false),
   ('nom_periodo_pagar', 'Marcar un período como pagado', 'Parafiscales › Período pagado.', 'Nómina', 40, false),
+  ('nom_archivo_plano', 'Generar el archivo plano de pago de nómina', 'Nómina de Personal › Archivo plano: es el archivo que se carga al banco para pagar.', 'Nómina', 50, true),
+  ('nom_vacaciones_liquidar', 'Liquidar vacaciones (registrar el pago)', 'Vacaciones › Liquidar: registra los días y el valor que se pagan.', 'Nómina', 60, true),
   ('seg_usuario_eliminar', 'Eliminar un usuario', 'Gestión de Usuarios › Eliminar usuario (borra la cuenta de acceso).', 'Seguridad', 10, false)
 on conflict (codigo) do update
   set nombre = excluded.nombre,
@@ -524,6 +529,8 @@ begin
     ('config_vendedores', 'config_vendedores__editar'),
     ('config_vendedores', 'config_vendedores__eliminar'),
     ('config_vendedores', 'config_vendedores__exportar'),
+    ('controlpiso', 'controlpiso__configurar'),
+    ('controlpiso', 'controlpiso__crear'),
     ('controlpiso', 'controlpiso__editar'),
     ('controlpiso', 'controlpiso__eliminar'),
     ('creacion_materiales', 'creacion_materiales__crear'),
@@ -619,6 +626,7 @@ begin
     ('iso_repositorio', 'iso_repositorio__eliminar'),
     ('liquidacion_tolva', 'liquidacion_tolva__cerrar'),
     ('liquidaciones', 'liquidaciones__editar'),
+    ('liquidaciones', 'liquidaciones__eliminar'),
     ('montacargas', 'montacargas__crear'),
     ('montacargas', 'montacargas__editar'),
     ('montacargas', 'montacargas__eliminar'),
@@ -629,14 +637,15 @@ begin
     ('muelles_empresa', 'muelles_empresa__crear'),
     ('muelles_empresa', 'muelles_empresa__editar'),
     ('muelles_empresa', 'muelles_empresa__eliminar'),
-    ('nominapersonal', 'nominapersonal__exportar'),
     ('notificaciones', 'notificaciones__configurar'),
     ('notificaciones', 'notificaciones__crear'),
     ('novedades_personal', 'novedades_personal__crear'),
     ('novedades_personal', 'novedades_personal__editar'),
+    ('operacion_dia', 'operacion_dia__crear'),
     ('packing', 'packing__cerrar'),
     ('packing', 'packing__editar'),
     ('packing', 'packing__exportar'),
+    ('parafiscales', 'parafiscales__crear'),
     ('parafiscales', 'parafiscales__editar'),
     ('parafiscales', 'parafiscales__exportar'),
     ('picking', 'picking__cerrar'),
@@ -735,7 +744,6 @@ begin
     ('traslados_producto', 'traslados_producto__crear'),
     ('vacaciones', 'vacaciones__anular'),
     ('vacaciones', 'vacaciones__aprobar'),
-    ('vacaciones', 'vacaciones__cerrar'),
     ('vacaciones', 'vacaciones__crear'),
     ('ver_ingresos_produccion', 'ver_ingresos_produccion__crear'),
     ('ver_ingresos_produccion', 'ver_ingresos_produccion__editar'),
@@ -780,6 +788,8 @@ begin
     ('nom_parametros', 'parafiscales'),
     ('nom_parametros', 'tabla_asistencia'),
     ('nom_periodo_pagar', 'parafiscales'),
+    ('nom_archivo_plano', 'nominapersonal'),
+    ('nom_vacaciones_liquidar', 'vacaciones'),
     ('seg_usuario_eliminar', 'gestion_usuarios')
     ) as v(proceso, llave)
   loop

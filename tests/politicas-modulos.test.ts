@@ -64,12 +64,13 @@ describe("catálogo de políticas", () => {
       expect([...idx].sort((a, b) => a - b)).toEqual(idx)
     }
   })
-  it("los 16 procesos nuevos están declarados y citados", () => {
+  it("los 18 procesos nuevos están declarados y citados", () => {
     expect(PROCESOS_NUEVOS.map((p) => p.codigo).sort()).toEqual(
       [
         "bas_corregir", "fac_corregir_orden", "fac_emitir_siigo", "fac_prefactura_aprobar", "fac_prefactura_prod_aprobar",
         "fac_registrar_pago", "fac_tarifas", "inv_acta_firmar", "inv_cierre_mes", "inv_cuadre_cerrar_mes",
-        "nom_ajustes_aprobar", "nom_liquidacion_aprobar", "nom_parametros", "nom_periodo_pagar", "ord_eliminar", "seg_usuario_eliminar",
+        "nom_ajustes_aprobar", "nom_archivo_plano", "nom_liquidacion_aprobar", "nom_parametros", "nom_periodo_pagar", "nom_vacaciones_liquidar",
+        "ord_eliminar", "seg_usuario_eliminar",
       ].sort(),
     )
     const citados = new Set(procesosDeAcciones().map((p) => p.codigo))

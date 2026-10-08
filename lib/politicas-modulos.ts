@@ -115,7 +115,10 @@ export const POLITICAS: Record<string, PoliticaModulo> = {
   "Liquidación Tolva del día": { silenciosas: ["cerrar"], etiquetas: { cerrar: "Liquidar el día" } },
   Tolva: { silenciosas: ["crear", "editar"] },
   "Ver Tolva": { silenciosas: ["editar", "eliminar"] },
-  "Dashboard de Producción": { silenciosas: ["editar", "eliminar"], etiquetas: { editar: "Editar paro", eliminar: "Eliminar paro" } },
+  "Dashboard de Producción": {
+    silenciosas: ["crear", "editar", "eliminar", "configurar"],
+    etiquetas: { crear: "Registrar paro", editar: "Editar paro", eliminar: "Eliminar paro", configurar: "Cierre de producción (correos y destinatarios)" },
+  },
   Reprocesos: { silenciosas: ["crear", "eliminar"] },
   "Servicios Adicionales": { silenciosas: ["crear", "exportar"], etiquetas: { crear: "Solicitar servicio" } },
   "Creación de materiales": { silenciosas: CRUD_EXPORT },
@@ -128,7 +131,7 @@ export const POLITICAS: Record<string, PoliticaModulo> = {
   Proyecciones: { silenciosas: ["editar", "eliminar"], etiquetas: { editar: "Guardar proyección", eliminar: "Eliminar proyección" } },
 
   // ───────────────────────── Operación LIP ─────────────────────────
-  "Operación del día": {},
+  "Operación del día": { silenciosas: ["crear"], etiquetas: { crear: "Registrar en bitácora" } },
   "Dashboard Operaciones LIP": {},
   "Ver Picking/Packing": {},
   "Control de Toneladas": {},
@@ -213,7 +216,7 @@ export const POLITICAS: Record<string, PoliticaModulo> = {
     conClave: { aprobar: "nom_ajustes_aprobar", anular: "nom_ajustes_aprobar" },
     etiquetas: { crear: "Registrar ajuste", aprobar: "Aprobar ajuste", anular: "Rechazar ajuste" },
   },
-  Nominapersonal: { silenciosas: ["exportar"] },
+  Nominapersonal: { conClave: { exportar: "nom_archivo_plano" }, etiquetas: { exportar: "Generar archivo plano de pago" } },
   "Acumulados LIPgo": { silenciosas: ["exportar"] },
   Bonos: {
     silenciosas: ["crear", "eliminar", "anular"],
@@ -223,16 +226,20 @@ export const POLITICAS: Record<string, PoliticaModulo> = {
   "Asignación de apoyo en cargue": { silenciosas: ["crear", "eliminar"] },
   "Asistencia Administrativa": { silenciosas: ["crear", "editar", "cerrar"], etiquetas: { cerrar: "Cerrar mes" } },
   Liquidaciones: {
-    silenciosas: ["editar"],
+    silenciosas: ["editar", "eliminar"],
     conClave: { aprobar: "nom_liquidacion_aprobar", configurar: "nom_parametros" },
-    etiquetas: { aprobar: "Aprobar liquidación", configurar: "Parámetros de liquidación" },
+    etiquetas: { aprobar: "Aprobar liquidación", configurar: "Parámetros de liquidación", eliminar: "Quitar deducción" },
   },
   Parafiscales: {
-    silenciosas: ["editar", "exportar"],
+    silenciosas: ["crear", "editar", "exportar"],
     conClave: { configurar: "nom_parametros", cerrar: "nom_periodo_pagar" },
-    etiquetas: { cerrar: "Marcar período pagado", configurar: "Tasas y parámetros" },
+    etiquetas: { crear: "Generar cálculo de prestaciones", cerrar: "Marcar período pagado", configurar: "Tasas y parámetros" },
   },
-  Vacaciones: { silenciosas: ["crear", "aprobar", "anular", "cerrar"], etiquetas: { anular: "Rechazar", cerrar: "Liquidar" } },
+  Vacaciones: {
+    silenciosas: ["crear", "aprobar", "anular"],
+    conClave: { cerrar: "nom_vacaciones_liquidar" },
+    etiquetas: { anular: "Rechazar", cerrar: "Liquidar vacaciones (paga)" },
+  },
   Turnos: { conClave: { configurar: "nom_parametros" }, etiquetas: { configurar: "Turnos y tarifas por puesto" } },
 
   // ───────────────────────── Certificaciones · SIG ─────────────────────────
@@ -308,7 +315,10 @@ export const POLITICAS: Record<string, PoliticaModulo> = {
     conClave: { cerrar: "inv_cierre_mes", aprobar: "inv_acta_firmar" },
     etiquetas: { crear: "Acta de cruce", editar: "Corregir acta", cerrar: "Cerrar mes de inventario", aprobar: "Firmar acta" },
   },
-  "Reporte de Paros": { silenciosas: ["editar", "eliminar"], etiquetas: { editar: "Registrar paro", eliminar: "Eliminar paro" } },
+  "Reporte de Paros": {
+    silenciosas: ["crear", "editar", "eliminar", "configurar"],
+    etiquetas: { crear: "Registrar paro", editar: "Editar paro", eliminar: "Eliminar paro", configurar: "Cierre de producción (correos y destinatarios)" },
+  },
   "Panel LIP Operación": {},
   "Panel LIP Gestión Humana": {},
   "Dashboard Gastos": {},
@@ -349,6 +359,8 @@ export const PROCESOS_NUEVOS: readonly ProcesoNuevo[] = [
   { codigo: "nom_liquidacion_aprobar", nombre: "Aprobar una liquidación", descripcion: "Liquidaciones › Aprobar.", grupo: "Nómina", orden: 20, con_alcance: false },
   { codigo: "nom_parametros", nombre: "Cambiar parámetros de liquidación y pago", descripcion: "Liquidaciones, Parafiscales, Turnos y tarifas por puesto, políticas de horas extra.", grupo: "Nómina", orden: 30, con_alcance: false },
   { codigo: "nom_periodo_pagar", nombre: "Marcar un período como pagado", descripcion: "Parafiscales › Período pagado.", grupo: "Nómina", orden: 40, con_alcance: false },
+  { codigo: "nom_archivo_plano", nombre: "Generar el archivo plano de pago de nómina", descripcion: "Nómina de Personal › Archivo plano: es el archivo que se carga al banco para pagar.", grupo: "Nómina", orden: 50, con_alcance: true },
+  { codigo: "nom_vacaciones_liquidar", nombre: "Liquidar vacaciones (registrar el pago)", descripcion: "Vacaciones › Liquidar: registra los días y el valor que se pagan.", grupo: "Nómina", orden: 60, con_alcance: true },
   { codigo: "seg_usuario_eliminar", nombre: "Eliminar un usuario", descripcion: "Gestión de Usuarios › Eliminar usuario (borra la cuenta de acceso).", grupo: "Seguridad", orden: 10, con_alcance: false },
 ]
 

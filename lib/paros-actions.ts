@@ -43,7 +43,7 @@ export async function guardarParo(payload: {
   categoria?: string | null
 }) {
   // Política por acción (catálogo lib/politicas-modulos.ts).
-  const motivoAccion = await motivoSinAccion(["Reporte de Paros", "Dashboard de Producción"], "editar", "Registrar paro")
+  const motivoAccion = await motivoSinAccion(["Reporte de Paros", "Dashboard de Producción"], "crear", "Registrar paro")
   if (motivoAccion) return { success: false, message: motivoAccion }
   const admin: any = await getSupabaseAdmin()
   const empresaId = payload.empresaId || (await getCurrentEmpresaIdForInsert())

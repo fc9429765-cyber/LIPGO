@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { registrarErrorServidor } from "@/lib/errores-servidor"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import { diasHabilesEntre, type VacacionResumen, type SolicitudVacaciones } from "@/lib/vacaciones-types"
-import { motivoSinAccion } from "@/lib/puerta-modulo"
+import { autorizarAccion, motivoSinAccion } from "@/lib/puerta-modulo"
 
 // Días hábiles de vacaciones que se causan por año de servicio (ley colombiana).
 const DIAS_VAC_ANIO = 15
@@ -296,10 +296,12 @@ export async function aprobarSolicitudVacaciones(id: string, aprobadoPor?: strin
 export async function registrarLiquidacionVacaciones(
   input: { cedula: string; nombre?: string; dias: number; valor_dia: number; observaciones?: string },
   empresaId?: number | null,
+  clave?: string,
 ) {
-  // Política por acción (catálogo lib/politicas-modulos.ts).
-  const motivoAccion = await motivoSinAccion(["Vacaciones"], "cerrar", "Liquidar vacaciones")
-  if (motivoAccion) return { success: false, message: motivoAccion }
+  // Acción CON CLAVE (nom_vacaciones_liquidar): registra un pago. En modo aviso pasa
+  // sin clave y deja rastro; en bloquear la pantalla pide la clave personal.
+  const autorizacionAccion = await autorizarAccion("Vacaciones", "cerrar", { clave: clave ?? "", idempresa: empresaId ?? null, referencia: `liquidar vacaciones ${input?.cedula ?? ""}` })
+  if (!autorizacionAccion.ok) return { success: false, message: autorizacionAccion.error || "Sin autorización." }
   try {
     const sb: any = await getSupabaseAdmin()
     const emp = empresaId || (await getCurrentEmpresaIdForInsert())
